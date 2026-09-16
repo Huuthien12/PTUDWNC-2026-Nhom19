@@ -56,6 +56,8 @@ npm run dev
 Giao diện Frontend sẽ truy cập tại: http://localhost:3000
 
 ## 📁 Cấu trúc Thư mục Dự án
+
+```text
 PTUDWNC-2026-Nhom19/
 ├── backend/                  # .NET 10 Minimal APIs (Clean Architecture)
 │   ├── CulinaryBlog.Domain/        # Domain Entities & Value Objects
@@ -65,5 +67,6 @@ PTUDWNC-2026-Nhom19/
 ├── frontend/                 # Next.js 15 App Router Project
 ├── docker-compose.yml        # Định nghĩa các container hạ tầng
 └── README.md                 # Tài liệu hướng dẫn sử dụng
----
+```
+
 
