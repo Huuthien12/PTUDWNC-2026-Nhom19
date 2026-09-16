@@ -1,0 +1,18 @@
+# .NET / C#
+bin/
+obj/
+.vs/
+*.user
+*.suo
+appsettings.Development.json
+
+# Node.js / Frontend
+node_modules/
+.next/
+out/
+build/
+.env.local
+
+# Docker & OS
+.DS_Store
+Thumbs.db
