@@ -1,6 +1,17 @@
+using CulinaryBlog.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Bật CORS cho phép Frontend Next.js gọi API
+var connectionString =
+    builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException(
+        "Connection string 'DefaultConnection' was not found.");
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+// CORS cho phép Frontend Next.js gọi API
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -15,7 +26,12 @@ var app = builder.Build();
 
 app.UseCors("AllowFrontend");
 
-// Endpoint Health Check test kết nối
-app.MapGet("/health", () => Results.Ok(new { status = "Healthy", message = "Backend .NET 10 is running!" }));
+// Health Check cơ bản
+app.MapGet("/health", () =>
+    Results.Ok(new
+    {
+        status = "Healthy",
+        message = "Backend .NET 10 is running!"
+    }));
 
 app.Run();
