@@ -22,6 +22,8 @@ public class RecipeConfiguration : IEntityTypeConfiguration<Recipe>
 
         builder.HasIndex(x => x.Slug)
             .IsUnique();
+        builder.HasIndex(x => x.Status);
+        builder.HasIndex(x => x.CreatedAt);
 
         builder.Property(x => x.Description)
             .HasColumnType("text")
