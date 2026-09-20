@@ -25,7 +25,10 @@ public class Recipe : BaseEntity
 
     public Guid CategoryId { get; set; }
 
+    // FK -> AspNetUsers.Id
     public string AuthorId { get; set; } = string.Empty;
+
+    public ApplicationUser Author { get; set; } = null!;
 
     public DateTime? PublishedAt { get; set; }
 
