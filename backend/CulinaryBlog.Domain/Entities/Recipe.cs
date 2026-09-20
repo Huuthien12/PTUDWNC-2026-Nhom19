@@ -25,6 +25,8 @@ public class Recipe : BaseEntity
 
     public Guid CategoryId { get; set; }
 
+    public Category Category { get; set; } = null!;
+
     // FK -> AspNetUsers.Id
     public string AuthorId { get; set; } = string.Empty;
 

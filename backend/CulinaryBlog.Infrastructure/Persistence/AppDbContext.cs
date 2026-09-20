@@ -29,6 +29,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<RecipeImage> RecipeImages
         => Set<RecipeImage>();
 
+    public DbSet<Category> Categories => Set<Category>();
 
     // =========================
     // Model Configuration
