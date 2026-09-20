@@ -2,6 +2,10 @@ using CulinaryBlog.Domain.Entities;
 using CulinaryBlog.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using CulinaryBlog.Application.Categories.Queries;
+using CulinaryBlog.Application.Common.Interfaces;
+using CulinaryBlog.Infrastructure.Repositories;
+using MediatR;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +22,21 @@ var connectionString =
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
+// =========================
+// Application / CQRS
+// =========================
+
+builder.Services.AddMediatR(config =>
+    config.RegisterServicesFromAssembly(
+        typeof(GetCategoriesQuery).Assembly));
+
+
+// =========================
+// Repositories
+// =========================
+
+builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 // =========================
 // ASP.NET Core Identity
@@ -119,6 +138,24 @@ app.MapGet("/health", () =>
 
 // Map Controller endpoints
 app.MapControllers();
+
+
+// =========================
+// Category Endpoints
+// =========================
+
+var categories = app.MapGroup("/api/v1/categories");
+
+categories.MapGet("/", async (
+    ISender sender,
+    CancellationToken cancellationToken) =>
+{
+    var result = await sender.Send(
+        new GetCategoriesQuery(),
+        cancellationToken);
+
+    return Results.Ok(result);
+});
 
 
 app.Run();
