@@ -141,12 +141,13 @@ builder.Services.AddControllers();
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowFrontend", policy =>
+    options.AddPolicy("Frontend", policy =>
     {
         policy
             .WithOrigins("http://localhost:3000")
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 
@@ -157,8 +158,7 @@ var app = builder.Build();
 // =========================
 // Middleware
 // =========================
-
-app.UseCors("AllowFrontend");
+app.UseCors("Frontend");
 
 app.UseAuthentication();
 app.UseAuthorization();
