@@ -14,12 +14,17 @@ public sealed record CreateCategoryCommand(
 public sealed class CreateCategoryCommandHandler
     : IRequestHandler<CreateCategoryCommand, CategoryDto>
 {
+    private const string CategoriesCacheKey = "categories:all";
+
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ICacheService _cacheService;
 
     public CreateCategoryCommandHandler(
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ICacheService cacheService)
     {
         _unitOfWork = unitOfWork;
+        _cacheService = cacheService;
     }
 
     public async Task<CategoryDto> Handle(
@@ -28,6 +33,7 @@ public sealed class CreateCategoryCommandHandler
     {
         var name = request.Name.Trim();
 
+        // Kiểm tra tên Category đã tồn tại
         var nameExists =
             await _unitOfWork.Categories.NameExistsAsync(
                 name,
@@ -39,10 +45,12 @@ public sealed class CreateCategoryCommandHandler
                 "CATEGORY_NAME_EXISTS");
         }
 
+        // Tạo slug
         var baseSlug = SlugHelper.Generate(name);
         var slug = baseSlug;
         var suffix = 2;
 
+        // Nếu slug trùng thì thêm -2, -3, ...
         while (await _unitOfWork.Categories.SlugExistsAsync(
                    slug,
                    cancellationToken))
@@ -51,6 +59,7 @@ public sealed class CreateCategoryCommandHandler
             suffix++;
         }
 
+        // Tạo Category
         var category = Category.Create(
             name,
             slug,
@@ -60,13 +69,21 @@ public sealed class CreateCategoryCommandHandler
             category,
             cancellationToken);
 
+        // Lưu database
         await _unitOfWork.SaveChangesAsync(
             cancellationToken);
 
+        // Category đã thay đổi -> xóa cache cũ
+        await _cacheService.RemoveAsync(
+            CategoriesCacheKey,
+            cancellationToken);
+
+        // Category mới chưa có recipe
         return new CategoryDto(
             category.Id,
             category.Name,
             category.Slug,
-            category.Description);
+            category.Description,
+            0);
     }
 }

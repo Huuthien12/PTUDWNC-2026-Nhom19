@@ -17,4 +17,12 @@ public interface IRecipeRepository
         string? userId,
         bool isAdmin,
         CancellationToken cancellationToken = default);
+
+    Task<int> CountPublishedByCategoryAsync(
+        Guid categoryId,
+        CancellationToken cancellationToken = default);
+
+    Task<int> CountAllByCategoryAsync(
+        Guid categoryId,
+        CancellationToken cancellationToken = default);
 }

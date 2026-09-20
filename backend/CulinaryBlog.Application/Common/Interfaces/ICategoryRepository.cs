@@ -7,6 +7,10 @@ public interface ICategoryRepository
     Task<IReadOnlyList<Category>> GetAllAsync(
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<(Category Category, int RecipeCount)>>
+        GetAllWithRecipeCountAsync(
+            CancellationToken cancellationToken = default);
+
     Task<Category?> GetByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default);

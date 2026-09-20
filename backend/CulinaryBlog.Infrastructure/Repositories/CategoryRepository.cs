@@ -1,5 +1,6 @@
 using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Domain.Entities;
+using CulinaryBlog.Domain.Enums;
 using CulinaryBlog.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,48 +20,81 @@ public sealed class CategoryRepository : ICategoryRepository
     {
         return await _context.Categories
             .AsNoTracking()
-            .Where(x => !x.IsDeleted)
-            .OrderBy(x => x.Name)
+            .Where(category => !category.IsDeleted)
+            .OrderBy(category => category.Name)
             .ToListAsync(cancellationToken);
     }
 
-    public Task<Category?> GetByIdAsync(
+    public async Task<IReadOnlyList<(Category Category, int RecipeCount)>>
+        GetAllWithRecipeCountAsync(
+            CancellationToken cancellationToken = default)
+    {
+        var result = await _context.Categories
+            .AsNoTracking()
+            .Where(category => !category.IsDeleted)
+            .OrderBy(category => category.Name)
+            .Select(category => new
+            {
+                Category = category,
+
+                RecipeCount = category.Recipes.Count(recipe =>
+                    !recipe.IsDeleted &&
+                    recipe.Status == RecipeStatus.Published)
+            })
+            .ToListAsync(cancellationToken);
+
+        return result
+            .Select(item =>
+                (item.Category, item.RecipeCount))
+            .ToList();
+    }
+
+    public async Task<Category?> GetByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        return _context.Categories
+        return await _context.Categories
             .FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
+                category =>
+                    category.Id == id &&
+                    !category.IsDeleted,
                 cancellationToken);
     }
 
-    public Task<Category?> GetBySlugAsync(
+    public async Task<Category?> GetBySlugAsync(
         string slug,
         CancellationToken cancellationToken = default)
     {
-        return _context.Categories
+        return await _context.Categories
+            .AsNoTracking()
             .FirstOrDefaultAsync(
-                x => x.Slug == slug && !x.IsDeleted,
+                category =>
+                    category.Slug == slug &&
+                    !category.IsDeleted,
                 cancellationToken);
     }
 
-    public Task<bool> NameExistsAsync(
+    public async Task<bool> NameExistsAsync(
         string name,
         CancellationToken cancellationToken = default)
     {
-        return _context.Categories
+        return await _context.Categories
             .AnyAsync(
-                x => x.Name == name && !x.IsDeleted,
+                category =>
+                    category.Name == name &&
+                    !category.IsDeleted,
                 cancellationToken);
     }
 
-    public Task<bool> SlugExistsAsync(
+    public async Task<bool> SlugExistsAsync(
         string slug,
         CancellationToken cancellationToken = default)
     {
-        return _context.Categories
+        return await _context.Categories
             .AnyAsync(
-                x => x.Slug == slug && !x.IsDeleted,
+                category =>
+                    category.Slug == slug &&
+                    !category.IsDeleted,
                 cancellationToken);
     }
 

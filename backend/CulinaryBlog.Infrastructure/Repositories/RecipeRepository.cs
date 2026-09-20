@@ -74,4 +74,30 @@ public sealed class RecipeRepository : IRecipeRepository
             .Take(pageSize)
             .ToListAsync(cancellationToken);
     }
+
+    public Task<int> CountPublishedByCategoryAsync(
+        Guid categoryId,
+        CancellationToken cancellationToken = default)
+    {
+        return _context.Recipes
+            .AsNoTracking()
+            .CountAsync(
+                recipe =>
+                    recipe.CategoryId == categoryId &&
+                    !recipe.IsDeleted &&
+                    recipe.Status == RecipeStatus.Published,
+                cancellationToken);
+    }
+
+    public Task<int> CountAllByCategoryAsync(
+        Guid categoryId,
+        CancellationToken cancellationToken = default)
+    {
+        return _context.Recipes
+            .AsNoTracking()
+            .CountAsync(
+                recipe =>
+                    recipe.CategoryId == categoryId,
+                cancellationToken);
+    }
 }

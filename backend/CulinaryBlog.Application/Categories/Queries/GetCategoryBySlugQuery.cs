@@ -29,6 +29,7 @@ public sealed class GetCategoryBySlugQueryHandler
         GetCategoryBySlugQuery request,
         CancellationToken cancellationToken)
     {
+        // Tìm Category theo Slug
         var category =
             await _unitOfWork.Categories.GetBySlugAsync(
                 request.Slug,
@@ -39,6 +40,10 @@ public sealed class GetCategoryBySlugQueryHandler
             return null;
         }
 
+        // Tổng số Recipe mà người dùng hiện tại được phép xem.
+        // Guest: Published
+        // Author: Published + Draft của chính mình
+        // Admin: theo quyền hiện tại của repository
         var totalCount =
             await _unitOfWork.Recipes.CountByCategoryAsync(
                 category.Id,
@@ -46,6 +51,13 @@ public sealed class GetCategoryBySlugQueryHandler
                 request.IsAdmin,
                 cancellationToken);
 
+        // recipeCount của Category chỉ tính Recipe Published.
+        var publishedRecipeCount =
+            await _unitOfWork.Recipes.CountPublishedByCategoryAsync(
+                category.Id,
+                cancellationToken);
+
+        // Lấy danh sách Recipe có phân trang
         var recipes =
             await _unitOfWork.Recipes.GetByCategoryAsync(
                 category.Id,
@@ -90,11 +102,13 @@ public sealed class GetCategoryBySlugQueryHandler
                     totalCount /
                     (double)request.PageSize);
 
+        // Category.recipeCount luôn là số Published Recipe
         var categoryDto = new CategoryDto(
             category.Id,
             category.Name,
             category.Slug,
-            category.Description);
+            category.Description,
+            publishedRecipeCount);
 
         var pagedRecipes =
             new PagedResult<RecipeSummaryDto>(
