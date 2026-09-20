@@ -1,11 +1,11 @@
-using CulinaryBlog.Domain.Entities;
-using CulinaryBlog.Infrastructure.Persistence;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using CulinaryBlog.Application.Categories.Queries;
 using CulinaryBlog.Application.Common.Interfaces;
+using CulinaryBlog.Domain.Entities;
+using CulinaryBlog.Infrastructure.Persistence;
 using CulinaryBlog.Infrastructure.Repositories;
 using MediatR;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +22,7 @@ var connectionString =
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
+
 // =========================
 // Application / CQRS
 // =========================
@@ -36,7 +37,9 @@ builder.Services.AddMediatR(config =>
 // =========================
 
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+
 
 // =========================
 // ASP.NET Core Identity
@@ -136,7 +139,10 @@ app.MapGet("/health", () =>
     }));
 
 
-// Map Controller endpoints
+// =========================
+// Controller Endpoints
+// =========================
+
 app.MapControllers();
 
 
@@ -144,7 +150,14 @@ app.MapControllers();
 // Category Endpoints
 // =========================
 
-var categories = app.MapGroup("/api/v1/categories");
+var categories =
+    app.MapGroup("/api/v1/categories");
+
+
+// =========================
+// FR-CAT-001
+// GET /api/v1/categories
+// =========================
 
 categories.MapGet("/", async (
     ISender sender,
@@ -153,6 +166,96 @@ categories.MapGet("/", async (
     var result = await sender.Send(
         new GetCategoriesQuery(),
         cancellationToken);
+
+    return Results.Ok(result);
+});
+
+
+// =========================
+// FR-CAT-002
+// GET /api/v1/categories/{slug}
+// =========================
+
+categories.MapGet("/{slug}", async (
+    string slug,
+    int? page,
+    int? pageSize,
+    HttpContext httpContext,
+    ISender sender,
+    CancellationToken cancellationToken) =>
+{
+    // Default pagination
+    var currentPage = page ?? 1;
+    var currentPageSize = pageSize ?? 12;
+
+
+    // =========================
+    // Validate pagination
+    // =========================
+
+    if (currentPage < 1 ||
+        currentPageSize < 1 ||
+        currentPageSize > 50)
+    {
+        return Results.BadRequest(new
+        {
+            error = "VALIDATION_ERROR",
+            message =
+                "page must be >= 1 and pageSize must be between 1 and 50."
+        });
+    }
+
+
+    // =========================
+    // Current User
+    // =========================
+
+    var userId =
+        httpContext.User.Identity?.IsAuthenticated == true
+            ? httpContext.User.FindFirst(
+                System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            : null;
+
+
+    // =========================
+    // Check Admin Role
+    // =========================
+
+    var isAdmin =
+        httpContext.User.IsInRole("Admin");
+
+
+    // =========================
+    // Dispatch Query
+    // =========================
+
+    var result = await sender.Send(
+        new GetCategoryBySlugQuery(
+            slug,
+            currentPage,
+            currentPageSize,
+            userId,
+            isAdmin),
+        cancellationToken);
+
+
+    // =========================
+    // Category Not Found
+    // =========================
+
+    if (result is null)
+    {
+        return Results.NotFound(new
+        {
+            error = "CATEGORY_NOT_FOUND",
+            message = "Category not found."
+        });
+    }
+
+
+    // =========================
+    // Success
+    // =========================
 
     return Results.Ok(result);
 });

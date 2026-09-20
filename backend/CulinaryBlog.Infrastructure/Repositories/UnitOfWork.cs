@@ -9,13 +9,17 @@ public sealed class UnitOfWork : IUnitOfWork
 
     public UnitOfWork(
         AppDbContext context,
-        ICategoryRepository categories)
+        ICategoryRepository categories,
+        IRecipeRepository recipes)
     {
         _context = context;
         Categories = categories;
+        Recipes = recipes;
     }
 
     public ICategoryRepository Categories { get; }
+
+    public IRecipeRepository Recipes { get; }
 
     public Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default)
