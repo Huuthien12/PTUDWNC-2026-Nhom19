@@ -20,6 +20,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<Recipe> Recipes => Set<Recipe>();
 
+    public DbSet<Category> Categories => Set<Category>();
+
     public DbSet<RecipeIngredient> RecipeIngredients
         => Set<RecipeIngredient>();
 
