@@ -12,4 +12,19 @@ public class Category : BaseEntity
 
     public ICollection<Recipe> Recipes { get; set; }
         = new List<Recipe>();
+
+    public static Category Create(
+        string name,
+        string slug,
+        string? description)
+    {
+        return new Category
+        {
+            Name = name.Trim(),
+            Slug = slug,
+            Description = string.IsNullOrWhiteSpace(description)
+                ? null
+                : description.Trim()
+        };
+    }
 }

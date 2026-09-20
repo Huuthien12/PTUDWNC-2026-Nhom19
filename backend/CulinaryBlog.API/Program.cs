@@ -1,8 +1,11 @@
+using CulinaryBlog.Application.Categories.Commands;
 using CulinaryBlog.Application.Categories.Queries;
+using CulinaryBlog.Application.Common.Behaviors;
 using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Domain.Entities;
 using CulinaryBlog.Infrastructure.Persistence;
 using CulinaryBlog.Infrastructure.Repositories;
+using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +33,18 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddMediatR(config =>
     config.RegisterServicesFromAssembly(
         typeof(GetCategoriesQuery).Assembly));
+
+
+// =========================
+// FluentValidation
+// =========================
+
+builder.Services.AddValidatorsFromAssembly(
+    typeof(GetCategoriesQuery).Assembly);
+
+builder.Services.AddTransient(
+    typeof(IPipelineBehavior<,>),
+    typeof(ValidationBehavior<,>));
 
 
 // =========================
@@ -261,4 +276,72 @@ categories.MapGet("/{slug}", async (
 });
 
 
+// =========================
+// FR-CAT-003
+// POST /api/v1/categories
+// Admin creates Category
+// =========================
+
+categories.MapPost("/", async (
+    CreateCategoryRequest request,
+    ISender sender,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await sender.Send(
+            new CreateCategoryCommand(
+                request.Name,
+                request.Description),
+            cancellationToken);
+
+        return Results.Created(
+            $"/api/v1/categories/{result.Slug}",
+            result);
+    }
+    catch (ValidationException exception)
+    {
+        var errors = exception.Errors
+            .GroupBy(error => error.PropertyName)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .Select(error => error.ErrorMessage)
+                    .ToArray());
+
+        return Results.ValidationProblem(
+            errors,
+            statusCode: StatusCodes.Status400BadRequest,
+            title: "Validation failed.");
+    }
+    catch (InvalidOperationException exception)
+        when (exception.Message == "CATEGORY_NAME_EXISTS")
+    {
+        return Results.Problem(
+            statusCode: StatusCodes.Status409Conflict,
+            title: "Category name already exists.",
+            detail: "A category with this name already exists.",
+            extensions: new Dictionary<string, object?>
+            {
+                ["code"] = "CATEGORY_NAME_EXISTS"
+            });
+    }
+})
+.RequireAuthorization(policy =>
+    policy.RequireRole("Admin"));
+
+
+// =========================
+// Run Application
+// =========================
+
 app.Run();
+
+
+// =========================
+// Request Models
+// =========================
+
+public sealed record CreateCategoryRequest(
+    string Name,
+    string? Description);
