@@ -10,6 +10,6 @@ public class RefreshToken : BaseEntity
     public string? ReplacedByToken { get; set; }
 
     // Foreign Key kết nối với ApplicationUser
-    public Guid UserId { get; set; }
+    public string UserId { get; set; } = string.Empty;
     public ApplicationUser User { get; set; } = null!;
 }

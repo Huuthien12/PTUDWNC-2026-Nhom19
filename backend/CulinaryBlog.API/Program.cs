@@ -1,5 +1,5 @@
-using CulinaryBlog.Infrastructure.Persistence;
 using CulinaryBlog.Domain.Entities;
+using CulinaryBlog.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,67 +11,114 @@ var connectionString =
         "Connection string 'DefaultConnection' was not found.");
 
 
+// =========================
+// Database
+// =========================
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 
-// Bổ sung: Đăng ký ASP.NET
-builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
-{
-    options.Password.RequireDigit = true;
-    options.Password.RequireLowercase = true;
-    options.Password.RequireUppercase = true;
-    options.Password.RequireNonAlphanumeric = true;
-    options.Password.RequiredLength = 8;
-    options.User.RequireUniqueEmail = true;
-})
-.AddEntityFrameworkStores<AppDbContext>()
-.AddDefaultTokenProviders();
+// =========================
+// ASP.NET Core Identity
+// =========================
 
-// 3. Authorization (Khắc phục triệt để lỗi "Unable to find the required services")
+builder.Services
+    .AddIdentity<ApplicationUser, IdentityRole>(options =>
+    {
+        options.Password.RequireDigit = true;
+        options.Password.RequireLowercase = true;
+        options.Password.RequireUppercase = true;
+        options.Password.RequireNonAlphanumeric = true;
+        options.Password.RequiredLength = 8;
+
+        options.User.RequireUniqueEmail = true;
+    })
+    .AddEntityFrameworkStores<AppDbContext>()
+    .AddDefaultTokenProviders();
+
+
+// =========================
+// Authorization
+// =========================
+
 builder.Services.AddAuthorization();
 
-// 4. Chặn Redirect 302 về trang Login mặc định (Trả về 401/403 chuẩn RESTful API)
+
+// =========================
+// Cookie behavior for API
+// =========================
+
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.Events.OnRedirectToLogin = context =>
     {
-        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        context.Response.StatusCode =
+            StatusCodes.Status401Unauthorized;
+
         return Task.CompletedTask;
     };
+
     options.Events.OnRedirectToAccessDenied = context =>
     {
-        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        context.Response.StatusCode =
+            StatusCodes.Status403Forbidden;
+
         return Task.CompletedTask;
     };
 });
 
-// 5. Register Controllers
+
+// =========================
+// Controllers
+// =========================
+
 builder.Services.AddControllers();
-// CORS cho phép Frontend Next.js gọi API
+
+
+// =========================
+// CORS
+// =========================
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000")
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        policy
+            .WithOrigins("http://localhost:3000")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
     });
 });
 
+
 var app = builder.Build();
+
+
+// =========================
+// Middleware
+// =========================
 
 app.UseCors("AllowFrontend");
 
-//Them
 app.UseAuthentication();
 app.UseAuthorization();
-// Health Check cơ bản
+
+
+// =========================
+// Health Check
+// =========================
+
 app.MapGet("/health", () =>
     Results.Ok(new
     {
         status = "Healthy",
         message = "Backend .NET 10 is running!"
     }));
+
+
+// Map Controller endpoints
+app.MapControllers();
+
 
 app.Run();
