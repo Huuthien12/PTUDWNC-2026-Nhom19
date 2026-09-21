@@ -10,6 +10,7 @@ using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using CulinaryBlog.Infrastructure.Caching;
+using CulinaryBlog.Infrastructure.Persistence.Seed;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -154,6 +155,26 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// =========================
+// Database Migration & Seed
+// =========================
+
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+
+    var dbContext =
+        services.GetRequiredService<AppDbContext>();
+
+    var userManager =
+        services.GetRequiredService<UserManager<ApplicationUser>>();
+
+    await dbContext.Database.MigrateAsync();
+
+    await DataSeeder.SeedAsync(
+        dbContext,
+        userManager);
+}
 
 // =========================
 // Middleware
