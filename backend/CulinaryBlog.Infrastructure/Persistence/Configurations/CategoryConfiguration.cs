@@ -13,20 +13,14 @@ public class CategoryConfiguration : IEntityTypeConfiguration<Category>
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.Name)
-            .HasMaxLength(100)
+            .HasMaxLength(50)
             .IsRequired();
 
         builder.Property(x => x.Slug)
-            .HasMaxLength(120)
+            .HasMaxLength(100)
             .IsRequired();
 
-        builder.Property(x => x.Description)
-            .HasColumnType("text")
-            .IsRequired(false);
-
-        builder.Property(x => x.ImageUrl)
-            .HasMaxLength(500)
-            .IsRequired(false);
+        builder.Property(x => x.Description);
 
         builder.HasIndex(x => x.Name)
             .IsUnique();
@@ -35,9 +29,11 @@ public class CategoryConfiguration : IEntityTypeConfiguration<Category>
             .IsUnique();
 
         builder.Property(x => x.RowVersion)
-            .IsConcurrencyToken()
-            .IsRequired();
+            .IsConcurrencyToken();
 
-        builder.HasQueryFilter(x => !x.IsDeleted);
+        builder.HasMany(x => x.Recipes)
+            .WithOne(x => x.Category)
+            .HasForeignKey(x => x.CategoryId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

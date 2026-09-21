@@ -10,7 +10,7 @@ export default async function Home() {
       healthStatus = `Kết nối Backend thành công! Message: ${data.message}`;
       isSuccess = true;
     }
-  } catch (error) {
+  } catch {
     healthStatus = "Lỗi: Backend chưa bật hoặc sai cổng.";
   }
 

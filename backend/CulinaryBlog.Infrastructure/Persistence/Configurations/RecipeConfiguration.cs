@@ -25,16 +25,6 @@ public class RecipeConfiguration : IEntityTypeConfiguration<Recipe>
         builder.HasIndex(x => x.Status);
         builder.HasIndex(x => x.CreatedAt);
 
-        builder.HasIndex(x => x.CategoryId)
-            .IsUnique(false)
-            .HasMethod("btree");
-
-        builder.HasOne(x => x.Category)
-            .WithMany(x => x.Recipes)
-            .HasForeignKey(x => x.CategoryId)
-            .IsRequired()
-            .OnDelete(DeleteBehavior.Restrict);
-
         builder.Property(x => x.Description)
             .HasColumnType("text")
             .IsRequired();

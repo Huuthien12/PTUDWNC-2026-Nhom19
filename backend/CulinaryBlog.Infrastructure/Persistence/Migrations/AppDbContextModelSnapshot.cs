@@ -112,20 +112,13 @@ namespace CulinaryBlog.Infrastructure.Persistence.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
-                    b.Property<string>("ImageUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("integer");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
@@ -134,8 +127,8 @@ namespace CulinaryBlog.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Slug")
                         .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -220,8 +213,6 @@ namespace CulinaryBlog.Infrastructure.Persistence.Migrations
                     b.HasIndex("AuthorId");
 
                     b.HasIndex("CategoryId");
-
-                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("CategoryId"), "btree");
 
                     b.HasIndex("CreatedAt");
 
