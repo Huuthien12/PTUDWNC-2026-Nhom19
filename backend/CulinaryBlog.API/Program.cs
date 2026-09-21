@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using CulinaryBlog.Infrastructure.Caching;
 using CulinaryBlog.Infrastructure.Persistence.Seed;
+using CulinaryBlog.Infrastructure.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -72,7 +73,8 @@ builder.Services.AddTransient(
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-
+builder.Services.AddScoped<IIdentityService, IdentityService>();
+builder.Services.AddScoped<JwtTokenService>();
 
 // =========================
 // ASP.NET Core Identity
@@ -92,6 +94,51 @@ builder.Services
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
+// =========================
+// JWT Authentication
+// =========================
+
+builder.Services
+    .AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme =
+            Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+
+        options.DefaultChallengeScheme =
+            Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        var jwtKey = builder.Configuration["Jwt:Key"]
+            ?? throw new InvalidOperationException(
+                "JWT Key is not configured.");
+
+        var jwtIssuer = builder.Configuration["Jwt:Issuer"]
+            ?? throw new InvalidOperationException(
+                "JWT Issuer is not configured.");
+
+        var jwtAudience = builder.Configuration["Jwt:Audience"]
+            ?? throw new InvalidOperationException(
+                "JWT Audience is not configured.");
+
+        options.TokenValidationParameters =
+            new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey =
+                    new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(
+                        System.Text.Encoding.UTF8.GetBytes(jwtKey)),
+
+                ValidateIssuer = true,
+                ValidIssuer = jwtIssuer,
+
+                ValidateAudience = true,
+                ValidAudience = jwtAudience,
+
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.Zero
+            };
+    });
 
 // =========================
 // Authorization
