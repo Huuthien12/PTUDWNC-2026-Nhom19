@@ -1,3 +1,4 @@
+﻿using CulinaryBlog.Application.Authentication.Commands.Login;
 using CulinaryBlog.Application.Categories.Commands;
 using CulinaryBlog.Application.Categories.Queries;
 using CulinaryBlog.Application.Common.Behaviors;
@@ -74,7 +75,7 @@ builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IIdentityService, IdentityService>();
-builder.Services.AddScoped<JwtTokenService>();
+builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
 // =========================
 // ASP.NET Core Identity
@@ -109,17 +110,32 @@ builder.Services
     })
     .AddJwtBearer(options =>
     {
-        var jwtKey = builder.Configuration["Jwt:Key"]
-            ?? throw new InvalidOperationException(
+        var jwtKey =
+            builder.Configuration["Jwt:Key"];
+
+        if (string.IsNullOrWhiteSpace(jwtKey))
+        {
+            throw new InvalidOperationException(
                 "JWT Key is not configured.");
+        }
 
-        var jwtIssuer = builder.Configuration["Jwt:Issuer"]
-            ?? throw new InvalidOperationException(
+        var jwtIssuer =
+            builder.Configuration["Jwt:Issuer"];
+
+        if (string.IsNullOrWhiteSpace(jwtIssuer))
+        {
+            throw new InvalidOperationException(
                 "JWT Issuer is not configured.");
+        }
 
-        var jwtAudience = builder.Configuration["Jwt:Audience"]
-            ?? throw new InvalidOperationException(
+        var jwtAudience =
+            builder.Configuration["Jwt:Audience"];
+
+        if (string.IsNullOrWhiteSpace(jwtAudience))
+        {
+            throw new InvalidOperationException(
                 "JWT Audience is not configured.");
+        }
 
         options.TokenValidationParameters =
             new Microsoft.IdentityModel.Tokens.TokenValidationParameters
@@ -180,7 +196,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 // Controllers
 // =========================
 
-builder.Services.AddControllers();
+
 
 
 // =========================
@@ -248,7 +264,59 @@ app.MapGet("/health", () =>
 // Controller Endpoints
 // =========================
 
-app.MapControllers();
+// =========================
+// Authentication Endpoints
+// =========================
+
+var auth =
+    app.MapGroup("/api/v1/auth");
+
+
+// =========================
+// Login
+// POST /api/v1/auth/login
+// =========================
+
+auth.MapPost("/login", async (
+    LoginRequest request,
+    ISender sender,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Email) ||
+        string.IsNullOrWhiteSpace(request.Password))
+    {
+        return Results.Problem(
+            type: "VALIDATION_ERROR",
+            title: "Validation failed.",
+            statusCode: StatusCodes.Status400BadRequest,
+            detail:
+                "Email and password are required.");
+    }
+
+    var result = await sender.Send(
+        new LoginCommand(
+            request.Email,
+            request.Password),
+        cancellationToken);
+
+    if (!result.Succeeded)
+    {
+        return Results.Problem(
+            type:
+                result.ErrorCode
+                ?? "INVALID_CREDENTIALS",
+            title: "Login failed.",
+            statusCode:
+                StatusCodes.Status401Unauthorized,
+            detail:
+                "Email or password is incorrect.");
+    }
+
+    return Results.Ok(
+        new LoginResponse(
+            result.AccessToken!,
+            result.TokenType));
+});
 
 
 // =========================
@@ -522,3 +590,11 @@ public sealed record CreateCategoryRequest(
 public sealed record UpdateCategoryRequest(
     string Name,
     string? Description);
+
+public sealed record LoginRequest(
+    string Email,
+    string Password);
+
+public sealed record LoginResponse(
+    string AccessToken,
+    string TokenType);

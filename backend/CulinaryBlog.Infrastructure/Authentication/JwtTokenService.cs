@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using CulinaryBlog.Application.Common.Interfaces;
@@ -7,7 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace CulinaryBlog.Infrastructure.Authentication;
 
-public sealed class JwtTokenService
+public sealed class JwtTokenService : IJwtTokenService
 {
     private readonly IConfiguration _configuration;
 
@@ -27,21 +27,39 @@ public sealed class JwtTokenService
                 "Cannot generate token for an invalid login result.");
         }
 
-        var jwtKey = _configuration["Jwt:Key"]
-            ?? throw new InvalidOperationException(
+        var jwtKey = _configuration["Jwt:Key"];
+
+        if (string.IsNullOrWhiteSpace(jwtKey))
+        {
+            throw new InvalidOperationException(
                 "JWT Key is not configured.");
+        }
 
-        var jwtIssuer = _configuration["Jwt:Issuer"]
-            ?? throw new InvalidOperationException(
+        var jwtIssuer = _configuration["Jwt:Issuer"];
+
+        if (string.IsNullOrWhiteSpace(jwtIssuer))
+        {
+            throw new InvalidOperationException(
                 "JWT Issuer is not configured.");
+        }
 
-        var jwtAudience = _configuration["Jwt:Audience"]
-            ?? throw new InvalidOperationException(
+        var jwtAudience = _configuration["Jwt:Audience"];
+
+        if (string.IsNullOrWhiteSpace(jwtAudience))
+        {
+            throw new InvalidOperationException(
                 "JWT Audience is not configured.");
+        }
 
         var expirationMinutes =
             _configuration.GetValue<int?>(
-                "Jwt:ExpirationMinutes") ?? 60;
+                "Jwt:ExpirationMinutes") ?? 15;
+
+        if (expirationMinutes <= 0)
+        {
+            throw new InvalidOperationException(
+                "JWT expiration must be greater than zero.");
+        }
 
         var claims = new List<Claim>
         {
@@ -56,7 +74,10 @@ public sealed class JwtTokenService
             new(
                 ClaimTypes.Name,
                 loginResult.FullName ?? string.Empty),
-
+            new(
+                JwtRegisteredClaimNames.Iat,
+                DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+                ClaimValueTypes.Integer64),
             new(
                 JwtRegisteredClaimNames.Jti,
                 Guid.NewGuid().ToString())
