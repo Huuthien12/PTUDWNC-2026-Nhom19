@@ -15,7 +15,7 @@ export default async function Home() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-gray-900 text-white">
+    <main className="flex flex-1 flex-col items-center justify-center px-6 py-12 sm:p-24 bg-gray-900 text-white">
       <h1 className="text-3xl font-bold mb-6">Culinary Blog - Test System</h1>
       <div className="p-6 border rounded-xl bg-gray-800 shadow-lg max-w-md text-center">
         <p className="font-semibold text-gray-300 mb-2">Trạng thái Backend:</p>
