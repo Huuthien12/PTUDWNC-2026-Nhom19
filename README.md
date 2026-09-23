@@ -224,12 +224,12 @@ PTUDWNC-2026-Nhom19/
 
 ## 👨‍💻 Thành viên nhóm
 
-    Member     MSSV    Họ và tên
-  ---------- --------- --------------------
-   Member 1   2312794  Nguyễn Thục Uyên
-   Member 2   2312745  Nguyễn Quốc Thái
-   Member 3   2312764  Nguyễn Khiêm Thuận
-   Member 4   2312753  Lương Hữu Thiện
+| Member | MSSV | Họ và tên |
+|:---:|:---:|---|
+| Member 1 | 2312794 | Nguyễn Thục Uyên |
+| Member 2 | 2312745 | Nguyễn Quốc Thái |
+| Member 3 | 2312764 | Nguyễn Khiêm Thuận |
+| Member 4 | 2312753 | Lương Hữu Thiện |
 
 ------------------------------------------------------------------------
 
