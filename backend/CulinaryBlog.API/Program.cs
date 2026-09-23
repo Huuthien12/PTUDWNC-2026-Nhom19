@@ -1,4 +1,5 @@
 ﻿using CulinaryBlog.Application.Authentication.Commands.Login;
+using CulinaryBlog.Application.Authentication.Commands.Register;
 using CulinaryBlog.Application.Categories.Commands;
 using CulinaryBlog.Application.Categories.Queries;
 using CulinaryBlog.Application.Common.Behaviors;
@@ -316,6 +317,55 @@ auth.MapPost("/login", async (
         new LoginResponse(
             result.AccessToken!,
             result.TokenType));
+});
+
+// =========================
+// Register
+// POST /api/v1/auth/register
+// =========================
+
+auth.MapPost("/register", async (
+    RegisterCommand request,
+    ISender sender,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await sender.Send(request, cancellationToken);
+
+        if (!result.Success)
+        {
+            return Results.Problem(
+                type: "REGISTRATION_FAILED",
+                title: "Registration failed.",
+                statusCode: StatusCodes.Status400BadRequest,
+                detail: result.Message,
+                extensions: new Dictionary<string, object?>
+                {
+                    ["errors"] = result.Errors
+                });
+        }
+
+        return Results.Created(
+            "/api/v1/auth/register",
+            result);
+    }
+    catch (ValidationException exception)
+    {
+        var errors = exception.Errors
+            .GroupBy(error => error.PropertyName)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .Select(error => error.ErrorMessage)
+                    .ToArray());
+
+        return Results.ValidationProblem(
+            errors,
+            statusCode: StatusCodes.Status400BadRequest,
+            title: "Validation failed.",
+            type: "VALIDATION_ERROR");
+    }
 });
 
 
