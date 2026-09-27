@@ -1,5 +1,7 @@
 ﻿using CulinaryBlog.Application.Authentication.Commands.Login;
 using CulinaryBlog.Application.Categories.Commands;
+using CulinaryBlog.Application.Authentication.DTOs;
+using CulinaryBlog.API.Authentication;
 using CulinaryBlog.Application.Categories.Queries;
 using CulinaryBlog.Application.Common.Behaviors;
 using CulinaryBlog.Application.Common.Interfaces;
@@ -76,6 +78,9 @@ builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IIdentityService, IdentityService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+builder.Services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
+builder.Services.AddSingleton<IRefreshTokenGenerator, RefreshTokenGenerator>();
+builder.Services.AddSingleton(TimeProvider.System);
 
 // =========================
 // ASP.NET Core Identity
@@ -222,8 +227,9 @@ var app = builder.Build();
 // Database Migration & Seed
 // =========================
 
-using (var scope = app.Services.CreateScope())
+if (!app.Environment.IsEnvironment("Testing"))
 {
+    using var scope = app.Services.CreateScope();
     var services = scope.ServiceProvider;
 
     var dbContext =
@@ -271,6 +277,8 @@ app.MapGet("/health", () =>
 var auth =
     app.MapGroup("/api/v1/auth");
 
+auth.MapTokenEndpoints();
+
 
 // =========================
 // Login
@@ -313,9 +321,12 @@ auth.MapPost("/login", async (
     }
 
     return Results.Ok(
-        new LoginResponse(
+        new AuthResponseDto(
             result.AccessToken!,
-            result.TokenType));
+            result.TokenType,
+            result.RefreshToken!,
+            result.ExpiresAt!.Value,
+            result.User!));
 });
 
 
@@ -595,6 +606,4 @@ public sealed record LoginRequest(
     string Email,
     string Password);
 
-public sealed record LoginResponse(
-    string AccessToken,
-    string TokenType);
+public partial class Program { }

@@ -68,6 +68,19 @@ public sealed class IdentityService : IIdentityService
             user.Email,
             user.FullName,
             roles,
-            null);
+            null,
+            user.UserName,
+            user.AvatarUrl);
+    }
+
+    public async Task<IdentityLoginResult> FindActiveUserAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null || !user.IsActive || await _userManager.IsLockedOutAsync(user))
+            return new(false, null, null, null, Array.Empty<string>(), "AUTH_ACCOUNT_DISABLED");
+
+        return new(true, user.Id, user.Email, user.FullName,
+            (await _userManager.GetRolesAsync(user)).ToArray(), null, user.UserName, user.AvatarUrl);
     }
 }
