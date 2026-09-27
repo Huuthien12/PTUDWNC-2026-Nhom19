@@ -3,4 +3,5 @@
   <Project Path="CulinaryBlog.Application/CulinaryBlog.Application.csproj" />
   <Project Path="CulinaryBlog.Domain/CulinaryBlog.Domain.csproj" />
   <Project Path="CulinaryBlog.Infrastructure/CulinaryBlog.Infrastructure.csproj" />
+  <Project Path="CulinaryBlog.Tests/CulinaryBlog.Tests.csproj" />
 </Solution>
