@@ -31,6 +31,49 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<Category> Categories => Set<Category>();
 
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        PrepareRecipeVersions();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        PrepareRecipeVersions();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void PrepareRecipeVersions()
+    {
+        ChangeTracker.DetectChanges();
+        foreach (var recipe in ChangeTracker.Entries<Recipe>().ToList())
+        {
+            var nutrition = recipe.Reference(x => x.Nutrition).TargetEntry;
+            if (recipe.State is not (EntityState.Added or EntityState.Modified) &&
+                !(recipe.State == EntityState.Unchanged &&
+                  nutrition?.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+                continue;
+
+            // Preserve the original token for the SQL WHERE predicate, including legacy empty tokens.
+            var version = recipe.Property(x => x.RowVersion);
+            var nextVersion = Guid.NewGuid().ToByteArray();
+            version.CurrentValue = nextVersion;
+            if (recipe.State != EntityState.Added)
+                version.IsModified = true;
+
+            if (nutrition is not null && nutrition.State != EntityState.Deleted)
+            {
+                var ownedVersion = nutrition.Property<byte[]>(nameof(Recipe.RowVersion));
+                ownedVersion.OriginalValue = version.OriginalValue;
+                ownedVersion.CurrentValue = nextVersion;
+                if (nutrition.State != EntityState.Added)
+                    ownedVersion.IsModified = true;
+            }
+        }
+    }
+
     // =========================
     // Model Configuration
     // =========================
