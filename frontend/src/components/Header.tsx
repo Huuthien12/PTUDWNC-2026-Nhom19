@@ -1,14 +1,15 @@
 import Link from "next/link";
+import AuthControls from "@/components/auth/AuthControls";
 
 export default function Header() {
   return (
     <header className="border-b bg-white">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+      <div className="mx-auto flex min-h-16 max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-3">
         <Link href="/" className="text-xl font-bold">
           Culinary Blog
         </Link>
 
-        <nav className="flex items-center gap-6">
+        <nav className="flex flex-wrap items-center gap-4">
           <Link
             href="/"
             className="text-sm font-medium hover:text-gray-600"
@@ -37,6 +38,7 @@ export default function Header() {
             Giới thiệu
           </Link>
         </nav>
+        <AuthControls />
       </div>
     </header>
   );
