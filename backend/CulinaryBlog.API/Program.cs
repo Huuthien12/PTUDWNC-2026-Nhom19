@@ -2,6 +2,7 @@
 using CulinaryBlog.Application.Categories.Commands;
 using CulinaryBlog.Application.Authentication.DTOs;
 using CulinaryBlog.API.Authentication;
+using CulinaryBlog.API.Recipes;
 using CulinaryBlog.Application.Categories.Queries;
 using CulinaryBlog.Application.Common.Behaviors;
 using CulinaryBlog.Application.Common.Interfaces;
@@ -586,6 +587,8 @@ categories.MapDelete("/{id:guid}", async (
 // =========================
 // Run Application
 // =========================
+
+app.MapRecipeEndpoints();
 
 app.Run();
 
