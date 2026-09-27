@@ -22,6 +22,7 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
     public Guid CategoryId { get; private set; }
     public string AuthorId { get; private set; } = "";
     public bool FailWithSlugConstraint { get; set; }
+    public RecordingRecipeCache Cache { get; } = new();
 
     public async Task InitializeAsync()
     {
@@ -45,6 +46,8 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<DbContextOptions<AppDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<AppDbContext>>();
             services.AddScoped(_ => Database.NewContext());
+            services.RemoveAll<ICacheService>();
+            services.AddSingleton<ICacheService>(Cache);
             if (FailWithSlugConstraint)
             {
                 services.RemoveAll<IUnitOfWork>();
@@ -53,12 +56,12 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
         });
     }
 
-    public HttpClient Client(string? role = "Author", bool expired = false, bool withSubject = true)
+    public HttpClient Client(string? role = "Author", bool expired = false, bool withSubject = true, string? userId = null)
     {
         var client = CreateClient();
         if (role is null) return client;
         var claims = new List<Claim> { new(ClaimTypes.Role, role) };
-        if (withSubject) claims.Add(new(ClaimTypes.NameIdentifier, AuthorId));
+        if (withSubject) claims.Add(new(ClaimTypes.NameIdentifier, userId ?? AuthorId));
         var token = new JwtSecurityToken("recipe-tests", "recipe-tests", claims,
             expires: DateTime.UtcNow.AddMinutes(expired ? -5 : 5),
             signingCredentials: new(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Key)), SecurityAlgorithms.HmacSha256));
@@ -82,5 +85,17 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
             => throw new DbUpdateException("Concurrent slug insert", new PostgresException(
                 "duplicate key", "ERROR", "ERROR", PostgresErrorCodes.UniqueViolation,
                 constraintName: "IX_Recipes_Slug"));
+    }
+}
+
+public sealed class RecordingRecipeCache : ICacheService
+{
+    public List<string> RemovedKeys { get; } = [];
+    public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default) => Task.FromResult(default(T));
+    public Task SetAsync<T>(string key, T value, TimeSpan expiration, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task RemoveAsync(string key, CancellationToken cancellationToken = default)
+    {
+        RemovedKeys.Add(key);
+        return Task.CompletedTask;
     }
 }

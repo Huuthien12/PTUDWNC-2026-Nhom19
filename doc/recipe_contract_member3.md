@@ -1,5 +1,12 @@
 # Member 3 — Recipe contract, buổi 3 đợt 1
 
+> Bổ sung đợt 4: FR-RCP-004 đã triển khai theo
+> [recipe_update_member3.md](recipe_update_member3.md). Update giữ nguyên slug khi
+> title đổi; nutrition bỏ qua/null giữ nguyên, object thay thế bốn giá trị (`{}`
+> xóa giá trị). RowVersion trong body được persistence kiểm tra, stale trả 422;
+> response trả trực tiếp RecipeDto với version mới. Các đoạn “dự kiến/chưa triển
+> khai” bên dưới mô tả thời điểm chốt contract đợt 1.
+
 Phạm vi: request/response DTO và FluentValidation cho FR-RCP-003/004, chưa có
 endpoint, command/handler, persistence hay frontend. Đây là contract mutation;
 không thay thế detail DTO của Member 2. Validators được assembly scanning hiện
