@@ -15,43 +15,53 @@ export default function CategoryPagination({
     return null;
   }
 
-  const pages = Array.from(
-    { length: totalPages },
-    (_, index) => index + 1
-  );
+  const activePage = Math.min(Math.max(currentPage, 1), totalPages);
+  const pages = [...new Set([
+    1,
+    activePage - 1,
+    activePage,
+    activePage + 1,
+    totalPages,
+  ])].filter(page => page >= 1 && page <= totalPages).sort((a, b) => a - b);
 
   return (
     <nav
-      className="mt-10 flex flex-wrap justify-center gap-2"
+      className="cb-pagination"
       aria-label="Phân trang"
     >
       {currentPage > 1 && (
         <Link
-          href={`/categories/${slug}?page=${currentPage - 1}`}
-          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          href={`/categories/${encodeURIComponent(slug)}?page=${Math.min(currentPage - 1, totalPages)}`}
+          className="cb-button cb-button-secondary"
         >
           ← Trước
         </Link>
       )}
 
-      {pages.map((page) => (
-        <Link
-          key={page}
-          href={`/categories/${slug}?page=${page}`}
-          className={
-            page === currentPage
-              ? "rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white"
-              : "rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          }
-        >
-          {page}
-        </Link>
+      {pages.map((page, index) => (
+        <span key={page} className="inline-flex items-center gap-2">
+          {index > 0 && page - pages[index - 1] > 1 && (
+            <span className="px-2 text-muted" aria-hidden="true">…</span>
+          )}
+          <Link
+            aria-current={page === currentPage ? "page" : undefined}
+            aria-label={`Trang ${page}`}
+            href={`/categories/${encodeURIComponent(slug)}?page=${page}`}
+            className={
+              page === currentPage
+                ? "cb-button"
+                : "cb-button cb-button-secondary"
+            }
+          >
+            {page}
+          </Link>
+        </span>
       ))}
 
       {currentPage < totalPages && (
         <Link
-          href={`/categories/${slug}?page=${currentPage + 1}`}
-          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          href={`/categories/${encodeURIComponent(slug)}?page=${currentPage + 1}`}
+          className="cb-button cb-button-secondary"
         >
           Sau →
         </Link>

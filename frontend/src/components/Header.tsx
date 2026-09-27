@@ -1,43 +1,18 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export default function Header() {
-  return (
-    <header className="border-b bg-white">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
-        <Link href="/" className="text-xl font-bold">
-          Culinary Blog
-        </Link>
-
-        <nav className="flex items-center gap-6">
-          <Link
-            href="/"
-            className="text-sm font-medium hover:text-gray-600"
-          >
-            Trang chủ
-          </Link>
-
-          <Link
-            href="/recipes"
-            className="text-sm font-medium hover:text-gray-600"
-          >
-            Công thức
-          </Link>
-
-          <Link
-            href="/categories"
-            className="text-sm font-medium hover:text-gray-600"
-          >
-            Danh mục
-          </Link>
-
-          <Link
-            href="/about"
-            className="text-sm font-medium hover:text-gray-600"
-          >
-            Giới thiệu
-          </Link>
-        </nav>
-      </div>
-    </header>
-  );
+  const pathname = usePathname();
+  return <header className="cb-header">
+    <div className="cb-container cb-header-inner">
+      <Link href="/" className="cb-brand" aria-label="Culinary Blog — Trang chủ">Culinary <span>Blog</span><span className="text-gold" aria-hidden="true">.</span></Link>
+      <nav className="cb-nav" aria-label="Điều hướng chính">
+        <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>Trang chủ</Link>
+        <Link href="/categories" aria-current={pathname.startsWith("/categories") ? "page" : undefined}>Khám phá danh mục</Link>
+        <Link href="/login" aria-current={pathname === "/login" ? "page" : undefined}>Đăng nhập ↗</Link>
+      </nav>
+    </div>
+  </header>;
 }
