@@ -2,7 +2,11 @@ import CategoryList from "@/components/categories/CategoryList";
 import { getCategories } from "@/services/category-service";
 import type { Category } from "@/types/category";
 
-export default async function CategoriesPage() {
+export default async function CategoriesPage({ searchParams }: {
+  searchParams: Promise<{ created?: string }>;
+}) {
+  const created = (await searchParams).created === "recipe";
+  const notice = created ? <p role="status" className="rounded-lg bg-green-50 p-4 text-green-800">Đã lưu bản nháp công thức. Bản nháp chưa xuất hiện trong danh sách công khai.</p> : null;
   let categories: Category[] = [];
   let hasError = false;
 
@@ -16,6 +20,7 @@ export default async function CategoriesPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-50 px-6">
         <div className="max-w-md rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
+          {notice}
           <h1 className="text-xl font-bold text-gray-900">
             Không thể tải danh mục
           </h1>
@@ -31,6 +36,7 @@ export default async function CategoriesPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
+      {notice}
       <section className="border-b border-gray-200 bg-white">
         <div className="mx-auto max-w-7xl px-6 py-14">
           <p className="mb-3 font-semibold text-orange-600">
