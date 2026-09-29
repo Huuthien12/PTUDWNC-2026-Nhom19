@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Header from "@/components/Header";
+import AuthLifecycle from "@/components/auth/AuthLifecycle";
 import Footer from "@/components/layout/footer";
 import "./globals.css";
 
@@ -15,6 +16,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className="h-full antialiased"
     >
       <body className="min-h-screen flex flex-col">
+        <AuthLifecycle />
         <a className="cb-skip" href="#main-content">Đến nội dung chính</a>
         <Header />
         <main id="main-content" tabIndex={-1} className="flex min-w-0 flex-1 flex-col">

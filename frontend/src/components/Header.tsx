@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import AuthControls from "@/components/auth/AuthControls";
 import { usePathname } from "next/navigation";
 
 export default function Header() {
@@ -11,7 +12,7 @@ export default function Header() {
       <nav className="cb-nav" aria-label="Điều hướng chính">
         <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>Trang chủ</Link>
         <Link href="/categories" aria-current={pathname.startsWith("/categories") ? "page" : undefined}>Khám phá danh mục</Link>
-        <Link href="/login" aria-current={pathname === "/login" ? "page" : undefined}>Đăng nhập ↗</Link>
+        <AuthControls />
       </nav>
     </div>
   </header>;

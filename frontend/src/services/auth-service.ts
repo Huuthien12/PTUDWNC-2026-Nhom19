@@ -1,20 +1,27 @@
-import { apiClient } from "./api-client";
+import { endSession, establishRegisteredSession, establishSession } from "./auth-session";
+import type { AuthResponse } from "../types/auth";
 
 export interface LoginRequest {
   email: string;
   password: string;
 }
 
-export interface LoginResponse {
-  accessToken: string;
-  tokenType: string;
+export interface RegisterRequest {
+  fullName: string;
+  email: string;
+  userName: string;
+  password: string;
 }
+
+export type LoginResponse = AuthResponse;
 
 export async function login(
   request: LoginRequest
 ): Promise<LoginResponse> {
-  return apiClient<LoginResponse>("/api/v1/auth/login", {
-    method: "POST",
-    body: JSON.stringify(request),
-  });
+  return establishSession(request);
 }
+
+export const logout = (): Promise<void> => endSession();
+
+export const register = (request: RegisterRequest): Promise<AuthResponse> =>
+  establishRegisteredSession(request);

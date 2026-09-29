@@ -2,6 +2,8 @@
 
 public interface IJwtTokenService
 {
-    Task<string> GenerateAccessTokenAsync(
+    Task<AccessTokenResult> GenerateAccessTokenAsync(
         IdentityLoginResult loginResult);
 }
+
+public sealed record AccessTokenResult(string Token, DateTime ExpiresAt);

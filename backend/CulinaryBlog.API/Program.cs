@@ -1,5 +1,8 @@
 ﻿using CulinaryBlog.Application.Authentication.Commands.Login;
+using CulinaryBlog.Application.Authentication.Commands.Register;
 using CulinaryBlog.Application.Categories.Commands;
+using CulinaryBlog.Application.Authentication.DTOs;
+using CulinaryBlog.API.Authentication;
 using CulinaryBlog.Application.Categories.Queries;
 using CulinaryBlog.Application.Common.Behaviors;
 using CulinaryBlog.Application.Common.Interfaces;
@@ -13,6 +16,10 @@ using Microsoft.EntityFrameworkCore;
 using CulinaryBlog.Infrastructure.Caching;
 using CulinaryBlog.Infrastructure.Persistence.Seed;
 using CulinaryBlog.Infrastructure.Authentication;
+using CulinaryBlog.Infrastructure.BackgroundJobs;
+using CulinaryBlog.Infrastructure.Email;
+using Hangfire;
+using Hangfire.PostgreSql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -76,6 +83,23 @@ builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IIdentityService, IdentityService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+builder.Services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
+builder.Services.AddSingleton<IRefreshTokenGenerator, RefreshTokenGenerator>();
+builder.Services.AddSingleton<IWelcomeEmailQueue, HangfireWelcomeEmailQueue>();
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+builder.Services.AddOptions<SmtpOptions>()
+    .Bind(builder.Configuration.GetSection("Email:Smtp"))
+    .Validate(options => builder.Environment.IsDevelopment() || options.EnableSsl,
+        "SMTP TLS is required outside Development.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(TimeProvider.System);
+
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddHangfire(configuration =>
+        configuration.UsePostgreSqlStorage(storage => storage.UseNpgsqlConnection(connectionString)));
+    builder.Services.AddHangfireServer();
+}
 
 // =========================
 // ASP.NET Core Identity
@@ -222,8 +246,9 @@ var app = builder.Build();
 // Database Migration & Seed
 // =========================
 
-using (var scope = app.Services.CreateScope())
+if (!app.Environment.IsEnvironment("Testing"))
 {
+    using var scope = app.Services.CreateScope();
     var services = scope.ServiceProvider;
 
     var dbContext =
@@ -271,6 +296,8 @@ app.MapGet("/health", () =>
 var auth =
     app.MapGroup("/api/v1/auth");
 
+auth.MapTokenEndpoints();
+
 
 // =========================
 // Login
@@ -313,9 +340,66 @@ auth.MapPost("/login", async (
     }
 
     return Results.Ok(
-        new LoginResponse(
+        new AuthResponseDto(
             result.AccessToken!,
-            result.TokenType));
+            result.TokenType,
+            result.RefreshToken!,
+            result.ExpiresAt!.Value,
+            result.User!));
+});
+
+// =========================
+// Register
+// POST /api/v1/auth/register
+// =========================
+
+auth.MapPost("/register", async (
+    RegisterCommand request,
+    ISender sender,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await sender.Send(request, cancellationToken);
+
+        if (result.Tokens is null)
+        {
+            if (result.ErrorCode == "AUTH_EMAIL_EXISTS")
+            {
+                return Results.Problem(
+                    type: "AUTH_EMAIL_EXISTS",
+                    title: "Email already exists.",
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            return Results.Problem(
+                type: result.ErrorCode ?? "REGISTRATION_FAILED",
+                title: "Registration failed.",
+                statusCode: result.ErrorCode == "VALIDATION_ERROR"
+                    ? StatusCodes.Status400BadRequest
+                    : StatusCodes.Status500InternalServerError);
+        }
+
+        return Results.Created(
+            "/api/v1/auth/register",
+            result.Tokens);
+    }
+    catch (ValidationException exception)
+    {
+        var errors = exception.Errors
+            .GroupBy(error => error.PropertyName)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .Select(error => error.ErrorMessage)
+                    .ToArray());
+
+        return Results.ValidationProblem(
+            errors,
+            statusCode: StatusCodes.Status400BadRequest,
+            title: "Validation failed.",
+            type: "VALIDATION_ERROR");
+    }
 });
 
 
@@ -595,6 +679,4 @@ public sealed record LoginRequest(
     string Email,
     string Password);
 
-public sealed record LoginResponse(
-    string AccessToken,
-    string TokenType);
+public partial class Program { }
