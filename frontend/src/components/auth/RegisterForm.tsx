@@ -3,14 +3,14 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5062";
+import { register } from "@/services/auth-service";
 
 export default function RegisterForm() {
   const router = useRouter();
   const [form, setForm] = useState({
     fullName: "",
     email: "",
+    userName: "",
     password: "",
     confirmPassword: "",
   });
@@ -27,8 +27,13 @@ export default function RegisterForm() {
     setError("");
     setSuccess("");
 
-    if (!form.fullName.trim() || !form.email.trim() || !form.password || !form.confirmPassword) {
+    if (!form.fullName.trim() || !form.email.trim() || !form.userName.trim() || !form.password || !form.confirmPassword) {
       setError("Vui lòng điền đầy đủ thông tin.");
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9]+$/.test(form.userName)) {
+      setError("Tên người dùng chỉ gồm chữ cái và chữ số.");
       return;
     }
 
@@ -44,31 +49,14 @@ export default function RegisterForm() {
 
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/api/v1/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          fullName: form.fullName.trim(),
-          email: form.email.trim(),
-        }),
+      await register({
+        fullName: form.fullName.trim(),
+        email: form.email.trim(),
+        userName: form.userName.trim(),
+        password: form.password,
       });
-
-      const result = (await response.json()) as {
-        message?: string;
-        detail?: string;
-        errors?: string[] | Record<string, string[]>;
-      };
-
-      if (!response.ok) {
-        const serverErrors = Array.isArray(result.errors)
-          ? result.errors
-          : Object.values(result.errors ?? {}).flat();
-        throw new Error([result.detail ?? result.message, ...serverErrors].filter(Boolean).join(" "));
-      }
-
-      setSuccess(result.message || "Đăng ký tài khoản thành công.");
-      setTimeout(() => router.push("/login"), 1200);
+      setSuccess("Đăng ký thành công. Đang chuyển đến trang chủ...");
+      setTimeout(() => router.push("/"), 1200);
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : "Không thể kết nối đến máy chủ.");
     } finally {
@@ -162,6 +150,22 @@ export default function RegisterForm() {
                   onChange={(event) => updateField("email", event.target.value)}
                   disabled={loading}
                   placeholder="ban@example.com"
+                  className="h-12 w-full border-b border-[#bfc7b5] bg-transparent px-0 text-[15px] text-[#28351f] outline-none transition placeholder:text-[#a5aa9d] focus:border-[#687858]"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="userName" className="mb-2 block text-sm font-semibold text-[#35412c]">
+                  Tên người dùng
+                </label>
+                <input
+                  id="userName"
+                  name="userName"
+                  type="text"
+                  value={form.userName}
+                  onChange={(event) => updateField("userName", event.target.value)}
+                  disabled={loading}
+                  placeholder="Ví dụ: MinhAnh01"
                   className="h-12 w-full border-b border-[#bfc7b5] bg-transparent px-0 text-[15px] text-[#28351f] outline-none transition placeholder:text-[#a5aa9d] focus:border-[#687858]"
                 />
               </div>

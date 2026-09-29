@@ -1,63 +1,204 @@
 # Culinary Blog - Dự án Phát triển Ứng dụng Web Nâng cao (Nhóm 19)
 
-Hệ thống nền tảng Blog Ẩm thực và Nấu ăn xây dựng theo kiến trúc API-Driven:
-- **Backend:** .NET 10 Minimal APIs (Clean Architecture + CQRS)
-- **Frontend:** Next.js 15 App Router (TypeScript, Tailwind CSS)
-- **Infrastructure:** PostgreSQL 16, Redis 7, MinIO, Mailhog (Docker Compose)
+Hệ thống nền tảng Blog Ẩm thực và Nấu ăn xây dựng theo kiến trúc
+API-Driven: - **Backend:** .NET 10 Minimal APIs (Clean Architecture +
+CQRS) - **Frontend:** Next.js 15 App Router (TypeScript, Tailwind CSS) -
+**Infrastructure:** PostgreSQL 16, Redis 7, MinIO, Mailhog (Docker
+Compose)
 
----
+------------------------------------------------------------------------
 
 ## 🛠️ Yêu cầu Môi trường (Prerequisites)
 
-Trước khi khởi chạy dự án, máy tính cần cài đặt sẵn các công cụ sau:
-1. **Docker Desktop** (bắt buộc phải kích hoạt WSL 2 trên Windows).
-2. **.NET 10.0 SDK** (phiên bản 10.x trở lên).
-3. **Node.js** (phiên bản v20 LTS trở lên) & **npm**.
-4. **Git**.
+Trước khi khởi chạy dự án, máy tính cần cài đặt:
 
----
+1.  **Docker Desktop**.
+2.  **.NET 10 SDK**.
+3.  **Node.js 20+** và **npm**.
+4.  **Git**.
+
+Kiểm tra:
+
+``` powershell
+docker --version
+docker compose version
+dotnet --version
+node --version
+npm --version
+git --version
+```
+
+------------------------------------------------------------------------
 
 ## 🚀 Hướng dẫn Khởi chạy Môi trường Phát triển (Local Setup)
 
-### 1. Khởi chạy các dịch vụ Hạ tầng (Database, Cache, Object Storage)
-Mở Terminal tại thư mục gốc dự án và chạy lệnh:
+> **Lưu ý:** Connection String, JWT Key và thông tin nhạy cảm không được
+> commit lên Git. Mỗi thành viên cần cấu hình **User Secrets** trên máy
+> của mình trước khi chạy Backend lần đầu.
+
+### 1. Clone hoặc cập nhật source code
+
+Clone lần đầu:
+
+``` powershell
+git clone <repository-url>
+cd PTUDWNC-2026-Nhom19
 ```
+
+Nếu đã có project:
+
+``` powershell
+git switch main
+git pull origin main
+```
+
+### 2. Khởi chạy hạ tầng bằng Docker
+
+Tại thư mục gốc:
+
+``` powershell
 docker compose up -d
-
+docker compose ps
 ```
-Sau khi chạy thành công, các dịch vụ sẽ hoạt động tại:
 
-PostgreSQL 16: localhost:5432 (Database: CulinaryBlogDb, User: postgres, Password: YourPassword123!)
+Các service development:
 
-Redis 7: localhost:6379
+-   **PostgreSQL 16:** `localhost:5432`
+-   **Redis 7:** `localhost:6379`
+-   **MinIO Console:** `http://localhost:9001`
+-   **Mailhog UI:** `http://localhost:8025`
 
-MinIO Console: http://localhost:9001 (User: minioadmin, Pass: minioadminpassword)
+Thông tin PostgreSQL phải khớp với cấu hình development trong
+`docker-compose.yml`.
 
-Mailhog UI (Test Email): http://localhost:8025
+### 3. Cấu hình Backend User Secrets
 
-2. Khởi chạy Backend (.NET 10 API)
-Mở cửa sổ Terminal thứ nhất:
+Kiểm tra:
+
+``` powershell
+dotnet user-secrets list --project backend/CulinaryBlog.API
 ```
-cd backend/CulinaryBlog.API
-dotnet run
 
+Nếu hiển thị `No secrets configured for this application`, cấu hình các
+giá trị sau.
+
+#### 3.1. PostgreSQL Connection String
+
+``` powershell
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=CulinaryBlogDb;Username=postgres;Password=<POSTGRES_PASSWORD>" --project backend/CulinaryBlog.API
 ```
-Backend API sẽ lắng nghe tại: http://localhost:5062
 
-Endpoint Health Check test: http://localhost:5062/health
+Thay `<POSTGRES_PASSWORD>` bằng mật khẩu PostgreSQL của môi trường
+development đang được nhóm sử dụng.
 
-3. Khởi chạy Frontend (Next.js 15)
-Mở cửa sổ Terminal thứ hai:
+#### 3.2. JWT Key
+
+``` powershell
+dotnet user-secrets set "Jwt:Key" "<YOUR_LOCAL_DEVELOPMENT_JWT_KEY>" --project backend/CulinaryBlog.API
 ```
+
+Kiểm tra lại:
+
+``` powershell
+dotnet user-secrets list --project backend/CulinaryBlog.API
+```
+
+Cần có tối thiểu:
+
+``` text
+ConnectionStrings:DefaultConnection = ...
+Jwt:Key = ...
+```
+
+> **Không commit Connection String, JWT Key hoặc mật khẩu thật lên
+> Git.**
+
+### 4. Restore và Build Backend
+
+``` powershell
+dotnet restore backend/CulinaryBlog.slnx
+dotnet build backend/CulinaryBlog.slnx
+```
+
+Kết quả mong đợi: `Build succeeded.`
+
+### 5. Chạy Backend (.NET 10 API)
+
+``` powershell
+dotnet run --project backend/CulinaryBlog.API
+```
+
+Backend API: `http://localhost:5062`
+
+Health Check: `http://localhost:5062/health`
+
+### 6. Cài đặt và chạy Frontend
+
+Mở Terminal khác:
+
+``` powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Các lần chạy sau nếu dependencies không thay đổi:
+
+``` powershell
 cd frontend
 npm run dev
-
 ```
-Giao diện Frontend sẽ truy cập tại: http://localhost:3000
+
+Frontend: `http://localhost:3000`
+
+### 7. Tài khoản Development
+
+Tài khoản **Author** được seed để phục vụ phát triển/test:
+
+``` text
+Email: seed.author@culinaryblog.local
+Password: Seed@123456
+```
+
+Tài khoản Admin chỉ sử dụng khi database development đã được seed Admin
+theo cấu hình chung của nhóm.
+
+### 8. Lỗi thường gặp
+
+#### PostgreSQL: `28P01: password authentication failed for user "postgres"`
+
+Connection String đang dùng password không khớp với PostgreSQL đang
+chạy.
+
+``` powershell
+docker compose ps
+dotnet user-secrets list --project backend/CulinaryBlog.API
+```
+
+Đảm bảo password trong `ConnectionStrings:DefaultConnection` khớp với
+PostgreSQL development.
+
+#### `JWT Key is not configured`
+
+``` powershell
+dotnet user-secrets set "Jwt:Key" "<YOUR_LOCAL_DEVELOPMENT_JWT_KEY>" --project backend/CulinaryBlog.API
+```
+
+#### Port PostgreSQL `5432` đã được sử dụng
+
+``` powershell
+netstat -ano | findstr :5432
+docker compose ps
+```
+
+Nếu máy đã cài PostgreSQL trực tiếp, service local có thể đang chiếm
+port `5432` của PostgreSQL Docker.
+
+------------------------------------------------------------------------
 
 ## 📁 Cấu trúc Thư mục Dự án
 
-```text
+``` text
 PTUDWNC-2026-Nhom19/
 ├── backend/                  # .NET 10 Minimal APIs (Clean Architecture)
 │   ├── CulinaryBlog.Domain/        # Domain Entities & Value Objects
@@ -68,17 +209,18 @@ PTUDWNC-2026-Nhom19/
 ├── docker-compose.yml        # Định nghĩa các container hạ tầng
 └── README.md                 # Tài liệu hướng dẫn sử dụng
 ```
-# 👥 PHÂN CÔNG CÔNG VIỆC – CULINARY BLOG
 
-> Dựa trên SRS Culinary Blog v1.0.2  
-> Backend: .NET 10 Minimal APIs  
-> Frontend: Next.js App Router + TypeScript  
-> Database: PostgreSQL 16  
-> Cache: Redis 7  
-> Object Storage: MinIO  
+# 👥 PHÂN CÔNG CÔNG VIỆC -- CULINARY BLOG
+
+> Dựa trên SRS Culinary Blog v1.0.2\
+> Backend: .NET 10 Minimal APIs\
+> Frontend: Next.js App Router + TypeScript\
+> Database: PostgreSQL 16\
+> Cache: Redis 7\
+> Object Storage: MinIO\
 > Background Jobs: Hangfire
 
----
+------------------------------------------------------------------------
 
 ## 👨‍💻 Thành viên nhóm
 
@@ -89,20 +231,25 @@ PTUDWNC-2026-Nhom19/
 | Member 3 | 2312764 | Nguyễn Khiêm Thuận |
 | Member 4 | 2312753 | Lương Hữu Thiện |
 
----
+------------------------------------------------------------------------
 
 # 📌 Nguyên tắc phân công
 
-- Không chia cố định một người chỉ làm Frontend, Backend hoặc Database.
-- Cả 4 thành viên đều phải tham gia Database, Backend và Frontend.
-- Mỗi thành viên chịu trách nhiệm chính một phần nhưng phải review code của thành viên khác.
-- Các chức năng phải bám theo SRS v1.0.2.
-- Mỗi chức năng hoàn thành phải được kiểm thử trước khi merge vào `main`.
-- Mỗi thành viên phát triển trên branch riêng hoặc feature branch.
-- Pull Request phải được ít nhất một thành viên khác review trước khi merge.
-- Công việc được chia thành 7 buổi theo thứ tự từ nền tảng → chức năng → tích hợp → kiểm thử.
+-   Không chia cố định một người chỉ làm Frontend, Backend hoặc
+    Database.
+-   Cả 4 thành viên đều phải tham gia Database, Backend và Frontend.
+-   Mỗi thành viên chịu trách nhiệm chính một phần nhưng phải review
+    code của thành viên khác.
+-   Các chức năng phải bám theo SRS v1.0.2.
+-   Mỗi chức năng hoàn thành phải được kiểm thử trước khi merge vào
+    `main`.
+-   Mỗi thành viên phát triển trên branch riêng hoặc feature branch.
+-   Pull Request phải được ít nhất một thành viên khác review trước khi
+    merge.
+-   Công việc được chia thành 7 buổi theo thứ tự từ nền tảng → chức năng
+    → tích hợp → kiểm thử.
 
----
+------------------------------------------------------------------------
 
 # 🗓️ BUỔI 1 – KHỞI TẠO DỰ ÁN & THIẾT KẾ DATABASE
 

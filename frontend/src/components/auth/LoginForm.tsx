@@ -4,8 +4,9 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError } from "@/services/api-client";
 import { login } from "@/services/auth-service";
+import { loginDestination } from "@/services/auth-navigation";
 
-export default function LoginForm() {
+export default function LoginForm({ next, reason }: { next?: string; reason?: string }) {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
@@ -26,18 +27,17 @@ export default function LoginForm() {
     try {
       setLoading(true);
 
-      const response = await login({
+      await login({
         email: email.trim(),
         password,
       });
 
-      localStorage.setItem("accessToken", response.accessToken);
-      localStorage.setItem("tokenType", response.tokenType);
-
-      router.push("/");
+      router.replace(loginDestination(next));
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.status === 401) {
+        if (err.status === 0) {
+          setError(err.message);
+        } else if (err.status === 401) {
           setError("\u0045\u006d\u0061\u0069\u006c \u0068\u006f\u1eb7\u0063 \u006d\u1ead\u0074 \u006b\u0068\u1ea9\u0075 \u006b\u0068\u00f4\u006e\u0067 \u0063\u0068\u00ed\u006e\u0068 \u0078\u00e1\u0063.");
         } else if (err.status === 400) {
           setError("\u0054\u0068\u00f4\u006e\u0067 \u0074\u0069\u006e \u0111\u0103\u006e\u0067 \u006e\u0068\u1ead\u0070 \u006b\u0068\u00f4\u006e\u0067 \u0068\u1ee3\u0070 \u006c\u1ec7.");
@@ -63,8 +63,10 @@ export default function LoginForm() {
           {"\u0110\u0103ng nh\u1eadp v\u00e0o t\u00e0i kho\u1ea3n Culinary Blog"}
         </p>
 
+        {reason === "session-expired" && <p role="status" className="mb-4 text-sm">Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.</p>}
+        {reason === "logout-unconfirmed" && <p role="status" className="mb-4 text-sm">Đã xóa phiên trên thiết bị này, nhưng chưa xác nhận được việc thu hồi phiên trên máy chủ.</p>}
         {error && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         )}

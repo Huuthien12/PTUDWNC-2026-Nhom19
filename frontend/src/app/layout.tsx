@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Header from "@/components/Header";
+import AuthLifecycle from "@/components/auth/AuthLifecycle";
 import Footer from "@/components/layout/footer";
 import "./globals.css";
 
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-screen flex flex-col">
+        <AuthLifecycle />
         <Header />
         <main className="flex min-w-0 flex-1 flex-col">
           {children}

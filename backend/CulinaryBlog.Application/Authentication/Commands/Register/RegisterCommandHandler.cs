@@ -1,59 +1,61 @@
+using CulinaryBlog.Application.Authentication.DTOs;
+using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Domain.Entities;
 using MediatR;
-using Microsoft.AspNetCore.Identity;
 
 namespace CulinaryBlog.Application.Authentication.Commands.Register;
 
-public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterResponse>
+public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterResult>
 {
-    private readonly UserManager<ApplicationUser> _userManager;
-    private readonly RoleManager<IdentityRole> _roleManager;
+    private readonly IIdentityService _identity;
+    private readonly IJwtTokenService _jwt;
+    private readonly IRefreshTokenStore _refreshTokens;
+    private readonly IRefreshTokenGenerator _generator;
+    private readonly TimeProvider _clock;
 
     public RegisterCommandHandler(
-        UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole> roleManager)
+        IIdentityService identity,
+        IJwtTokenService jwt,
+        IRefreshTokenStore refreshTokens,
+        IRefreshTokenGenerator generator,
+        TimeProvider clock)
     {
-        _userManager = userManager;
-        _roleManager = roleManager;
+        _identity = identity;
+        _jwt = jwt;
+        _refreshTokens = refreshTokens;
+        _generator = generator;
+        _clock = clock;
     }
 
-    public async Task<RegisterResponse> Handle(RegisterCommand request, CancellationToken cancellationToken)
+    public async Task<RegisterResult> Handle(RegisterCommand request, CancellationToken cancellationToken)
     {
-        // 1. Kiểm tra Email đã tồn tại chưa
-        var existingUser = await _userManager.FindByEmailAsync(request.Email);
-        if (existingUser != null)
+        var registered = await _identity.RegisterAsync(
+            request.FullName.Trim(),
+            request.Email.Trim(),
+            request.UserName.Trim(),
+            request.Password,
+            cancellationToken);
+        if (!registered.Succeeded)
+            return new(null, registered.ErrorCode);
+
+        var user = registered.User!;
+        var accessToken = await _jwt.GenerateAccessTokenAsync(user);
+        var refreshToken = _generator.Generate();
+        var now = _clock.GetUtcNow().UtcDateTime;
+        await _refreshTokens.AddAsync(new RefreshToken
         {
-            return new RegisterResponse(false, "Email này đã được đăng ký sử dụng.");
-        }
+            Token = _generator.Hash(refreshToken),
+            UserId = user.UserId!,
+            CreatedAt = now,
+            UpdatedAt = now,
+            ExpiresAt = now.AddDays(7)
+        }, cancellationToken);
 
-        // 2. Tạo entity ApplicationUser
-        var user = new ApplicationUser
-        {
-            UserName = request.Email,
-            Email = request.Email,
-            FullName = request.FullName,
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        // 3. Đăng ký user mới vào hệ thống Identity
-        var result = await _userManager.CreateAsync(user, request.Password);
-        if (!result.Succeeded)
-        {
-            var errors = result.Errors.Select(e => e.Description);
-            return new RegisterResponse(false, "Đăng ký không thành công.", errors);
-        }
-
-        // 4. Kiểm tra & Tạo role "Author" mặc định nếu chưa có
-        const string defaultRole = "Author";
-        if (!await _roleManager.RoleExistsAsync(defaultRole))
-        {
-            await _roleManager.CreateAsync(new IdentityRole(defaultRole));
-        }
-
-        // 5. Gán Role "Author" cho tài khoản vừa tạo
-        await _userManager.AddToRoleAsync(user, defaultRole);
-
-        return new RegisterResponse(true, "Đăng ký tài khoản thành công!");
+        return new(new AuthResponseDto(
+            accessToken.Token,
+            "Bearer",
+            refreshToken,
+            accessToken.ExpiresAt,
+            AuthUserDto.FromIdentity(user)), null);
     }
 }

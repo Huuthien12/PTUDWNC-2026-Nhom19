@@ -14,6 +14,10 @@ public class RegisterCommandValidator : AbstractValidator<RegisterCommand>
             .NotEmpty().WithMessage("Email không được để trống.")
             .EmailAddress().WithMessage("Định dạng Email không hợp lệ.");
 
+        RuleFor(x => x.UserName)
+            .NotEmpty().WithMessage("Tên người dùng không được để trống.")
+            .Matches("^[a-zA-Z0-9]+$").WithMessage("Tên người dùng không chứa ký tự đặc biệt.");
+
         RuleFor(x => x.Password)
             .NotEmpty().WithMessage("Mật khẩu không được để trống.")
             .MinimumLength(8).WithMessage("Mật khẩu phải chứa ít nhất 8 ký tự.")
@@ -22,7 +26,5 @@ public class RegisterCommandValidator : AbstractValidator<RegisterCommand>
             .Matches(@"[0-9]").WithMessage("Mật khẩu phải chứa ít nhất 1 chữ số.")
             .Matches(@"[\W_]").WithMessage("Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt.");
 
-        RuleFor(x => x.ConfirmPassword)
-            .Equal(x => x.Password).WithMessage("Xác nhận mật khẩu không khớp.");
     }
 }
