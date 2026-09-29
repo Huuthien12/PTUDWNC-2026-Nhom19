@@ -1,19 +1,8 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import Header from "@/components/Header";
 import AuthLifecycle from "@/components/auth/AuthLifecycle";
 import Footer from "@/components/layout/footer";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Culinary Blog",
@@ -24,12 +13,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="vi"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className="h-full antialiased"
     >
       <body className="min-h-screen flex flex-col">
         <AuthLifecycle />
+        <a className="cb-skip" href="#main-content">Đến nội dung chính</a>
         <Header />
-        <main className="flex min-w-0 flex-1 flex-col">
+        <main id="main-content" tabIndex={-1} className="flex min-w-0 flex-1 flex-col">
           {children}
         </main>
         <Footer />

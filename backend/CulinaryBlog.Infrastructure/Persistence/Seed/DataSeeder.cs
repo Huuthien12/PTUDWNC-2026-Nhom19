@@ -13,6 +13,77 @@ public static class DataSeeder
     private const int IngredientsPerRecipe = 10;
     private const int StepsPerRecipe = 5;
 
+    private static readonly IReadOnlyDictionary<string, string> CategoryDescriptions =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Món Việt"] = "Hương vị Việt thân quen, từ món ngon ba miền đến bữa cơm nhà ấm cúng.",
+            ["Món Á"] = "Khám phá những sắc màu ẩm thực châu Á qua các cách kết hợp nguyên liệu và gia vị.",
+            ["Món Âu"] = "Gợi ý món ăn phong cách châu Âu để làm mới thực đơn trong căn bếp của bạn.",
+            ["Món Chay"] = "Cảm hứng từ rau củ, nấm và đậu cho những bữa ăn chay đa dạng.",
+            ["Món Nướng"] = "Những ý tưởng món nướng thơm lừng dành cho bữa ăn sum họp.",
+            ["Món Chiên"] = "Khám phá các món chiên vàng giòn, thêm chút phong phú cho bữa cơm.",
+            ["Món Xào"] = "Các món xào nhanh gọn, kết hợp nguyên liệu tươi ngon cho bữa ăn hằng ngày.",
+            ["Món Hấp"] = "Các món hấp thanh nhẹ, giữ được hương vị tự nhiên của nguyên liệu.",
+            ["Món Kho"] = "Những món kho đậm đà, gợi nhớ hương vị bữa cơm gia đình.",
+            ["Món Canh"] = "Những món canh quen thuộc, phù hợp cho bữa cơm gia đình.",
+            ["Món Súp"] = "Một bát súp ấm áp để bắt đầu bữa ăn hoặc tận hưởng một ngày thong thả.",
+            ["Món Salad"] = "Kết hợp rau củ và nước xốt để mang đến những món salad tươi mới.",
+            ["Món Ăn Sáng"] = "Gợi ý cho bữa sáng, từ đơn giản nhanh gọn đến những ngày có thời gian vào bếp.",
+            ["Món Ăn Trưa"] = "Ý tưởng đổi món cho bữa trưa ở nhà hoặc chuẩn bị mang theo.",
+            ["Món Ăn Tối"] = "Cùng quây quần bên những món ăn dành cho bữa tối sau một ngày dài.",
+            ["Món Ăn Vặt"] = "Những gợi ý nhâm nhi cho buổi chiều thư thả và những cuộc trò chuyện vui.",
+            ["Bánh Ngọt"] = "Cảm hứng làm bánh cho những ai yêu mùi thơm dịu từ căn bếp.",
+            ["Tráng Miệng"] = "Một chút ngọt ngào để khép lại bữa ăn và chia sẻ cùng người thân.",
+            ["Đồ Uống"] = "Những ý tưởng pha chế để bạn tìm thấy thức uống yêu thích của mình.",
+            ["Hải Sản"] = "Khám phá cách chế biến hải sản để làm phong phú thực đơn gia đình."
+        };
+
+    private static string RecipeDescription(string categoryName) =>
+        $"Một công thức tham khảo trong danh mục {categoryName}. " +
+        "Bạn có thể điều chỉnh nguyên liệu và cách chế biến theo sở thích.";
+
+    private static readonly string[] StepDescriptions =
+    [
+        "Đọc danh sách nguyên liệu và chuẩn bị dụng cụ cần thiết trước khi bắt đầu.",
+        "Sơ chế và chia nguyên liệu thành các phần phù hợp với cách chế biến đã chọn.",
+        "Chuẩn bị phần gia vị, điều chỉnh lượng dùng theo khẩu vị và số người ăn.",
+        "Chế biến theo phương pháp phù hợp với từng nguyên liệu; kiểm tra độ chín trước khi dùng.",
+        "Hoàn thiện cách trình bày và thưởng thức. Ghi lại những điều chỉnh cho lần vào bếp tiếp theo."
+    ];
+
+    // Upgrade only recognizable, untouched legacy demo content. Keep IDs, slugs,
+    // relationships and any recipes edited after creation intact.
+    private static async Task RefreshLegacyRecipeContentAsync(
+        AppDbContext context, ApplicationUser author, IReadOnlyList<Category> categories)
+    {
+        var legacyRecipes = await context.Recipes
+            .Where(recipe => recipe.AuthorId == author.Id &&
+                recipe.Slug.StartsWith("lab02-recipe-") &&
+                recipe.Title.StartsWith("Công thức Lab 02 số "))
+            .Include(recipe => recipe.Steps)
+            .ToListAsync();
+        var categoryNames = categories.ToDictionary(category => category.Id, category => category.Name);
+
+        foreach (var recipe in legacyRecipes)
+        {
+            var suffix = recipe.Slug["lab02-recipe-".Length..];
+            if (!int.TryParse(suffix, out var number) || number < 1 || number > RequiredRecipes ||
+                recipe.Title != $"Công thức Lab 02 số {number}" ||
+                recipe.UpdatedAt > recipe.CreatedAt.AddSeconds(1) ||
+                !categoryNames.TryGetValue(recipe.CategoryId, out var categoryName))
+                continue;
+
+            recipe.Title = $"Công thức #{number:00}";
+            recipe.Description = RecipeDescription(categoryName);
+            foreach (var step in recipe.Steps.Where(step =>
+                step.StepNumber >= 1 && step.StepNumber <= StepsPerRecipe &&
+                step.Title == $"Bước {step.StepNumber}" &&
+                step.UpdatedAt <= step.CreatedAt.AddSeconds(1)))
+                step.Description = StepDescriptions[step.StepNumber - 1];
+        }
+        await context.SaveChangesAsync();
+    }
+
     public static async Task SeedAsync(
         AppDbContext context,
         UserManager<ApplicationUser> userManager)
@@ -25,6 +96,8 @@ public static class DataSeeder
         var author = await SeedAuthorAsync(userManager);
 
         var categories = await SeedCategoriesAsync(context);
+
+        await RefreshLegacyRecipeContentAsync(context, author, categories);
 
         await SeedRecipesAsync(
             context,
@@ -119,6 +192,14 @@ public static class DataSeeder
             "Hải Sản"
         };
 
+        foreach (var category in categories)
+        {
+            if (category.Slug.StartsWith("lab02-category-", StringComparison.Ordinal) &&
+                category.Description == $"Danh mục dữ liệu mẫu Lab 02 - {category.Name}" &&
+                CategoryDescriptions.TryGetValue(category.Name, out var description))
+                category.Description = description;
+        }
+
         var existingNames =
             categories
                 .Select(category => category.Name)
@@ -160,7 +241,7 @@ public static class DataSeeder
             var category = Category.Create(
                 name,
                 slug,
-                $"Danh mục dữ liệu mẫu Lab 02 - {name}");
+                CategoryDescriptions[name]);
 
             context.Categories.Add(category);
 
@@ -265,13 +346,13 @@ public static class DataSeeder
             var recipe = new Recipe
             {
                 Title =
-                    $"Công thức Lab 02 số {recipeNumber}",
+                    $"Công thức #{recipeNumber:00}",
 
                 Slug =
                     $"lab02-recipe-{recipeNumber}",
 
                 Description =
-                    faker.Lorem.Sentences(2),
+                    RecipeDescription(category.Name),
 
                 Instructions =
                     "Thực hiện theo các bước chế biến bên dưới.",
@@ -385,7 +466,7 @@ public static class DataSeeder
                             $"Bước {stepNumber}",
 
                         Description =
-                            faker.Lorem.Sentences(2),
+                            StepDescriptions[stepNumber - 1],
 
                         TimerMinutes =
                             faker.Random.Int(2, 20)
