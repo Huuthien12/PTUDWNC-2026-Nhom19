@@ -3,6 +3,7 @@ using CulinaryBlog.Application.Authentication.Commands.Register;
 using CulinaryBlog.Application.Categories.Commands;
 using CulinaryBlog.Application.Authentication.DTOs;
 using CulinaryBlog.API.Authentication;
+using CulinaryBlog.API.Middleware;
 using CulinaryBlog.Application.Categories.Queries;
 using CulinaryBlog.Application.Common.Behaviors;
 using CulinaryBlog.Application.Common.Interfaces;
@@ -267,6 +268,7 @@ if (!app.Environment.IsEnvironment("Testing"))
 // =========================
 // Middleware
 // =========================
+app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseCors("Frontend");
 
 app.UseAuthentication();
@@ -504,44 +506,15 @@ categories.MapPost("/", async (
     ISender sender,
     CancellationToken cancellationToken) =>
 {
-    try
-    {
-        var result = await sender.Send(
-            new CreateCategoryCommand(
-                request.Name,
-                request.Description),
-            cancellationToken);
+    var result = await sender.Send(
+        new CreateCategoryCommand(
+            request.Name,
+            request.Description),
+        cancellationToken);
 
-        return Results.Created(
-            $"/api/v1/categories/{result.Slug}",
-            result);
-    }
-    catch (ValidationException exception)
-    {
-        var errors = exception.Errors
-            .GroupBy(error => error.PropertyName)
-            .ToDictionary(
-                group => group.Key,
-                group => group
-                    .Select(error => error.ErrorMessage)
-                    .ToArray());
-
-        return Results.ValidationProblem(
-            errors,
-            statusCode: StatusCodes.Status400BadRequest,
-            title: "Validation failed.",
-            type: "VALIDATION_ERROR");
-    }
-    catch (InvalidOperationException exception)
-        when (exception.Message == "CATEGORY_NAME_EXISTS")
-    {
-        return Results.Problem(
-            type: "CATEGORY_NAME_EXISTS",
-            title: "Category name already exists.",
-            statusCode: StatusCodes.Status409Conflict,
-            detail:
-                "A category with this name already exists.");
-    }
+    return Results.Created(
+        $"/api/v1/categories/{result.Slug}",
+        result);
 })
 .RequireAuthorization("Admin");
 
@@ -559,53 +532,24 @@ categories.MapPut("/{id:guid}", async (
     ISender sender,
     CancellationToken cancellationToken) =>
 {
-    try
-    {
-        var result = await sender.Send(
-            new UpdateCategoryCommand(
-                id,
-                request.Name,
-                request.Description),
-            cancellationToken);
+    var result = await sender.Send(
+        new UpdateCategoryCommand(
+            id,
+            request.Name,
+            request.Description),
+        cancellationToken);
 
-        if (result is null)
-        {
-            return Results.Problem(
-                type: "CATEGORY_NOT_FOUND",
-                title: "Category not found.",
-                statusCode: StatusCodes.Status404NotFound,
-                detail:
-                    "The requested category does not exist.");
-        }
-
-        return Results.Ok(result);
-    }
-    catch (ValidationException exception)
-    {
-        var errors = exception.Errors
-            .GroupBy(error => error.PropertyName)
-            .ToDictionary(
-                group => group.Key,
-                group => group
-                    .Select(error => error.ErrorMessage)
-                    .ToArray());
-
-        return Results.ValidationProblem(
-            errors,
-            statusCode: StatusCodes.Status400BadRequest,
-            title: "Validation failed.",
-            type: "VALIDATION_ERROR");
-    }
-    catch (InvalidOperationException exception)
-        when (exception.Message == "CATEGORY_NAME_EXISTS")
+    if (result is null)
     {
         return Results.Problem(
-            type: "CATEGORY_NAME_EXISTS",
-            title: "Category name already exists.",
-            statusCode: StatusCodes.Status409Conflict,
+            type: "CATEGORY_NOT_FOUND",
+            title: "Category not found.",
+            statusCode: StatusCodes.Status404NotFound,
             detail:
-                "A category with this name already exists.");
+                "The requested category does not exist.");
     }
+
+    return Results.Ok(result);
 })
 .RequireAuthorization("Admin");
 
