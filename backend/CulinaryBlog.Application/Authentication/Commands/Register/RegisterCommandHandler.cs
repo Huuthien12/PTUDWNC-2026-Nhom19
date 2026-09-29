@@ -11,6 +11,7 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
     private readonly IJwtTokenService _jwt;
     private readonly IRefreshTokenStore _refreshTokens;
     private readonly IRefreshTokenGenerator _generator;
+    private readonly IWelcomeEmailQueue _welcomeEmails;
     private readonly TimeProvider _clock;
 
     public RegisterCommandHandler(
@@ -18,12 +19,14 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
         IJwtTokenService jwt,
         IRefreshTokenStore refreshTokens,
         IRefreshTokenGenerator generator,
+        IWelcomeEmailQueue welcomeEmails,
         TimeProvider clock)
     {
         _identity = identity;
         _jwt = jwt;
         _refreshTokens = refreshTokens;
         _generator = generator;
+        _welcomeEmails = welcomeEmails;
         _clock = clock;
     }
 
@@ -50,6 +53,7 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
             UpdatedAt = now,
             ExpiresAt = now.AddDays(7)
         }, cancellationToken);
+        await _welcomeEmails.EnqueueAsync(user.Email!, user.FullName!, cancellationToken);
 
         return new(new AuthResponseDto(
             accessToken.Token,

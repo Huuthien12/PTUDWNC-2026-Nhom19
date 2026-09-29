@@ -16,6 +16,10 @@ using Microsoft.EntityFrameworkCore;
 using CulinaryBlog.Infrastructure.Caching;
 using CulinaryBlog.Infrastructure.Persistence.Seed;
 using CulinaryBlog.Infrastructure.Authentication;
+using CulinaryBlog.Infrastructure.BackgroundJobs;
+using CulinaryBlog.Infrastructure.Email;
+using Hangfire;
+using Hangfire.PostgreSql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -81,7 +85,21 @@ builder.Services.AddScoped<IIdentityService, IdentityService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
 builder.Services.AddSingleton<IRefreshTokenGenerator, RefreshTokenGenerator>();
+builder.Services.AddSingleton<IWelcomeEmailQueue, HangfireWelcomeEmailQueue>();
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+builder.Services.AddOptions<SmtpOptions>()
+    .Bind(builder.Configuration.GetSection("Email:Smtp"))
+    .Validate(options => builder.Environment.IsDevelopment() || options.EnableSsl,
+        "SMTP TLS is required outside Development.")
+    .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
+
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddHangfire(configuration =>
+        configuration.UsePostgreSqlStorage(storage => storage.UseNpgsqlConnection(connectionString)));
+    builder.Services.AddHangfireServer();
+}
 
 // =========================
 // ASP.NET Core Identity

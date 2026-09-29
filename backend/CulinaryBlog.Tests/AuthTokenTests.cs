@@ -102,6 +102,8 @@ public sealed class AuthTokenTests : IAsyncLifetime
         Assert.Equal(new RefreshTokenGenerator().Hash(tokens.RefreshToken), stored.Token);
         Assert.NotEqual(tokens.RefreshToken, stored.Token);
         Assert.Equal(_factory.Clock.Now.UtcDateTime.AddDays(7), stored.ExpiresAt);
+        Assert.Single(_factory.WelcomeEmails.Messages);
+        Assert.Equal((email, "New Author"), _factory.WelcomeEmails.Messages.Single());
     }
 
     [Theory]
@@ -121,6 +123,7 @@ public sealed class AuthTokenTests : IAsyncLifetime
         });
 
         await AssertProblem(response, HttpStatusCode.BadRequest, "VALIDATION_ERROR");
+        Assert.Empty(_factory.WelcomeEmails.Messages);
     }
 
     [Fact]
@@ -135,6 +138,7 @@ public sealed class AuthTokenTests : IAsyncLifetime
         });
 
         await AssertProblem(response, HttpStatusCode.Conflict, "AUTH_EMAIL_EXISTS");
+        Assert.Empty(_factory.WelcomeEmails.Messages);
     }
 
     [Fact]

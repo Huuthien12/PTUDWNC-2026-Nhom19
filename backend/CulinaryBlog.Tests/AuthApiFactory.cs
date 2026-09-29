@@ -1,3 +1,4 @@
+using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Domain.Entities;
 using CulinaryBlog.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
@@ -31,12 +32,25 @@ public sealed class TestClock : TimeProvider
     public override DateTimeOffset GetUtcNow() => Now;
 }
 
+public sealed class RecordingWelcomeEmailQueue : IWelcomeEmailQueue
+{
+    public List<(string Email, string FullName)> Messages { get; } = [];
+
+    public Task EnqueueAsync(string email, string fullName, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Messages.Add((email, fullName));
+        return Task.CompletedTask;
+    }
+}
+
 public sealed class AuthApiFactory : WebApplicationFactory<Program>
 {
     // Public, test-only signing material. Never loaded from user secrets.
     public const string Key = "culinary-tests-only-signing-key-64-characters-012345678901234567890";
     public string DatabasePath { get; } = Path.Combine(Path.GetTempPath(), $"culinary-auth-tests-{Guid.NewGuid():N}.db");
     public TestClock Clock { get; } = new();
+    public RecordingWelcomeEmailQueue WelcomeEmails { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -46,6 +60,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Issuer", "culinary-tests");
         builder.UseSetting("Jwt:Audience", "culinary-tests");
         builder.UseSetting("Jwt:ExpirationMinutes", "15");
+        builder.UseSetting("Email:Smtp:EnableSsl", "true");
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<AppDbContext>();
@@ -54,6 +69,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
             services.AddScoped<AppDbContext>(_ => NewContext());
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Clock);
+            services.RemoveAll<IWelcomeEmailQueue>();
+            services.AddSingleton<IWelcomeEmailQueue>(WelcomeEmails);
         });
     }
 
