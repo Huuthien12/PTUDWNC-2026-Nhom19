@@ -44,6 +44,16 @@ public sealed class RefreshTokenStore(AppDbContext context) : IRefreshTokenStore
         return true;
     }
 
+    public async Task RevokeAllAsync(string userId, DateTime now, CancellationToken cancellationToken)
+    {
+        await context.RefreshTokens
+            .Where(t => t.UserId == userId && !t.IsDeleted && !t.IsRevoked)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(t => t.IsRevoked, true)
+                .SetProperty(t => t.RevokedAt, now)
+                .SetProperty(t => t.UpdatedAt, now), cancellationToken);
+    }
+
     public async Task<bool> RevokeAsync(string tokenHash, string userId, DateTime now, bool requireActive, CancellationToken cancellationToken)
     {
         var query = context.RefreshTokens.Where(t => t.Token == tokenHash && t.UserId == userId && !t.IsRevoked && !t.IsDeleted);

@@ -140,7 +140,7 @@ public sealed class AuthTokenTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Login_stores_only_hash_and_rotation_rejects_old_token_but_preserves_new_token()
+    public async Task Login_stores_only_hash_and_reuse_revokes_all_active_tokens()
     {
         var first = await Login();
         Assert.Equal("Bearer", first.TokenType);
@@ -161,7 +161,9 @@ public sealed class AuthTokenTests : IAsyncLifetime
         Assert.Equal(new RefreshTokenGenerator().Hash(second.RefreshToken), stored.ReplacedByToken);
 
         await AssertProblem(await Refresh(first.RefreshToken), HttpStatusCode.Unauthorized, "AUTH_REFRESH_TOKEN_REVOKED");
-        Assert.Equal(HttpStatusCode.OK, (await Refresh(second.RefreshToken)).StatusCode);
+        await AssertProblem(await Refresh(second.RefreshToken), HttpStatusCode.Unauthorized, "AUTH_REFRESH_TOKEN_REVOKED");
+        await using var verify = _factory.NewContext();
+        Assert.Empty(await verify.RefreshTokens.Where(token => !token.IsRevoked).ToListAsync());
     }
 
     [Fact]
@@ -186,7 +188,7 @@ public sealed class AuthTokenTests : IAsyncLifetime
             HttpStatusCode.Unauthorized, "AUTH_REFRESH_TOKEN_REVOKED");
         await using var db = _factory.NewContext();
         Assert.Equal(2, await db.RefreshTokens.CountAsync());
-        Assert.Single(await db.RefreshTokens.Where(t => !t.IsRevoked).ToListAsync());
+        Assert.Empty(await db.RefreshTokens.Where(t => !t.IsRevoked).ToListAsync());
     }
 
     [Fact]
@@ -223,7 +225,7 @@ public sealed class AuthTokenTests : IAsyncLifetime
         await AssertProblem(await Refresh(token), status, code);
 
     [Fact]
-    public async Task Duplicate_legacy_hash_is_rejected_without_500_or_rotation()
+    public async Task Refresh_token_hash_is_unique()
     {
         var tokens = await Login();
         await using var db = _factory.NewContext();
@@ -232,11 +234,7 @@ public sealed class AuthTokenTests : IAsyncLifetime
         {
             Token = original.Token, UserId = original.UserId, ExpiresAt = original.ExpiresAt
         });
-        await db.SaveChangesAsync();
-
-        await AssertProblem(await Refresh(tokens.RefreshToken), HttpStatusCode.Unauthorized, "AUTH_TOKEN_INVALID");
-        Assert.Equal(2, await db.RefreshTokens.CountAsync());
-        Assert.All(await db.RefreshTokens.AsNoTracking().ToListAsync(), token => Assert.False(token.IsRevoked));
+        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }
 
     [Theory]
@@ -303,8 +301,13 @@ public sealed class AuthTokenTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NoContent, (await Logout(tokens.AccessToken, tokens.RefreshToken)).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await Logout(tokens.AccessToken, tokens.RefreshToken)).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await Logout(tokens.AccessToken, "unknown")).StatusCode);
+
+        var otherRefresh = await Refresh(otherSession.RefreshToken);
+        Assert.Equal(HttpStatusCode.OK, otherRefresh.StatusCode);
+        var otherReplacement = (await otherRefresh.Content.ReadFromJsonAsync<AuthResponseDto>())!;
+
         await AssertProblem(await Refresh(tokens.RefreshToken), HttpStatusCode.Unauthorized, "AUTH_REFRESH_TOKEN_REVOKED");
-        Assert.Equal(HttpStatusCode.OK, (await Refresh(otherSession.RefreshToken)).StatusCode);
+        await AssertProblem(await Refresh(otherReplacement.RefreshToken), HttpStatusCode.Unauthorized, "AUTH_REFRESH_TOKEN_REVOKED");
     }
 
     [Fact]
