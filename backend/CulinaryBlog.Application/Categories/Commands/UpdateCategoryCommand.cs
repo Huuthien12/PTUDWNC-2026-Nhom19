@@ -1,5 +1,6 @@
 using CulinaryBlog.Application.Categories.DTOs;
 using CulinaryBlog.Application.Common.Interfaces;
+using CulinaryBlog.Domain.Exceptions;
 using MediatR;
 
 namespace CulinaryBlog.Application.Categories.Commands;
@@ -56,8 +57,9 @@ public sealed class UpdateCategoryCommandHandler
 
             if (nameExists)
             {
-                throw new InvalidOperationException(
-                    "CATEGORY_NAME_EXISTS");
+                throw new ConflictException(
+                    "CATEGORY_NAME_EXISTS",
+                    "A category with this name already exists.");
             }
         }
 
