@@ -1,5 +1,6 @@
 using CulinaryBlog.Domain.Common;
 using CulinaryBlog.Domain.Enums;
+using CulinaryBlog.Domain.Exceptions;
 
 namespace CulinaryBlog.Domain.Entities;
 
@@ -44,4 +45,48 @@ public class Recipe : BaseEntity
 
     public ICollection<RecipeImage> Images { get; set; }
         = new List<RecipeImage>();
+
+    public void Publish()
+    {
+        if (Status == RecipeStatus.Published)
+        {
+            return;
+        }
+
+        if (Status != RecipeStatus.Draft)
+        {
+            throw new BusinessRuleException(
+                "RECIPE_PUBLISH_INVALID_STATE",
+                "Only a draft recipe can be published.");
+        }
+
+        if (!Ingredients.Any(ingredient => !ingredient.IsDeleted) ||
+            !Steps.Any(step => !step.IsDeleted))
+        {
+            throw new BusinessRuleException(
+                "RECIPE_PUBLISH_INCOMPLETE",
+                "A recipe must have at least one ingredient and one step before publishing.");
+        }
+
+        Status = RecipeStatus.Published;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void Unpublish()
+    {
+        if (Status == RecipeStatus.Draft)
+        {
+            return;
+        }
+
+        if (Status != RecipeStatus.Published)
+        {
+            throw new BusinessRuleException(
+                "RECIPE_UNPUBLISH_INVALID_STATE",
+                "Only a published recipe can be unpublished.");
+        }
+
+        Status = RecipeStatus.Draft;
+        UpdatedAt = DateTime.UtcNow;
+    }
 }
