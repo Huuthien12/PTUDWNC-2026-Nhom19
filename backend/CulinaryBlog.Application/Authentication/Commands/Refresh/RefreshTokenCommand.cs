@@ -27,7 +27,7 @@ public sealed class RefreshTokenCommandHandler(
             return new(null, "AUTH_TOKEN_INVALID");
 
         if (token.IsRevoked || token.ReplacedByToken is not null)
-            return Reused(token.Id);
+            return await ReusedAsync(token.UserId, token.Id, cancellationToken);
 
         var now = clock.GetUtcNow().UtcDateTime;
         if (token.ExpiresAt <= now)
@@ -49,14 +49,18 @@ public sealed class RefreshTokenCommandHandler(
         };
 
         if (!await store.TryRotateAsync(token.Id, replacement, now, cancellationToken))
-            return Reused(token.Id);
+            return await ReusedAsync(token.UserId, token.Id, cancellationToken);
 
         return new(new(accessToken.Token, "Bearer", rawToken,
             accessToken.ExpiresAt, AuthUserDto.FromIdentity(user)), null);
     }
 
-    private RefreshResult Reused(Guid tokenId)
+    private async Task<RefreshResult> ReusedAsync(
+        string userId,
+        Guid tokenId,
+        CancellationToken cancellationToken)
     {
+        await store.RevokeAllAsync(userId, clock.GetUtcNow().UtcDateTime, cancellationToken);
         logger.LogWarning("Refresh token reuse or concurrent revocation detected for record {TokenId}.", tokenId);
         return new(null, "AUTH_REFRESH_TOKEN_REVOKED");
     }

@@ -116,6 +116,15 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         {
             entity.HasKey(rt => rt.Id);
 
+            entity.Property(rt => rt.Token)
+                .HasMaxLength(64);
+
+            entity.Property(rt => rt.ReplacedByToken)
+                .HasMaxLength(64);
+
+            entity.HasIndex(rt => rt.Token)
+                .IsUnique();
+
             entity.Property(rt => rt.UserId)
                 .HasMaxLength(450);
 
