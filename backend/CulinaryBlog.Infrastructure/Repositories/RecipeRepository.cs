@@ -97,6 +97,49 @@ public sealed class RecipeRepository : IRecipeRepository
             .Take(pageSize)
             .ToListAsync(cancellationToken);
     }
+    public async Task<Recipe?> GetBySlugAsync(
+        string slug,
+        string? userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default)
+    {
+    var query = _context.Recipes
+        .AsNoTracking()
+        .Where(r =>
+            r.Slug == slug &&
+            !r.IsDeleted);
+
+    if (!isAdmin)
+    {
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            query = query.Where(r =>
+                r.Status == RecipeStatus.Published ||
+                (r.Status == RecipeStatus.Draft &&
+                 r.AuthorId == userId));
+        }
+        else
+        {
+            query = query.Where(r =>
+                r.Status == RecipeStatus.Published);
+        }
+    }
+
+    return await query
+        .Include(r => r.Category)
+        .Include(r => r.Author)
+        .Include(r => r.Nutrition)
+        .Include(r => r.Ingredients
+            .Where(i => !i.IsDeleted)
+            .OrderBy(i => i.OrderIndex))
+        .Include(r => r.Steps
+            .Where(s => !s.IsDeleted)
+            .OrderBy(s => s.StepNumber))
+        .Include(r => r.Images
+            .Where(i => !i.IsDeleted)
+            .OrderBy(i => i.OrderIndex))
+        .FirstOrDefaultAsync(cancellationToken);
+    }
 
     public Task<int> CountPublishedByCategoryAsync(
         Guid categoryId,

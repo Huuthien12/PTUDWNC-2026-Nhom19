@@ -6,6 +6,7 @@ using CulinaryBlog.Application.Recipes.DTOs;
 using CulinaryBlog.Application.Recipes.Validators;
 using CulinaryBlog.Domain.Entities;
 using CulinaryBlog.Domain.Enums;
+using CulinaryBlog.Domain.Exceptions;
 using CulinaryBlog.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -161,8 +162,9 @@ public sealed class UpdateRecipeTests
         var uow = new UnitOfWork(db, new CategoryRepository(db), new RecipeRepository(db));
         var handler = new UpdateRecipeCommandHandler(uow, new UpdateRecipeRequestValidator(), factory.Cache, TimeProvider.System);
         var invalid = new UpdateRecipeRequest("bad", "", Guid.NewGuid(), 0, -1, 0, 0, "", "invalid");
-        await Assert.ThrowsAsync<RecipeForbiddenException>(() => handler.Handle(
+        var exception = await Assert.ThrowsAsync<ForbiddenException>(() => handler.Handle(
             new(before.Id, invalid, "other-author", false), default));
+        Assert.Equal("RECIPE_FORBIDDEN", exception.ErrorCode);
         Assert.False(db.ChangeTracker.HasChanges());
         Assert.Equal(before.Title, db.Recipes.Local.Single().Title);
         using var client = factory.Client(userId: "other-author");

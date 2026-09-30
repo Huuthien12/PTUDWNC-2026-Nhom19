@@ -1,6 +1,7 @@
 using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Application.Recipes.DTOs;
 using CulinaryBlog.Domain.Enums;
+using CulinaryBlog.Domain.Exceptions;
 using FluentValidation;
 using MediatR;
 
@@ -10,9 +11,6 @@ namespace CulinaryBlog.Application.Recipes.Commands;
 public sealed record UpdateRecipeCommand(Guid Id, UpdateRecipeRequest Request, string UserId, bool IsAdmin)
     : IRequest<RecipeDto>;
 
-public sealed class RecipeNotFoundException : Exception;
-public sealed class RecipeForbiddenException : Exception;
-
 public sealed class UpdateRecipeCommandHandler(IUnitOfWork unitOfWork,
     IValidator<UpdateRecipeRequest> validator, ICacheService cache, TimeProvider clock)
     : IRequestHandler<UpdateRecipeCommand, RecipeDto>
@@ -20,9 +18,9 @@ public sealed class UpdateRecipeCommandHandler(IUnitOfWork unitOfWork,
     public async Task<RecipeDto> Handle(UpdateRecipeCommand command, CancellationToken cancellationToken)
     {
         var recipe = await unitOfWork.Recipes.GetByIdAsync(command.Id, cancellationToken)
-            ?? throw new RecipeNotFoundException();
+            ?? throw new NotFoundException("RECIPE_NOT_FOUND", "Recipe not found.");
         if (!command.IsAdmin && recipe.AuthorId != command.UserId)
-            throw new RecipeForbiddenException();
+            throw new ForbiddenException("RECIPE_FORBIDDEN", "Only the author or an Admin may update this recipe.");
 
         // Validate only after resource authorization, and before any tracked entity mutation.
         var request = command.Request;

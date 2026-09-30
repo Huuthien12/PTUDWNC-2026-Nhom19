@@ -3,14 +3,13 @@ using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Application.Recipes.DTOs;
 using CulinaryBlog.Domain.Entities;
 using CulinaryBlog.Domain.Enums;
+using CulinaryBlog.Domain.Exceptions;
 using FluentValidation;
 using MediatR;
 
 namespace CulinaryBlog.Application.Recipes.Commands;
 
 public sealed record CreateRecipeCommand(CreateRecipeRequest Request, string AuthorId) : IRequest<RecipeDto>;
-
-public sealed class RecipeSlugExistsException : Exception;
 
 public sealed class CreateRecipeCommandValidator : AbstractValidator<CreateRecipeCommand>
 {
@@ -34,7 +33,7 @@ public sealed class CreateRecipeCommandHandler(IUnitOfWork unitOfWork)
         if (string.IsNullOrEmpty(slug))
             throw new ValidationException([new("Title", "Title must produce a non-empty slug.")]);
         if (await unitOfWork.Recipes.SlugExistsAsync(slug, cancellationToken: cancellationToken))
-            throw new RecipeSlugExistsException();
+            throw new ConflictException("RECIPE_SLUG_EXISTS", "Recipe slug already exists.");
 
         var recipe = new Recipe
         {

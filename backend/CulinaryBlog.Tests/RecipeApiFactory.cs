@@ -40,6 +40,7 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Key", Key);
         builder.UseSetting("Jwt:Issuer", "recipe-tests");
         builder.UseSetting("Jwt:Audience", "recipe-tests");
+        builder.UseSetting("Email:Smtp:EnableSsl", "true");
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<AppDbContext>();
