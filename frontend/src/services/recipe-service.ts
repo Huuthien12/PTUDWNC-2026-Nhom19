@@ -1,13 +1,12 @@
 import type { RecipeDetail } from "@/types/recipe";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5062";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5062";
 
 export async function getRecipeBySlug(
   slug: string
 ): Promise<RecipeDetail | null> {
   const response = await fetch(
-    `${API_BASE_URL}/api/v1/recipes/${encodeURIComponent(slug)}`,
+    `${API_URL}/api/v1/recipes/${encodeURIComponent(slug)}`,
     {
       cache: "no-store",
     }

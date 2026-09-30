@@ -21,7 +21,7 @@ public static class RecipeDetailMapper
 
             Difficulty = recipe.Difficulty,
             Status = recipe.Status,
-
+            RowVersion = Convert.ToBase64String(recipe.RowVersion),
             CreatedAt = recipe.CreatedAt,
             PublishedAt = recipe.PublishedAt,
 

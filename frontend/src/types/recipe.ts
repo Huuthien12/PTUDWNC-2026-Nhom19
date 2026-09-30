@@ -1,5 +1,5 @@
 export type RecipeDifficulty = 1 | 2 | 3;
-export type RecipeStatus = 0 | 1 | 2;
+export type RecipeStatus = 1 | 2 | 3;
 
 export interface RecipeCategory {
   id: string;
@@ -61,6 +61,7 @@ export interface RecipeDetail {
 
   difficulty: RecipeDifficulty;
   status: RecipeStatus;
+  rowVersion: string;
 
   createdAt: string;
   publishedAt: string | null;

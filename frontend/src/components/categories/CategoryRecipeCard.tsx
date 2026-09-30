@@ -16,7 +16,6 @@ function difficultyLabel(value: RecipeSummary["difficulty"]) {
 
   return labels[String(value).toLowerCase()] ?? "Chưa xác định";
 }
-
 export default function CategoryRecipeCard({
   recipe,
 }: {
@@ -66,4 +65,3 @@ export default function CategoryRecipeCard({
     </Link>
   );
 }
-

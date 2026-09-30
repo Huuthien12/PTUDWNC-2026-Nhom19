@@ -16,6 +16,7 @@ public sealed class RecipeDetailDto
 
     public RecipeDifficulty Difficulty { get; set; }
     public RecipeStatus Status { get; set; }
+    public string RowVersion { get; set; } = string.Empty;
 
     public DateTime CreatedAt { get; set; }
     public DateTime? PublishedAt { get; set; }
