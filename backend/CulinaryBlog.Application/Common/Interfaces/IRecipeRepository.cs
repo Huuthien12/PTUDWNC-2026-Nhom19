@@ -4,6 +4,11 @@ namespace CulinaryBlog.Application.Common.Interfaces;
 
 public interface IRecipeRepository
 {
+    Task<int> CountVisibleAsync(string? userId, bool isAdmin, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Recipe>> GetVisibleAsync(int page, int pageSize, string? userId,
+        bool isAdmin, CancellationToken cancellationToken = default);
+
     // Returns a tracked recipe, including its owned Nutrition, for editing.
     Task<Recipe?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 

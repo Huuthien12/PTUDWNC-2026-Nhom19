@@ -99,3 +99,12 @@ export interface RecipeDetail {
   steps: RecipeStep[];
   images: RecipeImage[];
 }
+
+export interface RecipeSummary {
+  id: string; title: string; slug: string; description: string; prepTime: number; cookTime: number;
+  servings: number; difficulty: RecipeDifficulty; thumbnailUrl: string | null; publishedAt: string | null;
+}
+
+export interface RecipePage {
+  items: RecipeSummary[]; totalCount: number; page: number; pageSize: number; totalPages: number;
+}

@@ -1,6 +1,12 @@
 import { apiClient } from "./api-client";
 import { getSession } from "./auth-session";
 import type { CreateRecipeRequest, RecipeDetail, RecipeDto, UpdateRecipeRequest } from "../types/recipe";
+import type { RecipePage } from "../types/recipe";
+
+export function getRecipes(page = 1, pageSize = 12): Promise<RecipePage> {
+  const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  return apiClient<RecipePage>(`/api/v1/recipes?${query}`, { auth: getSession() !== null, cache: "no-store" });
+}
 
 export function createRecipe(input: CreateRecipeRequest): Promise<RecipeDto> {
   return apiClient<RecipeDto>("/api/v1/recipes", {
