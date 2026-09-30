@@ -1,8 +1,10 @@
 ﻿using CulinaryBlog.Application.Authentication.Commands.Login;
+using CulinaryBlog.Application.Authentication.Commands.Register;
 using CulinaryBlog.Application.Categories.Commands;
 using CulinaryBlog.Application.Authentication.DTOs;
 using CulinaryBlog.API.Authentication;
 using CulinaryBlog.API.Recipes;
+using CulinaryBlog.API.Middleware;
 using CulinaryBlog.Application.Categories.Queries;
 using CulinaryBlog.Application.Common.Behaviors;
 using CulinaryBlog.Application.Common.Interfaces;
@@ -16,6 +18,10 @@ using Microsoft.EntityFrameworkCore;
 using CulinaryBlog.Infrastructure.Caching;
 using CulinaryBlog.Infrastructure.Persistence.Seed;
 using CulinaryBlog.Infrastructure.Authentication;
+using CulinaryBlog.Infrastructure.BackgroundJobs;
+using CulinaryBlog.Infrastructure.Email;
+using Hangfire;
+using Hangfire.PostgreSql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -81,7 +87,21 @@ builder.Services.AddScoped<IIdentityService, IdentityService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
 builder.Services.AddSingleton<IRefreshTokenGenerator, RefreshTokenGenerator>();
+builder.Services.AddSingleton<IWelcomeEmailQueue, HangfireWelcomeEmailQueue>();
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+builder.Services.AddOptions<SmtpOptions>()
+    .Bind(builder.Configuration.GetSection("Email:Smtp"))
+    .Validate(options => builder.Environment.IsDevelopment() || options.EnableSsl,
+        "SMTP TLS is required outside Development.")
+    .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
+
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddHangfire(configuration =>
+        configuration.UsePostgreSqlStorage(storage => storage.UseNpgsqlConnection(connectionString)));
+    builder.Services.AddHangfireServer();
+}
 
 // =========================
 // ASP.NET Core Identity
@@ -249,6 +269,7 @@ if (!app.Environment.IsEnvironment("Testing"))
 // =========================
 // Middleware
 // =========================
+app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseCors("Frontend");
 
 app.UseAuthentication();
@@ -328,6 +349,60 @@ auth.MapPost("/login", async (
             result.RefreshToken!,
             result.ExpiresAt!.Value,
             result.User!));
+});
+
+// =========================
+// Register
+// POST /api/v1/auth/register
+// =========================
+
+auth.MapPost("/register", async (
+    RegisterCommand request,
+    ISender sender,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await sender.Send(request, cancellationToken);
+
+        if (result.Tokens is null)
+        {
+            if (result.ErrorCode == "AUTH_EMAIL_EXISTS")
+            {
+                return Results.Problem(
+                    type: "AUTH_EMAIL_EXISTS",
+                    title: "Email already exists.",
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            return Results.Problem(
+                type: result.ErrorCode ?? "REGISTRATION_FAILED",
+                title: "Registration failed.",
+                statusCode: result.ErrorCode == "VALIDATION_ERROR"
+                    ? StatusCodes.Status400BadRequest
+                    : StatusCodes.Status500InternalServerError);
+        }
+
+        return Results.Created(
+            "/api/v1/auth/register",
+            result.Tokens);
+    }
+    catch (ValidationException exception)
+    {
+        var errors = exception.Errors
+            .GroupBy(error => error.PropertyName)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .Select(error => error.ErrorMessage)
+                    .ToArray());
+
+        return Results.ValidationProblem(
+            errors,
+            statusCode: StatusCodes.Status400BadRequest,
+            title: "Validation failed.",
+            type: "VALIDATION_ERROR");
+    }
 });
 
 
@@ -432,44 +507,15 @@ categories.MapPost("/", async (
     ISender sender,
     CancellationToken cancellationToken) =>
 {
-    try
-    {
-        var result = await sender.Send(
-            new CreateCategoryCommand(
-                request.Name,
-                request.Description),
-            cancellationToken);
+    var result = await sender.Send(
+        new CreateCategoryCommand(
+            request.Name,
+            request.Description),
+        cancellationToken);
 
-        return Results.Created(
-            $"/api/v1/categories/{result.Slug}",
-            result);
-    }
-    catch (ValidationException exception)
-    {
-        var errors = exception.Errors
-            .GroupBy(error => error.PropertyName)
-            .ToDictionary(
-                group => group.Key,
-                group => group
-                    .Select(error => error.ErrorMessage)
-                    .ToArray());
-
-        return Results.ValidationProblem(
-            errors,
-            statusCode: StatusCodes.Status400BadRequest,
-            title: "Validation failed.",
-            type: "VALIDATION_ERROR");
-    }
-    catch (InvalidOperationException exception)
-        when (exception.Message == "CATEGORY_NAME_EXISTS")
-    {
-        return Results.Problem(
-            type: "CATEGORY_NAME_EXISTS",
-            title: "Category name already exists.",
-            statusCode: StatusCodes.Status409Conflict,
-            detail:
-                "A category with this name already exists.");
-    }
+    return Results.Created(
+        $"/api/v1/categories/{result.Slug}",
+        result);
 })
 .RequireAuthorization("Admin");
 
@@ -487,53 +533,24 @@ categories.MapPut("/{id:guid}", async (
     ISender sender,
     CancellationToken cancellationToken) =>
 {
-    try
-    {
-        var result = await sender.Send(
-            new UpdateCategoryCommand(
-                id,
-                request.Name,
-                request.Description),
-            cancellationToken);
+    var result = await sender.Send(
+        new UpdateCategoryCommand(
+            id,
+            request.Name,
+            request.Description),
+        cancellationToken);
 
-        if (result is null)
-        {
-            return Results.Problem(
-                type: "CATEGORY_NOT_FOUND",
-                title: "Category not found.",
-                statusCode: StatusCodes.Status404NotFound,
-                detail:
-                    "The requested category does not exist.");
-        }
-
-        return Results.Ok(result);
-    }
-    catch (ValidationException exception)
-    {
-        var errors = exception.Errors
-            .GroupBy(error => error.PropertyName)
-            .ToDictionary(
-                group => group.Key,
-                group => group
-                    .Select(error => error.ErrorMessage)
-                    .ToArray());
-
-        return Results.ValidationProblem(
-            errors,
-            statusCode: StatusCodes.Status400BadRequest,
-            title: "Validation failed.",
-            type: "VALIDATION_ERROR");
-    }
-    catch (InvalidOperationException exception)
-        when (exception.Message == "CATEGORY_NAME_EXISTS")
+    if (result is null)
     {
         return Results.Problem(
-            type: "CATEGORY_NAME_EXISTS",
-            title: "Category name already exists.",
-            statusCode: StatusCodes.Status409Conflict,
+            type: "CATEGORY_NOT_FOUND",
+            title: "Category not found.",
+            statusCode: StatusCodes.Status404NotFound,
             detail:
-                "A category with this name already exists.");
+                "The requested category does not exist.");
     }
+
+    return Results.Ok(result);
 })
 .RequireAuthorization("Admin");
 

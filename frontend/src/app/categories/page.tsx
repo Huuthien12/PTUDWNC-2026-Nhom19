@@ -1,4 +1,6 @@
 import CategoryList from "@/components/categories/CategoryList";
+import CulinaryIllustration from "@/components/shared/CulinaryIllustration";
+import ContentState from "@/components/shared/ContentState";
 import { getCategories } from "@/services/category-service";
 import type { Category } from "@/types/category";
 
@@ -6,67 +8,27 @@ export default async function CategoriesPage({ searchParams }: {
   searchParams: Promise<{ created?: string }>;
 }) {
   const created = (await searchParams).created === "recipe";
-  const notice = created ? <p role="status" className="rounded-lg bg-green-50 p-4 text-green-800">Đã lưu bản nháp công thức. Bản nháp chưa xuất hiện trong danh sách công khai.</p> : null;
-  let categories: Category[] = [];
-  let hasError = false;
+  const notice = created ? <p role="status" className="cb-container pt-4 text-green-800">Đã lưu bản nháp công thức. Bản nháp chưa xuất hiện trong danh sách công khai.</p> : null;
+  let categories: Category[];
 
   try {
     categories = await getCategories();
   } catch {
-    hasError = true;
+    return <div className="cb-container cb-section">{notice}<ContentState title="Chưa thể mở góc bếp" description="Danh mục tạm thời chưa tải được. Bạn hãy thử lại sau một chút nhé." retry /></div>;
   }
 
-  if (hasError) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-50 px-6">
-        <div className="max-w-md rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
-          {notice}
-          <h1 className="text-xl font-bold text-gray-900">
-            Không thể tải danh mục
-          </h1>
-
-          <p className="mt-3 text-gray-600">
-            Không thể kết nối đến hệ thống. Hãy kiểm tra Backend
-            và thử lại.
-          </p>
-        </div>
-      </main>
-    );
-  }
-
-  return (
-    <main className="min-h-screen bg-gray-50">
-      {notice}
-      <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-7xl px-6 py-14">
-          <p className="mb-3 font-semibold text-orange-600">
-            Culinary Blog
-          </p>
-
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">
-            Danh mục công thức
-          </h1>
-
-          <p className="mt-4 max-w-2xl leading-7 text-gray-600">
-            Khám phá các món ăn theo từng danh mục và tìm
-            công thức phù hợp với bạn.
-          </p>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-6 py-10">
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900">
-            Tất cả danh mục
-          </h2>
-
-          <span className="text-sm text-gray-500">
-            {categories.length} danh mục
-          </span>
-        </div>
-
-        <CategoryList categories={categories} />
-      </section>
-    </main>
-  );
+  return <>
+    {notice}
+    <section className="cb-hero"><div className="cb-container cb-hero-inner">
+      <div><p className="cb-eyebrow">Cảm hứng từ căn bếp</p><h1 className="cb-title">Hôm nay,<br />mình nấu gì?</h1>
+        <p className="cb-lead">Từ bữa cơm quen thuộc đến một hương vị mới. Chọn một danh mục và tìm cảm hứng cho lần vào bếp tiếp theo.</p>
+        <a href="#danh-muc" className="cb-button mt-6">Khám phá danh mục <span aria-hidden="true">→</span></a>
+      </div>
+      <div className="cb-hero-art"><CulinaryIllustration /><p className="text-center text-xs tracking-widest uppercase">Chuyện ngon mỗi ngày</p></div>
+    </div></section>
+    <section id="danh-muc" className="cb-container cb-section" aria-labelledby="categories-heading">
+      <div className="cb-section-heading"><h2 id="categories-heading" className="cb-section-title">Những góc hương vị</h2><span className="text-sm text-muted">{categories.length} danh mục để khám phá</span></div>
+      <CategoryList categories={categories} />
+    </section>
+  </>;
 }

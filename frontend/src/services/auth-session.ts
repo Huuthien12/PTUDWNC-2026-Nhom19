@@ -85,6 +85,17 @@ export async function establishSession(request: { email: string; password: strin
   });
 }
 
+export async function establishRegisteredSession(request: {
+  fullName: string; email: string; userName: string; password: string;
+}): Promise<AuthResponse> {
+  return withSessionLock(async () => {
+    const response = await httpClient<AuthResponse>("/api/v1/auth/register", {
+      method: "POST", body: JSON.stringify(request), cache: "no-store", signal: AbortSignal.timeout(15000),
+    });
+    return saveSession(response, crypto.randomUUID());
+  });
+}
+
 export function refreshSession(expected: AuthSession): Promise<AuthSession> {
   if (logoutFlight) return Promise.reject(new ApiError("Logout in progress", 401));
   if (refreshFlight?.sessionId === expected.sessionId) return refreshFlight.promise;

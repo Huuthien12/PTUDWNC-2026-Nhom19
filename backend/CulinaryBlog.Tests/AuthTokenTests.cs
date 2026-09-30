@@ -72,6 +72,76 @@ public sealed class AuthTokenTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Register_creates_author_and_returns_a_hashed_refresh_token_session()
+    {
+        const string email = "new.author@test.local";
+        const string userName = "NewAuthor01";
+        const string password = "Register-only@123456";
+
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            fullName = "New Author",
+            email,
+            userName,
+            password
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var tokens = (await response.Content.ReadFromJsonAsync<AuthResponseDto>())!;
+        Assert.Equal("Bearer", tokens.TokenType);
+        Assert.False(string.IsNullOrWhiteSpace(tokens.AccessToken));
+        Assert.False(string.IsNullOrWhiteSpace(tokens.RefreshToken));
+        Assert.Equal(email, tokens.User.Email);
+        Assert.Equal(userName, tokens.User.UserName);
+        Assert.Contains("Author", tokens.User.Roles);
+        Assert.Contains(new JwtSecurityTokenHandler().ReadJwtToken(tokens.AccessToken).Claims,
+            claim => (claim.Type == "role" || claim.Type == ClaimTypes.Role) && claim.Value == "Author");
+
+        await using var db = _factory.NewContext();
+        var stored = await db.RefreshTokens.SingleAsync(token => token.UserId == tokens.User.Id);
+        Assert.Equal(new RefreshTokenGenerator().Hash(tokens.RefreshToken), stored.Token);
+        Assert.NotEqual(tokens.RefreshToken, stored.Token);
+        Assert.Equal(_factory.Clock.Now.UtcDateTime.AddDays(7), stored.ExpiresAt);
+        Assert.Single(_factory.WelcomeEmails.Messages);
+        Assert.Equal((email, "New Author"), _factory.WelcomeEmails.Messages.Single());
+    }
+
+    [Theory]
+    [InlineData("", "valid@email.test", "ValidUser01", "Register-only@123456")]
+    [InlineData("Valid Name", "not-an-email", "ValidUser01", "Register-only@123456")]
+    [InlineData("Valid Name", "valid@email.test", "invalid-user", "Register-only@123456")]
+    [InlineData("Valid Name", "valid@email.test", "ValidUser01", "weak")]
+    public async Task Register_rejects_invalid_input(
+        string fullName, string email, string userName, string password)
+    {
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            fullName,
+            email,
+            userName,
+            password
+        });
+
+        await AssertProblem(response, HttpStatusCode.BadRequest, "VALIDATION_ERROR");
+        Assert.Empty(_factory.WelcomeEmails.Messages);
+    }
+
+    [Fact]
+    public async Task Register_rejects_duplicate_email_with_srs_conflict_code()
+    {
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            fullName = "Duplicate Author",
+            email = Email,
+            userName = "DifferentUser01",
+            password = "Register-only@123456"
+        });
+
+        await AssertProblem(response, HttpStatusCode.Conflict, "AUTH_EMAIL_EXISTS");
+        Assert.Empty(_factory.WelcomeEmails.Messages);
+    }
+
+    [Fact]
     public async Task Login_and_refresh_return_full_srs_response_with_current_profile_and_roles()
     {
         using var scope = _factory.Services.CreateScope();
