@@ -5,6 +5,7 @@ using CulinaryBlog.Application.Authentication.DTOs;
 using CulinaryBlog.API.Authentication;
 using CulinaryBlog.API.Middleware;
 using CulinaryBlog.Application.Categories.Queries;
+using CulinaryBlog.Application.Recipes.Queries;
 using CulinaryBlog.Application.Common.Behaviors;
 using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Domain.Entities;
@@ -299,6 +300,34 @@ var auth =
     app.MapGroup("/api/v1/auth");
 
 auth.MapTokenEndpoints();
+
+// =========================
+// FR-RCP-001
+// GET /api/v1/recipes?page=1&pageSize=12
+// =========================
+
+var recipes = app.MapGroup("/api/v1/recipes");
+
+recipes.MapGet("/", async (
+    HttpContext context,
+    int? page,
+    int? pageSize,
+    ISender sender,
+    CancellationToken cancellationToken) =>
+{
+    var currentPage = Math.Max(page ?? 1, 1);
+    var currentPageSize = Math.Clamp(pageSize ?? 12, 1, 50);
+    var userId = context.User.Identity?.IsAuthenticated == true
+        ? context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+        : null;
+    var isAdmin = context.User.IsInRole("Admin");
+
+    var result = await sender.Send(
+        new GetRecipesQuery(currentPage, currentPageSize, userId, isAdmin),
+        cancellationToken);
+
+    return Results.Ok(result);
+});
 
 
 // =========================

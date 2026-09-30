@@ -4,6 +4,18 @@ namespace CulinaryBlog.Application.Common.Interfaces;
 
 public interface IRecipeRepository
 {
+    Task<int> CountVisibleAsync(
+        string? userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Recipe>> GetVisibleAsync(
+        int page,
+        int pageSize,
+        string? userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default);
+
     Task<int> CountByCategoryAsync(
         Guid categoryId,
         string? userId,

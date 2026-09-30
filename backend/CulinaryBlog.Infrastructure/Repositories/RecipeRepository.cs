@@ -15,6 +15,48 @@ public sealed class RecipeRepository : IRecipeRepository
         _context = context;
     }
 
+    private IQueryable<Recipe> BuildVisibleQuery(string? userId, bool isAdmin)
+    {
+        var query = _context.Recipes
+            .AsNoTracking()
+            .Where(recipe => !recipe.IsDeleted);
+
+        if (isAdmin)
+            return query;
+
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            return query.Where(recipe =>
+                recipe.Status == RecipeStatus.Published ||
+                (recipe.Status == RecipeStatus.Draft && recipe.AuthorId == userId));
+        }
+
+        return query.Where(recipe => recipe.Status == RecipeStatus.Published);
+    }
+
+    public Task<int> CountVisibleAsync(
+        string? userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default)
+    {
+        return BuildVisibleQuery(userId, isAdmin).CountAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Recipe>> GetVisibleAsync(
+        int page,
+        int pageSize,
+        string? userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default)
+    {
+        return await BuildVisibleQuery(userId, isAdmin)
+            .Include(recipe => recipe.Images)
+            .OrderByDescending(recipe => recipe.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+    }
+
     private IQueryable<Recipe> BuildCategoryQuery(
         Guid categoryId,
         string? userId,
