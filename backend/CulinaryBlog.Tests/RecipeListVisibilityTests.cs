@@ -25,8 +25,8 @@ public sealed class RecipeListVisibilityTests : IAsyncLifetime
     private Recipe Recipe(string slug, string author, RecipeStatus status, int day, bool deleted = false) => new() { Title = slug, Slug = slug, AuthorId = author, CategoryId = _categoryId, Status = status, IsDeleted = deleted, CreatedAt = new DateTime(2026, 1, day), Nutrition = new RecipeNutrition() };
     private async Task<(int Count, IReadOnlyList<string> Slugs, int Pages)> List(string? user, bool admin, int page = 1, int size = 12)
     { await using var db = NewContext(); var repo = new RecipeRepository(db); var query = new GetRecipesQueryHandler(new UnitOfWork(db, new CategoryRepository(db), repo)); var result = await query.Handle(new GetRecipesQuery(page, size, user, admin), default); return (result.TotalCount, result.Items.Select(x => x.Slug).ToList(), result.TotalPages); }
-    [Fact] public async Task Guest_sees_only_published() { var r = await List(null, false); Assert.Equal(2, r.Count); Assert.Equal(["published-new", "published-old"], r.Slugs); }
-    [Fact] public async Task Author_sees_published_and_own_draft_only() { var r = await List("owner", false); Assert.Equal(3, r.Count); Assert.Contains("own-draft", r.Slugs); Assert.DoesNotContain("other-draft", r.Slugs); }
+    [Fact] public async Task Guest_sees_only_published() { var r = await List(null, false); Assert.Equal(2, r.Count); Assert.Equal(["published-new", "published-old"], r.Slugs); Assert.DoesNotContain("archived", r.Slugs); }
+    [Fact] public async Task Author_sees_published_and_own_private_statuses_only() { var r = await List("owner", false); Assert.Equal(4, r.Count); Assert.Contains("own-draft", r.Slugs); Assert.Contains("archived", r.Slugs); Assert.DoesNotContain("other-draft", r.Slugs); }
     [Fact] public async Task Admin_sees_all_non_deleted_statuses() { var r = await List("admin", true); Assert.Equal(5, r.Count); Assert.DoesNotContain("deleted", r.Slugs); }
     [Fact] public async Task Pagination_uses_filtered_total_and_ordering() { var r = await List(null, false, 2, 1); Assert.Equal(2, r.Count); Assert.Equal(2, r.Pages); Assert.Equal(["published-old"], r.Slugs); }
 }
