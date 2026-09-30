@@ -2,6 +2,7 @@ using CulinaryBlog.Domain.Exceptions;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using System.Text.Json;
 
 namespace CulinaryBlog.API.Middleware;
@@ -42,6 +43,7 @@ public sealed class GlobalExceptionMiddleware(
             ForbiddenException forbidden => (StatusCodes.Status403Forbidden, forbidden.ErrorCode, "Forbidden.", forbidden.Message),
             ConcurrencyException concurrency => (StatusCodes.Status422UnprocessableEntity, concurrency.ErrorCode, "Optimistic concurrency conflict.", concurrency.Message),
             DbUpdateConcurrencyException => (StatusCodes.Status422UnprocessableEntity, "RECIPE_CONCURRENCY_CONFLICT", "Optimistic concurrency conflict.", "The resource was updated by another request. Reload and try again."),
+            DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "IX_Recipes_Slug" } } => (StatusCodes.Status409Conflict, "RECIPE_SLUG_EXISTS", "Resource conflict.", "Recipe slug already exists."),
             UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "AUTH_TOKEN_INVALID", "Unauthorized.", "Authentication is required."),
             _ => (StatusCodes.Status500InternalServerError, "INTERNAL_SERVER_ERROR", "An unexpected error occurred.", "An unexpected error occurred.")
         };

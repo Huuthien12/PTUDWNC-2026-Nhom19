@@ -3,8 +3,10 @@ using CulinaryBlog.Application.Authentication.Commands.Register;
 using CulinaryBlog.Application.Categories.Commands;
 using CulinaryBlog.Application.Authentication.DTOs;
 using CulinaryBlog.API.Authentication;
+using CulinaryBlog.API.Recipes;
 using CulinaryBlog.API.Middleware;
 using CulinaryBlog.Application.Categories.Queries;
+using CulinaryBlog.Application.Recipes.Queries;
 using CulinaryBlog.Application.Common.Behaviors;
 using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Domain.Entities;
@@ -13,6 +15,8 @@ using CulinaryBlog.Infrastructure.Repositories;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using CulinaryBlog.Infrastructure.Caching;
 using CulinaryBlog.Infrastructure.Persistence.Seed;
@@ -21,6 +25,7 @@ using CulinaryBlog.Infrastructure.BackgroundJobs;
 using CulinaryBlog.Infrastructure.Email;
 using Hangfire;
 using Hangfire.PostgreSql;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -179,6 +184,28 @@ builder.Services
                 ValidateLifetime = true,
                 ClockSkew = TimeSpan.Zero
             };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnChallenge = async context =>
+            {
+                context.HandleResponse();
+                var response = context.Response;
+                response.StatusCode = StatusCodes.Status401Unauthorized;
+                response.ContentType = "application/problem+json";
+                var problem = new ProblemDetails
+                {
+                    Type = "AUTH_TOKEN_INVALID",
+                    Title = "Unauthorized.",
+                    Status = StatusCodes.Status401Unauthorized,
+                    Detail = "Authentication is required.",
+                    Instance = context.Request.Path
+                };
+                problem.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+                await JsonSerializer.SerializeAsync(response.Body, problem,
+                    cancellationToken: context.HttpContext.RequestAborted);
+            }
+        };
     });
 
 // =========================
@@ -404,6 +431,41 @@ auth.MapPost("/register", async (
     }
 });
 
+// =========================
+// Recipe Endpoints
+// =========================
+
+// =========================
+// FR-RCP-002
+// GET /api/v1/recipes/{slug}
+// Recipe Detail
+// =========================
+
+var recipes =
+    app.MapGroup("/api/v1/recipes");
+
+recipes.MapGet("/{slug}", async (
+    string slug,
+    HttpContext httpContext,
+    ISender sender,
+    CancellationToken cancellationToken) =>
+{
+    var userId =
+        httpContext.User.Identity?.IsAuthenticated == true
+            ? httpContext.User.FindFirst(
+                System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            : null;
+
+    var isAdmin =
+        httpContext.User.IsInRole("Admin");
+
+    var result = await sender.Send(
+        new GetRecipeDetailQuery(slug, userId, isAdmin),
+        cancellationToken);
+
+    return Results.Ok(result);
+});
+
 
 // =========================
 // Category Endpoints
@@ -603,6 +665,8 @@ categories.MapDelete("/{id:guid}", async (
 // =========================
 // Run Application
 // =========================
+
+app.MapRecipeEndpoints();
 
 app.Run();
 

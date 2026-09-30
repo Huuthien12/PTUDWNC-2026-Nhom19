@@ -27,6 +27,8 @@ export default function AuthControls() {
   if (!session) return <Link href="/login" className="text-sm font-medium">Đăng nhập</Link>;
   return (
     <div className="flex flex-wrap items-center gap-3 text-sm">
+      {session.user.roles.some((role) => role === "Author" || role === "Admin") &&
+        <Link href="/recipes/create">Tạo công thức</Link>}
       {session.user.roles.includes("Admin") && <Link href="/admin/categories">Quản trị</Link>}
       <span>{session.user.fullName || session.user.userName}</span>
       <button type="button" onClick={() => void handleLogout()} disabled={pending}

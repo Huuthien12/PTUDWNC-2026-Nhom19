@@ -47,12 +47,19 @@ public class RecipeConfiguration : IEntityTypeConfiguration<Recipe>
 
         builder.Property(x => x.RowVersion)
             .IsConcurrencyToken()
+            .ValueGeneratedNever()
             .IsRequired();
 
         builder.HasQueryFilter(x => !x.IsDeleted);
 
         builder.OwnsOne(x => x.Nutrition, nutrition =>
         {
+            nutrition.Property<byte[]>(nameof(Recipe.RowVersion))
+                .HasColumnName(nameof(Recipe.RowVersion))
+                .IsConcurrencyToken()
+                .ValueGeneratedNever()
+                .IsRequired();
+
             nutrition.Property(x => x.Calories)
                 .HasColumnName("Nutrition_Calories");
 
