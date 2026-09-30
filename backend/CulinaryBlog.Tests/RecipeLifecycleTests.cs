@@ -102,12 +102,13 @@ public sealed class RecipeLifecycleTests
         var publishedAt = DateTime.UtcNow.AddDays(-2);
         var recipe = CreateRecipe(status);
         recipe.UpdatedAt = DateTime.UtcNow.AddDays(-1);
+        var updatedAt = recipe.UpdatedAt;
         recipe.PublishedAt = publishedAt;
 
         recipe.Archive();
 
         Assert.Equal(RecipeStatus.Archived, recipe.Status);
-        Assert.True(recipe.UpdatedAt > publishedAt);
+        Assert.True(recipe.UpdatedAt > updatedAt);
         Assert.Equal(publishedAt, recipe.PublishedAt);
     }
 
