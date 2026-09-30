@@ -25,4 +25,9 @@ public interface IRecipeRepository
     Task<int> CountAllByCategoryAsync(
         Guid categoryId,
         CancellationToken cancellationToken = default);
+    Task<Recipe?> GetBySlugAsync(
+        string slug,
+        string? userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default);
 }

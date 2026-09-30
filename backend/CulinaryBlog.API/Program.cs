@@ -5,6 +5,8 @@ using CulinaryBlog.Application.Authentication.DTOs;
 using CulinaryBlog.API.Authentication;
 using CulinaryBlog.API.Middleware;
 using CulinaryBlog.Application.Categories.Queries;
+using CulinaryBlog.Application.Recipes.DTOs;
+using CulinaryBlog.Application.Recipes.Mappers;
 using CulinaryBlog.Application.Common.Behaviors;
 using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Domain.Entities;
@@ -402,6 +404,70 @@ auth.MapPost("/register", async (
             title: "Validation failed.",
             type: "VALIDATION_ERROR");
     }
+});
+
+// =========================
+// Recipe Endpoints
+// =========================
+
+// =========================
+// FR-RCP-002
+// GET /api/v1/recipes/{slug}
+// Recipe Detail
+// =========================
+
+var recipes =
+    app.MapGroup("/api/v1/recipes");
+
+recipes.MapGet("/{slug}", async (
+    string slug,
+    HttpContext httpContext,
+    IRecipeRepository recipeRepository,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(slug))
+    {
+        return Results.Problem(
+            type: "VALIDATION_ERROR",
+            title: "Validation failed.",
+            statusCode: StatusCodes.Status400BadRequest,
+            detail: "Recipe slug is required.");
+    }
+
+    // Get current authenticated user
+    var userId =
+        httpContext.User.Identity?.IsAuthenticated == true
+            ? httpContext.User.FindFirst(
+                System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            : null;
+
+    // Check Admin role
+    var isAdmin =
+        httpContext.User.IsInRole("Admin");
+
+    // Get recipe detail
+    var recipe = await recipeRepository.GetBySlugAsync(
+        slug,
+        userId,
+        isAdmin,
+        cancellationToken);
+
+    // Recipe not found
+    if (recipe is null)
+    {
+        return Results.Problem(
+            type: "RECIPE_NOT_FOUND",
+            title: "Recipe not found.",
+            statusCode: StatusCodes.Status404NotFound,
+            detail:
+                "The requested recipe does not exist.");
+    }
+
+    // Map Entity -> DTO
+    var result =
+        RecipeDetailMapper.ToDto(recipe);
+
+    return Results.Ok(result);
 });
 
 
