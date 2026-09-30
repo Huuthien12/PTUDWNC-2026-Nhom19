@@ -5,6 +5,7 @@ using CulinaryBlog.Application.Authentication.DTOs;
 using CulinaryBlog.API.Authentication;
 using CulinaryBlog.API.Middleware;
 using CulinaryBlog.Application.Categories.Queries;
+using CulinaryBlog.Application.Recipes.Queries;
 using CulinaryBlog.Application.Common.Behaviors;
 using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Domain.Entities;
@@ -402,6 +403,41 @@ auth.MapPost("/register", async (
             title: "Validation failed.",
             type: "VALIDATION_ERROR");
     }
+});
+
+// =========================
+// Recipe Endpoints
+// =========================
+
+// =========================
+// FR-RCP-002
+// GET /api/v1/recipes/{slug}
+// Recipe Detail
+// =========================
+
+var recipes =
+    app.MapGroup("/api/v1/recipes");
+
+recipes.MapGet("/{slug}", async (
+    string slug,
+    HttpContext httpContext,
+    ISender sender,
+    CancellationToken cancellationToken) =>
+{
+    var userId =
+        httpContext.User.Identity?.IsAuthenticated == true
+            ? httpContext.User.FindFirst(
+                System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            : null;
+
+    var isAdmin =
+        httpContext.User.IsInRole("Admin");
+
+    var result = await sender.Send(
+        new GetRecipeDetailQuery(slug, userId, isAdmin),
+        cancellationToken);
+
+    return Results.Ok(result);
 });
 
 
