@@ -469,9 +469,6 @@ auth.MapPost("/register", async (
 // Recipe Detail
 // =========================
 
-var recipes =
-    app.MapGroup("/api/v1/recipes");
-
 recipes.MapGet("/{slug}", async (
     string slug,
     HttpContext httpContext,
