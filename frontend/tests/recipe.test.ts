@@ -177,6 +177,7 @@ test("dashboard lifecycle transport sends the current RowVersion to the correct 
       assert.equal(result.rowVersion, "next-token");
     }
     assert.match(lifecycleErrorMessage(new ApiError("hidden", 422)), /tải lại/);
+    assert.match(lifecycleErrorMessage(new ApiError("hidden", 400)), /chưa đủ điều kiện/);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
