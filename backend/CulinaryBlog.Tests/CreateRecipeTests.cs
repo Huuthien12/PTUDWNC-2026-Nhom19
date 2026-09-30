@@ -85,6 +85,25 @@ public sealed class CreateRecipeTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Missing_or_invalid_jwt_returns_problem_details_challenge(bool invalid)
+    {
+        await using var factory = new RecipeApiFactory();
+        await factory.InitializeAsync();
+        using var client = factory.Client(role: null);
+        if (invalid)
+            client.DefaultRequestHeaders.Authorization = new("Bearer", "not-a-jwt");
+
+        var response = await client.PostAsJsonAsync("/api/v1/recipes", Body(factory));
+        Assert.Equal(401, (int)response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        var problem = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+        Assert.Equal("AUTH_TOKEN_INVALID", (string?)problem["type"]);
+        Assert.False(string.IsNullOrWhiteSpace((string?)problem["traceId"]));
+    }
+
+    [Theory]
     [InlineData("title", "bad")]
     [InlineData("title", "!!!!!")]
     [InlineData("categoryId", "00000000-0000-0000-0000-000000000000")]
