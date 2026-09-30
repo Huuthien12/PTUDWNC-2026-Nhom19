@@ -1,7 +1,27 @@
-import { apiClient } from "@/services/api-client";
-import type { RecipePage } from "@/types/recipe";
+import { apiClient } from "./api-client";
+import { getSession } from "./auth-session";
+import type { CreateRecipeRequest, RecipeDetail, RecipeDto, UpdateRecipeRequest } from "../types/recipe";
+import type { RecipePage } from "../types/recipe";
 
 export function getRecipes(page = 1, pageSize = 12): Promise<RecipePage> {
   const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-  return apiClient<RecipePage>(`/api/v1/recipes?${query.toString()}`, { cache: "no-store" });
+  return apiClient<RecipePage>(`/api/v1/recipes?${query}`, { auth: getSession() !== null, cache: "no-store" });
+}
+
+export function createRecipe(input: CreateRecipeRequest): Promise<RecipeDto> {
+  return apiClient<RecipeDto>("/api/v1/recipes", {
+    method: "POST", auth: true, body: JSON.stringify(input),
+  });
+}
+
+export function getRecipeBySlug(slug: string): Promise<RecipeDetail> {
+  return apiClient<RecipeDetail>(`/api/v1/recipes/${encodeURIComponent(slug)}`, {
+    auth: getSession() !== null,
+  });
+}
+
+export function updateRecipe(id: string, input: UpdateRecipeRequest): Promise<RecipeDto> {
+  return apiClient<RecipeDto>(`/api/v1/recipes/${encodeURIComponent(id)}`, {
+    method: "PUT", auth: true, body: JSON.stringify(input),
+  });
 }
