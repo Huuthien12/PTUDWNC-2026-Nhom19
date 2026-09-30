@@ -10,6 +10,16 @@ public static class RecipeEndpoints
 {
     public static void MapRecipeEndpoints(this WebApplication app)
     {
+        foreach (var action in new[] { RecipeLifecycleAction.Publish, RecipeLifecycleAction.Unpublish, RecipeLifecycleAction.Archive })
+        {
+            var path = action switch { RecipeLifecycleAction.Publish => "/api/v1/recipes/{id:guid}/publish", RecipeLifecycleAction.Unpublish => "/api/v1/recipes/{id:guid}/unpublish", _ => "/api/v1/recipes/{id:guid}/archive" };
+            app.MapPatch(path, async (Guid id, LifecycleRequest request, ClaimsPrincipal user, ISender sender, CancellationToken cancellationToken) =>
+            {
+                var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrWhiteSpace(userId)) throw new UnauthorizedAccessException();
+                return Results.Ok(await sender.Send(new ChangeRecipeLifecycleCommand(id, action, request.RowVersion, userId, user.IsInRole("Admin")), cancellationToken));
+            }).RequireAuthorization(policy => policy.AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme).RequireAuthenticatedUser().RequireRole("Author", "Admin"));
+        }
         app.MapPut("/api/v1/recipes/{id:guid}", async (Guid id, UpdateRecipeRequest request,
             ClaimsPrincipal user, ISender sender, CancellationToken cancellationToken) =>
         {
@@ -38,3 +48,5 @@ public static class RecipeEndpoints
     }
 
 }
+
+public sealed record LifecycleRequest(string RowVersion);

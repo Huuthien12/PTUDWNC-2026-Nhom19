@@ -89,4 +89,12 @@ public class Recipe : BaseEntity
         Status = RecipeStatus.Draft;
         UpdatedAt = DateTime.UtcNow;
     }
+
+    // Archive is idempotent because FR-RCP-006 specifies only the resulting Archived state.
+    public void Archive()
+    {
+        if (Status == RecipeStatus.Archived) return;
+        Status = RecipeStatus.Archived;
+        UpdatedAt = DateTime.UtcNow;
+    }
 }

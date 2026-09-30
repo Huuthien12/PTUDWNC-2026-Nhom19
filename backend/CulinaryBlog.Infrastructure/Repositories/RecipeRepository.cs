@@ -18,6 +18,10 @@ public sealed class RecipeRepository : IRecipeRepository
     public Task<Recipe?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
         => _context.Recipes.FirstOrDefaultAsync(recipe => recipe.Id == id, cancellationToken);
 
+    public Task<Recipe?> GetForLifecycleAsync(Guid id, CancellationToken cancellationToken = default)
+        => _context.Recipes.Include(recipe => recipe.Ingredients).Include(recipe => recipe.Steps)
+            .FirstOrDefaultAsync(recipe => recipe.Id == id, cancellationToken);
+
     public async Task AddAsync(Recipe recipe, CancellationToken cancellationToken = default)
         => await _context.Recipes.AddAsync(recipe, cancellationToken);
 

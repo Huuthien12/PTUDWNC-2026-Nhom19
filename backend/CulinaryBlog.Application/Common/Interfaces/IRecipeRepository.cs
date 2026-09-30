@@ -12,6 +12,8 @@ public interface IRecipeRepository
     // Returns a tracked recipe, including its owned Nutrition, for editing.
     Task<Recipe?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
+    Task<Recipe?> GetForLifecycleAsync(Guid id, CancellationToken cancellationToken = default);
+
     Task AddAsync(Recipe recipe, CancellationToken cancellationToken = default);
 
     // Use the client's decoded Base64 token, not the token from a fresh database read.
