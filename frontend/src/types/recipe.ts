@@ -20,6 +20,36 @@ export interface RecipeNutrition {
   fat: number | null;
 }
 
+export interface CreateRecipeRequest {
+  title: string;
+  description: string;
+  categoryId: string;
+  prepTime: number;
+  cookTime: number;
+  servings: number;
+  difficulty: RecipeDifficulty;
+  instructions?: string | null;
+  nutrition?: RecipeNutrition | null;
+}
+
+export interface UpdateRecipeRequest extends CreateRecipeRequest {
+  instructions: string;
+  rowVersion: string;
+}
+
+export interface RecipeDto extends Omit<CreateRecipeRequest, "instructions" | "nutrition"> {
+  id: string;
+  slug: string;
+  authorId: string;
+  instructions: string;
+  nutrition: RecipeNutrition;
+  status: RecipeStatus;
+  rowVersion: string;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+}
+
 export interface RecipeIngredient {
   id: string;
   name: string;
@@ -54,21 +84,16 @@ export interface RecipeDetail {
   slug: string;
   description: string;
   instructions: string;
-
   prepTime: number;
   cookTime: number;
   servings: number;
-
   difficulty: RecipeDifficulty;
   status: RecipeStatus;
   rowVersion: string;
-
   createdAt: string;
   publishedAt: string | null;
-
   category: RecipeCategory;
   author: RecipeAuthor;
-
   nutrition: RecipeNutrition | null;
   ingredients: RecipeIngredient[];
   steps: RecipeStep[];

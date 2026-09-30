@@ -15,6 +15,29 @@ public sealed class RecipeRepository : IRecipeRepository
         _context = context;
     }
 
+    public Task<Recipe?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+        => _context.Recipes.FirstOrDefaultAsync(recipe => recipe.Id == id, cancellationToken);
+
+    public async Task AddAsync(Recipe recipe, CancellationToken cancellationToken = default)
+        => await _context.Recipes.AddAsync(recipe, cancellationToken);
+
+    public void Update(Recipe recipe, byte[] originalRowVersion)
+    {
+        ArgumentNullException.ThrowIfNull(originalRowVersion);
+        var entry = _context.Entry(recipe);
+        if (entry.State != EntityState.Unchanged && entry.State != EntityState.Modified)
+            throw new InvalidOperationException("Load a tracked Recipe with GetByIdAsync before updating it.");
+
+        // Mark only the root, not its Author, Category, or child collections.
+        entry.State = EntityState.Modified;
+        entry.Property(x => x.RowVersion).OriginalValue = originalRowVersion.ToArray();
+    }
+
+    public Task<bool> SlugExistsAsync(string slug, Guid? excludeRecipeId = null,
+        CancellationToken cancellationToken = default)
+        => _context.Recipes.IgnoreQueryFilters().AnyAsync(
+            recipe => recipe.Slug == slug && recipe.Id != excludeRecipeId, cancellationToken);
+
     private IQueryable<Recipe> BuildCategoryQuery(
         Guid categoryId,
         string? userId,
