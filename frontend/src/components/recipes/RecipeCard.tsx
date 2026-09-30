@@ -56,7 +56,7 @@ export default function RecipeCard({ recipe }: { recipe: RecipeSummary }) {
         </dl>
 
         <Link
-          href="/recipes"
+          href={`/recipes/${recipe.slug}`}
           className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#254b3b] transition-colors hover:text-[#18382b]"
         >
           Xem công thức
