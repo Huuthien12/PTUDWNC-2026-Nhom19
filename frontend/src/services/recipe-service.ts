@@ -1,26 +1,11 @@
 import type { RecipeDetail } from "@/types/recipe";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5062";
+import { apiClient } from "@/services/api-client";
+import { getSession } from "@/services/auth-session";
 
 export async function getRecipeBySlug(
   slug: string
-): Promise<RecipeDetail | null> {
-  const response = await fetch(
-    `${API_URL}/api/v1/recipes/${encodeURIComponent(slug)}`,
-    {
-      cache: "no-store",
-    }
-  );
-
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      `Failed to load recipe: ${response.status}`
-    );
-  }
-
-  return response.json();
+): Promise<RecipeDetail> {
+  return apiClient<RecipeDetail>(`/api/v1/recipes/${encodeURIComponent(slug)}`, {
+    auth: getSession() !== null,
+  });
 }
