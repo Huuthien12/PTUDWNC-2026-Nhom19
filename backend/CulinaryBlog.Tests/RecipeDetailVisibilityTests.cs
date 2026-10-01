@@ -46,6 +46,8 @@ public sealed class RecipeDetailVisibilityTests : IAsyncLifetime
     [InlineData("published", null, false, true)]
     [InlineData("own-draft", "owner", false, true)]
     [InlineData("other-draft", "owner", false, false)]
+    [InlineData("archived", "owner", false, true)]
+    [InlineData("archived", "other", false, false)]
     [InlineData("archived", null, false, false)]
     [InlineData("deleted", "owner", true, false)]
     [InlineData("other-draft", null, true, true)]

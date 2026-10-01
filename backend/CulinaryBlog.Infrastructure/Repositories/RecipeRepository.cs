@@ -18,6 +18,10 @@ public sealed class RecipeRepository : IRecipeRepository
     public Task<Recipe?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
         => _context.Recipes.FirstOrDefaultAsync(recipe => recipe.Id == id, cancellationToken);
 
+    public Task<Recipe?> GetForLifecycleAsync(Guid id, CancellationToken cancellationToken = default)
+        => _context.Recipes.Include(recipe => recipe.Ingredients).Include(recipe => recipe.Steps)
+            .FirstOrDefaultAsync(recipe => recipe.Id == id, cancellationToken);
+
     public async Task AddAsync(Recipe recipe, CancellationToken cancellationToken = default)
         => await _context.Recipes.AddAsync(recipe, cancellationToken);
 
@@ -44,7 +48,7 @@ public sealed class RecipeRepository : IRecipeRepository
         if (isAdmin) return query;
         return !string.IsNullOrWhiteSpace(userId)
             ? query.Where(recipe => recipe.Status == RecipeStatus.Published ||
-                (recipe.Status == RecipeStatus.Draft && recipe.AuthorId == userId))
+                ((recipe.Status == RecipeStatus.Draft || recipe.Status == RecipeStatus.Archived) && recipe.AuthorId == userId))
             : query.Where(recipe => recipe.Status == RecipeStatus.Published);
     }
 
@@ -133,7 +137,7 @@ public sealed class RecipeRepository : IRecipeRepository
         {
             query = query.Where(r =>
                 r.Status == RecipeStatus.Published ||
-                (r.Status == RecipeStatus.Draft &&
+                ((r.Status == RecipeStatus.Draft || r.Status == RecipeStatus.Archived) &&
                  r.AuthorId == userId));
         }
         else
