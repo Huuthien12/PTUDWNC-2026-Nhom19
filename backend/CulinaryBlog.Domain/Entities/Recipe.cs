@@ -97,4 +97,10 @@ public class Recipe : BaseEntity
         Status = RecipeStatus.Archived;
         UpdatedAt = DateTime.UtcNow;
     }
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        UpdatedAt = DateTime.UtcNow;
+    }
 }

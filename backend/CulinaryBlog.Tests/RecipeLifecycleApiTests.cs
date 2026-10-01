@@ -22,8 +22,10 @@ public sealed class RecipeLifecycleApiTests
         recipe.UpdatedAt = DateTime.UtcNow.AddDays(-1);
         recipe.Ingredients.Add(new RecipeIngredient { Name = "Salt", Quantity = 1, Unit = "g", OrderIndex = 1 });
         recipe.Steps.Add(new RecipeStep { StepNumber = 1, Description = "Mix" });
+        recipe.Images.Add(new RecipeImage { OriginalUrl = "https://example.test/image.jpg", OrderIndex = 1, IsPrimary = true });
         db.RecipeIngredients.AddRange(recipe.Ingredients);
         db.RecipeSteps.AddRange(recipe.Steps);
+        db.RecipeImages.AddRange(recipe.Images);
         await db.SaveChangesAsync();
         return recipe;
     }
@@ -159,5 +161,67 @@ public sealed class RecipeLifecycleApiTests
         var saved = await db.Recipes.SingleAsync(x => x.Id == recipe.Id);
         Assert.Equal(RecipeStatus.Published, saved.Status);
         Assert.Equal(current.RowVersion, Convert.ToBase64String(saved.RowVersion));
+    }
+
+    [Fact]
+    public async Task Owner_soft_delete_keeps_recipe_and_children_but_hides_all_recipe_reads()
+    {
+        await using var factory = new RecipeApiFactory();
+        var recipe = await SeedAsync(factory);
+        using var client = factory.Client();
+
+        var response = await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/recipes/{recipe.Id}")
+        {
+            Content = JsonContent.Create(Body(recipe))
+        });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        await using var db = factory.Database.NewContext();
+        var deleted = await db.Recipes.IgnoreQueryFilters().SingleAsync(x => x.Id == recipe.Id);
+        Assert.True(deleted.IsDeleted);
+        Assert.Equal(1, await db.RecipeIngredients.IgnoreQueryFilters().CountAsync(x => x.RecipeId == recipe.Id));
+        Assert.Equal(1, await db.RecipeSteps.IgnoreQueryFilters().CountAsync(x => x.RecipeId == recipe.Id));
+        Assert.Equal(1, await db.RecipeImages.IgnoreQueryFilters().CountAsync(x => x.RecipeId == recipe.Id));
+        Assert.Null(await db.Recipes.SingleOrDefaultAsync(x => x.Id == recipe.Id));
+        await AssertProblem(await client.GetAsync($"/api/v1/recipes/{recipe.Slug}"), 404, "RECIPE_NOT_FOUND");
+        Assert.DoesNotContain(recipe.Id.ToString(), await (await client.GetAsync("/api/v1/recipes")).Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Admin_can_soft_delete_another_author_recipe()
+    {
+        await using var factory = new RecipeApiFactory();
+        var recipe = await SeedAsync(factory);
+        using var client = factory.Client("Admin", userId: "admin-user");
+
+        var response = await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/recipes/{recipe.Id}") { Content = JsonContent.Create(Body(recipe)) });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_requires_owner_and_existing_recipe()
+    {
+        await using var factory = new RecipeApiFactory();
+        var recipe = await SeedAsync(factory);
+        using var guest = factory.Client(role: null);
+        using var otherAuthor = factory.Client(userId: "other-author");
+        using var owner = factory.Client();
+
+        await AssertProblem(await guest.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/recipes/{recipe.Id}") { Content = JsonContent.Create(Body(recipe)) }), 401, "AUTH_TOKEN_INVALID");
+        await AssertProblem(await otherAuthor.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/recipes/{recipe.Id}") { Content = JsonContent.Create(Body(recipe)) }), 403, "RECIPE_FORBIDDEN");
+        await AssertProblem(await owner.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/recipes/{Guid.NewGuid()}") { Content = JsonContent.Create(Body(recipe)) }), 404, "RECIPE_NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task Stale_delete_row_version_returns_rfc7807_422()
+    {
+        await using var factory = new RecipeApiFactory();
+        var recipe = await SeedAsync(factory);
+        using var client = factory.Client();
+        var winner = await client.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/archive", Body(recipe));
+        Assert.Equal(HttpStatusCode.OK, winner.StatusCode);
+
+        await AssertProblem(await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/recipes/{recipe.Id}") { Content = JsonContent.Create(Body(recipe)) }), 422, "RECIPE_CONCURRENCY_CONFLICT");
     }
 }

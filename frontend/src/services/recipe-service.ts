@@ -33,3 +33,9 @@ export function changeRecipeLifecycle(id: string, action: RecipeLifecycleAction,
     method: "PATCH", auth: true, body: JSON.stringify({ rowVersion }),
   });
 }
+
+export function deleteRecipe(id: string, rowVersion: string): Promise<void> {
+  return apiClient<void>(`/api/v1/recipes/${encodeURIComponent(id)}`, {
+    method: "DELETE", auth: true, body: JSON.stringify({ rowVersion }),
+  });
+}

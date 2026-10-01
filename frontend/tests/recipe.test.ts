@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildRecipePayload, initialRecipeValues, mapRecipeError, recipeCreatedDestination, recipeRoles } from "../src/services/recipe-form";
 import { ApiError, httpClient } from "../src/services/http-client";
-import { changeRecipeLifecycle, createRecipe } from "../src/services/recipe-service";
+import { changeRecipeLifecycle, createRecipe, deleteRecipe } from "../src/services/recipe-service";
 import { dashboardActions, lifecycleErrorMessage } from "../src/services/recipe-dashboard";
 import { canAccess, loginDestination } from "../src/services/auth-navigation";
 import { SESSION_KEY } from "../src/services/auth-session";
@@ -178,6 +178,27 @@ test("dashboard lifecycle transport sends the current RowVersion to the correct 
     }
     assert.match(lifecycleErrorMessage(new ApiError("hidden", 422)), /tải lại/);
     assert.match(lifecycleErrorMessage(new ApiError("hidden", 400)), /chưa đủ điều kiện/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+    else Reflect.deleteProperty(globalThis, "window");
+  }
+});
+
+test("dashboard delete sends the current RowVersion and accepts 204", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const session = { sessionId: "dashboard", accessToken: "access", refreshToken: "refresh", tokenType: "Bearer", expiresAt: new Date(Date.now() + 600000).toISOString(), user: { id: "author", fullName: "Author", userName: "author", email: "a@example.test", avatarUrl: null, roles: ["Author"] } };
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { localStorage: { getItem: (key: string) => key === SESSION_KEY ? JSON.stringify(session) : null } } });
+  globalThis.fetch = async (url, options = {}) => {
+    assert.ok(String(url).endsWith("/api/v1/recipes/recipe-id"));
+    assert.equal(options.method, "DELETE");
+    assert.equal(new Headers(options.headers).get("Authorization"), "Bearer access");
+    assert.deepEqual(JSON.parse(String(options.body)), { rowVersion: "current-token" });
+    return new Response(null, { status: 204 });
+  };
+  try {
+    await deleteRecipe("recipe-id", "current-token");
   } finally {
     globalThis.fetch = originalFetch;
     if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
