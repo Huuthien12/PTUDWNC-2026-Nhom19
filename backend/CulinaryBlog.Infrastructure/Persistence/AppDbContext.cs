@@ -31,6 +31,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<Category> Categories => Set<Category>();
 
+    public DbSet<SearchHistory> SearchHistories => Set<SearchHistory>();
+
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         PrepareRecipeVersions();

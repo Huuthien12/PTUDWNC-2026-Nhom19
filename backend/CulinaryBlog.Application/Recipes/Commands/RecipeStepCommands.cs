@@ -46,7 +46,7 @@ public sealed record DeleteRecipeStepCommand(
     string RowVersion,
     string UserId,
     bool IsAdmin
-) : IRequest;
+) : IRequest<string>;
 
 public sealed class CreateRecipeStepCommandValidator
     : AbstractValidator<CreateRecipeStepCommand>
@@ -300,9 +300,9 @@ public sealed class DeleteRecipeStepCommandHandler(
     IUnitOfWork unitOfWork,
     IValidator<DeleteRecipeStepCommand> validator,
     TimeProvider clock)
-    : IRequestHandler<DeleteRecipeStepCommand>
+    : IRequestHandler<DeleteRecipeStepCommand, string>
 {
-    public async Task Handle(
+    public async Task<string> Handle(
     DeleteRecipeStepCommand command,
     CancellationToken cancellationToken)
 {
@@ -393,6 +393,8 @@ public sealed class DeleteRecipeStepCommandHandler(
                 transactionCancellationToken);
         },
         cancellationToken);
+
+    return Convert.ToBase64String(recipe.RowVersion);
     }
 }
 

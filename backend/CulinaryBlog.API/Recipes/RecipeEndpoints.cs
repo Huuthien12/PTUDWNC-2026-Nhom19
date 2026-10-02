@@ -2,6 +2,7 @@ using System.Security.Claims;
 using CulinaryBlog.Application.Recipes.Commands;
 using CulinaryBlog.Application.Recipes.DTOs;
 using CulinaryBlog.Application.Recipes.Queries;
+using CulinaryBlog.Application.SearchHistory;
 using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
@@ -177,12 +178,15 @@ public static class RecipeEndpoints
                                 user.IsInRole("Admin")),
                             cancellationToken);
 
-                        return Results.Ok(result);
+                        return Results.Created(
+                            $"/api/v1/recipes/{id}/steps/{result.Items.Last().Id}",
+                            result);
                     })
                     .RequireAuthorization(policy => policy
                         .AddAuthenticationSchemes(
                             JwtBearerDefaults.AuthenticationScheme)
-                        .RequireAuthenticatedUser());
+                        .RequireAuthenticatedUser()
+                        .RequireRole("Author", "Admin"));
 
         // GET /api/v1/recipes/suggestions?q={prefix}
         // Public endpoint: Guest / Author / Admin
@@ -231,7 +235,8 @@ public static class RecipeEndpoints
             .RequireAuthorization(policy => policy
                 .AddAuthenticationSchemes(
                     JwtBearerDefaults.AuthenticationScheme)
-                .RequireAuthenticatedUser());
+                        .RequireAuthenticatedUser()
+                        .RequireRole("Author", "Admin"));
 
         app.MapDelete(
             "/api/v1/recipes/{id:guid}/steps/{stepId:guid}",
@@ -239,6 +244,7 @@ public static class RecipeEndpoints
                 Guid id,
                 Guid stepId,
                 [FromBody] DeleteRecipeStepRequest request,
+                HttpContext context,
                 ClaimsPrincipal user,
                 ISender sender,
                 CancellationToken cancellationToken) =>
@@ -249,7 +255,7 @@ public static class RecipeEndpoints
                 if (string.IsNullOrWhiteSpace(userId))
                     throw new UnauthorizedAccessException();
 
-                await sender.Send(
+                var rowVersion = await sender.Send(
                     new DeleteRecipeStepCommand(
                         id,
                         stepId,
@@ -258,12 +264,20 @@ public static class RecipeEndpoints
                         user.IsInRole("Admin")),
                     cancellationToken);
 
+                context.Response.Headers.ETag = $"\"{rowVersion}\"";
                 return Results.NoContent();
             })
             .RequireAuthorization(policy => policy
                 .AddAuthenticationSchemes(
                     JwtBearerDefaults.AuthenticationScheme)
-                .RequireAuthenticatedUser());
+                .RequireAuthenticatedUser()
+                .RequireRole("Author", "Admin"));
+
+        var history = app.MapGroup("/api/v1/search-history").RequireAuthorization(policy => policy.AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme).RequireAuthenticatedUser().RequireRole("Author", "Admin"));
+        history.MapGet("/", async (ClaimsPrincipal user, ISender sender, CancellationToken cancellationToken) => Results.Ok(await sender.Send(new GetSearchHistoryQuery(user.FindFirstValue(ClaimTypes.NameIdentifier)!), cancellationToken)));
+        history.MapPost("/", async (CreateSearchHistoryRequest request, ClaimsPrincipal user, ISender sender, CancellationToken cancellationToken) => { var item = await sender.Send(new CreateSearchHistoryCommand(request, user.FindFirstValue(ClaimTypes.NameIdentifier)!), cancellationToken); return Results.Created($"/api/v1/search-history/{item.Id}", item); });
+        history.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, ISender sender, CancellationToken cancellationToken) => { await sender.Send(new DeleteSearchHistoryCommand(id, user.FindFirstValue(ClaimTypes.NameIdentifier)!), cancellationToken); return Results.NoContent(); });
+        history.MapDelete("/", async (ClaimsPrincipal user, ISender sender, CancellationToken cancellationToken) => { await sender.Send(new ClearSearchHistoryCommand(user.FindFirstValue(ClaimTypes.NameIdentifier)!), cancellationToken); return Results.NoContent(); });
     }
 }
 

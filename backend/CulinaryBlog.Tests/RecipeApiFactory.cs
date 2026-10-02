@@ -89,12 +89,15 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
 
     // Deterministically exercises the provider error path after the slug precheck succeeds.
    private sealed class SlugConstraintUnitOfWork(
-    ICategoryRepository categories,
-    IRecipeRepository recipes) : IUnitOfWork
+   ICategoryRepository categories,
+    IRecipeRepository recipes,
+    ISearchHistoryRepository searchHistories) : IUnitOfWork
 {
     public ICategoryRepository Categories => categories;
 
     public IRecipeRepository Recipes => recipes;
+
+    public ISearchHistoryRepository SearchHistories => searchHistories;
 
     public Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default)

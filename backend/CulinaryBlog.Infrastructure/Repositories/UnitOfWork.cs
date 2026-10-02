@@ -8,19 +8,28 @@ public sealed class UnitOfWork : IUnitOfWork
 {
     private readonly AppDbContext _context;
 
+    public UnitOfWork(AppDbContext context, ICategoryRepository categories, IRecipeRepository recipes)
+        : this(context, categories, recipes, new SearchHistoryRepository(context))
+    {
+    }
+
     public UnitOfWork(
         AppDbContext context,
         ICategoryRepository categories,
-        IRecipeRepository recipes)
+        IRecipeRepository recipes,
+        ISearchHistoryRepository searchHistories)
     {
         _context = context;
         Categories = categories;
         Recipes = recipes;
+        SearchHistories = searchHistories;
     }
 
     public ICategoryRepository Categories { get; }
 
     public IRecipeRepository Recipes { get; }
+
+    public ISearchHistoryRepository SearchHistories { get; }
 
     public Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default)

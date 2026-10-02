@@ -33,7 +33,7 @@ public sealed class RecipeStepTests : IAsyncLifetime
                 rowVersion = originalRowVersion
             });
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var result =
             await response.Content.ReadFromJsonAsync<RecipeStepListResponse>();
@@ -357,7 +357,7 @@ public sealed class RecipeStepTests : IAsyncLifetime
                 rowVersion
             });
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var result =
             await response.Content.ReadFromJsonAsync<RecipeStepListResponse>();

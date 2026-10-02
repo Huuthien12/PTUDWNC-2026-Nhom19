@@ -2,6 +2,7 @@ using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Application.Common.Models;
 using CulinaryBlog.Application.Recipes.DTOs;
 using CulinaryBlog.Domain.Enums;
+using FluentValidation;
 using MediatR;
 
 namespace CulinaryBlog.Application.Recipes.Queries;
@@ -19,6 +20,20 @@ public sealed record GetRecipesQuery(
     string SortOrder = "desc"
 ) : IRequest<PagedResult<RecipeSummaryDto>>;
 
+public sealed class GetRecipesQueryValidator : AbstractValidator<GetRecipesQuery>
+{
+    public GetRecipesQueryValidator()
+    {
+        RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
+        RuleFor(x => x.PageSize).InclusiveBetween(1, 50);
+        RuleFor(x => x.MaxCookTime).GreaterThanOrEqualTo(0).When(x => x.MaxCookTime.HasValue);
+        RuleFor(x => x.MinServings).GreaterThanOrEqualTo(1).When(x => x.MinServings.HasValue);
+        RuleFor(x => x.Difficulty).IsInEnum().When(x => x.Difficulty.HasValue);
+        RuleFor(x => x.SortBy).Must(value => value.Equals("createdAt", StringComparison.OrdinalIgnoreCase) || value.Equals("title", StringComparison.OrdinalIgnoreCase));
+        RuleFor(x => x.SortOrder).Must(value => value.Equals("asc", StringComparison.OrdinalIgnoreCase) || value.Equals("desc", StringComparison.OrdinalIgnoreCase));
+    }
+}
+
 public sealed class GetRecipesQueryHandler
     : IRequestHandler<GetRecipesQuery, PagedResult<RecipeSummaryDto>>
 {
@@ -33,6 +48,12 @@ public sealed class GetRecipesQueryHandler
         GetRecipesQuery request,
         CancellationToken cancellationToken)
     {
+        request = request with
+        {
+            SortBy = request.SortBy.Trim(),
+            SortOrder = request.SortOrder.Trim()
+        };
+
         var totalCount = await _unitOfWork.Recipes.CountVisibleAsync(
             request.UserId,
             request.IsAdmin,
