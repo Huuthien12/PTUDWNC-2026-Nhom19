@@ -51,9 +51,17 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         foreach (var recipe in ChangeTracker.Entries<Recipe>().ToList())
         {
             var nutrition = recipe.Reference(x => x.Nutrition).TargetEntry;
+            var childChanged =
+                ChangeTracker.Entries<RecipeIngredient>().Any(x =>
+                    x.Entity.RecipeId == recipe.Entity.Id &&
+                    x.State is EntityState.Added or EntityState.Modified or EntityState.Deleted) ||
+                ChangeTracker.Entries<RecipeStep>().Any(x =>
+                    x.Entity.RecipeId == recipe.Entity.Id &&
+                    x.State is EntityState.Added or EntityState.Modified or EntityState.Deleted);
             if (recipe.State is not (EntityState.Added or EntityState.Modified) &&
                 !(recipe.State == EntityState.Unchanged &&
-                  nutrition?.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+                  (nutrition?.State is EntityState.Added or EntityState.Modified or EntityState.Deleted ||
+                   childChanged)))
                 continue;
 
             // Preserve the original token for the SQL WHERE predicate, including legacy empty tokens.
