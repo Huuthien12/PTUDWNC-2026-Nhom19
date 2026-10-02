@@ -26,3 +26,7 @@ public sealed class ForbiddenException(
 public sealed class ConcurrencyException(
     string errorCode,
     string? detail = null) : DomainException(errorCode, detail);
+
+public sealed class ServiceUnavailableException(
+    string errorCode,
+    string? detail = null) : DomainException(errorCode, detail);
