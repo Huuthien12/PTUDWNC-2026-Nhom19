@@ -81,13 +81,14 @@ public static class RecipeEndpoints
             .RequireAuthenticatedUser().RequireRole("Author", "Admin"));
 
         app.MapDelete("/api/v1/recipes/{id:guid}/ingredients/{ingId:guid}", async (
-            Guid id, Guid ingId, [FromBody] LifecycleRequest request, ClaimsPrincipal user,
+            Guid id, Guid ingId, [FromBody] LifecycleRequest request, HttpContext context, ClaimsPrincipal user,
             ISender sender, CancellationToken cancellationToken) =>
         {
             var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? throw new UnauthorizedAccessException();
-            await sender.Send(new DeleteRecipeIngredientCommand(
+            var rowVersion = await sender.Send(new DeleteRecipeIngredientCommand(
                 id, ingId, request.RowVersion, userId, user.IsInRole("Admin")), cancellationToken);
+            context.Response.Headers.ETag = $"\"{rowVersion}\"";
             return Results.NoContent();
         }).RequireAuthorization(policy => policy
             .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)

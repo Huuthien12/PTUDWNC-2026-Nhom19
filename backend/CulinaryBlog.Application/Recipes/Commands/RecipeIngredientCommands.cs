@@ -1,5 +1,6 @@
 using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Application.Recipes.DTOs;
+using CulinaryBlog.Application.Recipes.Validators;
 using CulinaryBlog.Domain.Entities;
 using CulinaryBlog.Domain.Exceptions;
 using FluentValidation;
@@ -20,12 +21,31 @@ public sealed record UpdateRecipeIngredientCommand(
     string UserId,
     bool IsAdmin) : IRequest<RecipeIngredientDto>;
 
+public sealed class AddRecipeIngredientCommandValidator : AbstractValidator<AddRecipeIngredientCommand>
+{
+    public AddRecipeIngredientCommandValidator() => RuleFor(command => command.Request)
+        .SetValidator(new CreateRecipeIngredientRequestValidator());
+}
+
+public sealed class UpdateRecipeIngredientCommandValidator : AbstractValidator<UpdateRecipeIngredientCommand>
+{
+    public UpdateRecipeIngredientCommandValidator() => RuleFor(command => command.Request)
+        .SetValidator(new UpdateRecipeIngredientRequestValidator());
+}
+
 public sealed record DeleteRecipeIngredientCommand(
     Guid RecipeId,
     Guid IngredientId,
     string RowVersion,
     string UserId,
-    bool IsAdmin) : IRequest;
+    bool IsAdmin) : IRequest<string>;
+
+public sealed class DeleteRecipeIngredientCommandValidator : AbstractValidator<DeleteRecipeIngredientCommand>
+{
+    public DeleteRecipeIngredientCommandValidator() => RuleFor(command => command.RowVersion)
+        .Must(CreateRecipeIngredientRequestValidator.IsCanonicalBase64)
+        .WithMessage("RowVersion must be a non-empty canonical Base64 string.");
+}
 
 public sealed class AddRecipeIngredientCommandHandler(
     IUnitOfWork unitOfWork) : IRequestHandler<AddRecipeIngredientCommand, RecipeIngredientDto>
@@ -46,6 +66,7 @@ public sealed class AddRecipeIngredientCommandHandler(
             OrderIndex = request.SortOrder
         };
         recipe.Ingredients.Add(ingredient);
+        unitOfWork.Recipes.AddIngredient(ingredient);
         unitOfWork.Recipes.UpdateForChildMutation(recipe, Decode(request.RowVersion));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return ToDto(ingredient, recipe);
@@ -94,9 +115,9 @@ public sealed class UpdateRecipeIngredientCommandHandler(
 }
 
 public sealed class DeleteRecipeIngredientCommandHandler(
-    IUnitOfWork unitOfWork) : IRequestHandler<DeleteRecipeIngredientCommand>
+    IUnitOfWork unitOfWork) : IRequestHandler<DeleteRecipeIngredientCommand, string>
 {
-    public async Task Handle(DeleteRecipeIngredientCommand command, CancellationToken cancellationToken)
+    public async Task<string> Handle(DeleteRecipeIngredientCommand command, CancellationToken cancellationToken)
     {
         var recipe = await unitOfWork.Recipes.GetForLifecycleAsync(command.RecipeId, cancellationToken)
             ?? throw new NotFoundException("RECIPE_NOT_FOUND", "Recipe not found.");
@@ -108,5 +129,6 @@ public sealed class DeleteRecipeIngredientCommandHandler(
         ingredient.UpdatedAt = DateTime.UtcNow;
         unitOfWork.Recipes.UpdateForChildMutation(recipe, AddRecipeIngredientCommandHandler.Decode(command.RowVersion));
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Convert.ToBase64String(recipe.RowVersion);
     }
 }

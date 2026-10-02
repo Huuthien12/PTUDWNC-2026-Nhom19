@@ -17,6 +17,8 @@ public interface IRecipeRepository
 
     Task AddAsync(Recipe recipe, CancellationToken cancellationToken = default);
 
+    void AddIngredient(RecipeIngredient ingredient);
+
     // Use the client's decoded Base64 token, not the token from a fresh database read.
     // Empty tokens are supported for legacy rows; request validation is the caller's responsibility.
     void Update(Recipe recipe, byte[] originalRowVersion);

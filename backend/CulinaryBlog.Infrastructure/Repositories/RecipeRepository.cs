@@ -27,6 +27,8 @@ public sealed class RecipeRepository : IRecipeRepository
     public async Task AddAsync(Recipe recipe, CancellationToken cancellationToken = default)
         => await _context.Recipes.AddAsync(recipe, cancellationToken);
 
+    public void AddIngredient(RecipeIngredient ingredient) => _context.RecipeIngredients.Add(ingredient);
+
     public void Update(Recipe recipe, byte[] originalRowVersion)
     {
         ArgumentNullException.ThrowIfNull(originalRowVersion);
@@ -42,7 +44,6 @@ public sealed class RecipeRepository : IRecipeRepository
     public void UpdateForChildMutation(Recipe recipe, byte[] originalRowVersion)
     {
         var entry = _context.Entry(recipe);
-        entry.State = EntityState.Modified;
         entry.Property(x => x.RowVersion).OriginalValue = originalRowVersion.ToArray();
     }
 
@@ -68,7 +69,7 @@ public sealed class RecipeRepository : IRecipeRepository
             WHERE "IsDeleted" = false
               AND "Status" = 1
               AND "SearchVector" @@ to_tsquery('simple', unaccent(@query))
-            ORDER BY "Score" DESC, "CreatedAt" DESC
+            ORDER BY "Score" DESC, "CreatedAt" DESC, "Id" ASC
             OFFSET @offset LIMIT @limit
             """;
         var hits = await _context.Database.SqlQueryRaw<SearchHit>(
