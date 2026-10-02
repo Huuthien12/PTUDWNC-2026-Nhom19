@@ -17,27 +17,31 @@ public sealed class RecipeConcurrencyTests
         await using var database = new RecipeDatabaseFixture();
         var id = await database.InitializeAsync(beforeVersionMigration: true);
         await using var context = database.NewContext();
-        var existing = await context.Recipes.SingleAsync();
-        var retainedVersion = existing.RowVersion.ToArray();
-        var legacy = new Recipe
-        {
-            Title = "Legacy recipe", Slug = "legacy-recipe", AuthorId = existing.AuthorId,
-            CategoryId = existing.CategoryId, Nutrition = new RecipeNutrition { Calories = 321 }
-        };
-        context.Recipes.Add(legacy);
-        await context.SaveChangesAsync();
+        var existing = await context.Database.SqlQueryRaw<HistoricalRecipe>("""
+            SELECT "AuthorId", "CategoryId", "RowVersion" FROM "Recipes" WHERE "Id" = {0}
+            """, id).SingleAsync();
+        var legacyId = Guid.NewGuid();
         await context.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE \"Recipes\" SET \"RowVersion\" = {Array.Empty<byte>()} WHERE \"Id\" = {legacy.Id}");
+            $"""
+            INSERT INTO "Recipes" ("Id", "Title", "Slug", "Description", "Instructions", "PrepTime", "CookTime", "Servings", "Difficulty", "Status", "CategoryId", "AuthorId", "Nutrition_Calories", "CreatedAt", "UpdatedAt", "IsDeleted", "RowVersion")
+            VALUES ({legacyId}, {"Legacy recipe"}, {"legacy-recipe"}, {""}, {""}, {0}, {0}, {0}, {(short)1}, {(short)1}, {existing.CategoryId}, {existing.AuthorId}, {321m}, {DateTime.UtcNow}, {DateTime.UtcNow}, {false}, {Array.Empty<byte>()})
+            """);
         const string contents = """
             SELECT (to_jsonb(r) - 'RowVersion')::text AS "Value" FROM "Recipes" r ORDER BY "Id"
             """;
         var before = await context.Database.SqlQueryRaw<string>(contents).ToListAsync();
-        await context.Database.MigrateAsync();
-        context.ChangeTracker.Clear();
+        await context.GetService<IMigrator>().MigrateAsync("20260927131847_EnableRecipeRowVersion");
         Assert.Equal(before, await context.Database.SqlQueryRaw<string>(contents).ToListAsync());
-        Assert.Equal(retainedVersion, (await context.Recipes.SingleAsync(r => r.Id == id)).RowVersion);
-        Assert.Equal(16, (await context.Recipes.SingleAsync(r => r.Id == legacy.Id)).RowVersion.Length);
-        Assert.Equal(2, await context.Recipes.CountAsync());
+        Assert.Equal(existing.RowVersion, await context.Database.SqlQueryRaw<byte[]>("SELECT \"RowVersion\" AS \"Value\" FROM \"Recipes\" WHERE \"Id\" = {0}", id).SingleAsync());
+        Assert.Equal(16, (await context.Database.SqlQueryRaw<byte[]>("SELECT \"RowVersion\" AS \"Value\" FROM \"Recipes\" WHERE \"Id\" = {0}", legacyId).SingleAsync()).Length);
+        Assert.Equal(2, await context.Database.SqlQueryRaw<int>("SELECT count(*)::int AS \"Value\" FROM \"Recipes\"").SingleAsync());
+    }
+
+    private sealed class HistoricalRecipe
+    {
+        public string AuthorId { get; set; } = "";
+        public Guid CategoryId { get; set; }
+        public byte[] RowVersion { get; set; } = [];
     }
 
     [Theory]

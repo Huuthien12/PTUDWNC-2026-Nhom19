@@ -53,7 +53,7 @@ public sealed class RecipeRepository : IRecipeRepository
             SELECT count(*)::int AS "Value"
             FROM "Recipes"
             WHERE "IsDeleted" = false
-              AND "Status" = 1
+              AND "Status" = 2
               AND "SearchVector" @@ to_tsquery('simple', unaccent(@query))
             """;
         return _context.Database.SqlQueryRaw<int>(
@@ -67,7 +67,7 @@ public sealed class RecipeRepository : IRecipeRepository
             SELECT "Id", ts_rank("SearchVector", to_tsquery('simple', unaccent(@query))) AS "Score"
             FROM "Recipes"
             WHERE "IsDeleted" = false
-              AND "Status" = 1
+              AND "Status" = 2
               AND "SearchVector" @@ to_tsquery('simple', unaccent(@query))
             ORDER BY "Score" DESC, "CreatedAt" DESC, "Id" ASC
             OFFSET @offset LIMIT @limit

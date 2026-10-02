@@ -12,6 +12,7 @@ namespace CulinaryBlog.Infrastructure.Persistence.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql("CREATE EXTENSION IF NOT EXISTS unaccent;");
+            migrationBuilder.Sql("CREATE EXTENSION IF NOT EXISTS pg_trgm;");
 
             migrationBuilder.AddColumn<NpgsqlTsVector>(
                 name: "SearchVector",

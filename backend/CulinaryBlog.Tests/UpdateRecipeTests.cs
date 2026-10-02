@@ -15,6 +15,9 @@ namespace CulinaryBlog.Tests;
 
 public sealed class UpdateRecipeTests
 {
+    private static DateTime? PostgreSqlPrecision(DateTime? value) => value is { } timestamp
+        ? new DateTime(timestamp.Ticks - timestamp.Ticks % 10, timestamp.Kind) : null;
+
     private static async Task<Recipe> Seed(RecipeApiFactory factory, RecipeStatus status = RecipeStatus.Draft)
     {
         await factory.InitializeAsync();
@@ -105,8 +108,8 @@ public sealed class UpdateRecipeTests
         Assert.Equal(status, dto.Status);
         Assert.Equal(before.Slug, saved.Slug);
         Assert.Equal(before.Slug, dto.Slug);
-        Assert.Equal(before.PublishedAt, saved.PublishedAt);
-        Assert.Equal(before.CreatedAt, saved.CreatedAt);
+        Assert.Equal(PostgreSqlPrecision(before.PublishedAt), PostgreSqlPrecision(saved.PublishedAt));
+        Assert.Equal(PostgreSqlPrecision(before.CreatedAt), PostgreSqlPrecision(saved.CreatedAt));
         Assert.True(saved.UpdatedAt > before.UpdatedAt);
         Assert.Equal(saved.UpdatedAt, dto.UpdatedAt);
         Assert.Equal("Existing title", saved.Title);
@@ -149,7 +152,7 @@ public sealed class UpdateRecipeTests
         var saved = await db.Recipes.SingleAsync();
         Assert.Equal(before.Title, saved.Title);
         Assert.Equal(before.RowVersion, saved.RowVersion);
-        Assert.Equal(before.UpdatedAt, saved.UpdatedAt);
+        Assert.Equal(PostgreSqlPrecision(before.UpdatedAt), PostgreSqlPrecision(saved.UpdatedAt));
         Assert.Empty(factory.Cache.RemovedKeys);
     }
 
