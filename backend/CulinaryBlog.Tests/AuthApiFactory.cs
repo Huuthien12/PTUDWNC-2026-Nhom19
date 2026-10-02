@@ -1,4 +1,5 @@
 using CulinaryBlog.Application.Common.Interfaces;
+using CulinaryBlog.Application.Authentication.Commands;
 using CulinaryBlog.Domain.Entities;
 using CulinaryBlog.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
@@ -44,6 +45,13 @@ public sealed class RecordingWelcomeEmailQueue : IWelcomeEmailQueue
     }
 }
 
+public sealed class FakeGoogleCredentialVerifier : IGoogleCredentialVerifier
+{
+    public GoogleIdentity? Identity { get; set; }
+    public Task<GoogleIdentity?> VerifyAsync(string? idToken, string? authorizationCode,
+        CancellationToken cancellationToken = default) => Task.FromResult(Identity);
+}
+
 public sealed class AuthApiFactory : WebApplicationFactory<Program>
 {
     // Public, test-only signing material. Never loaded from user secrets.
@@ -51,6 +59,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     public string DatabasePath { get; } = Path.Combine(Path.GetTempPath(), $"culinary-auth-tests-{Guid.NewGuid():N}.db");
     public TestClock Clock { get; } = new();
     public RecordingWelcomeEmailQueue WelcomeEmails { get; } = new();
+    public FakeGoogleCredentialVerifier GoogleVerifier { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -71,6 +80,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<TimeProvider>(Clock);
             services.RemoveAll<IWelcomeEmailQueue>();
             services.AddSingleton<IWelcomeEmailQueue>(WelcomeEmails);
+            services.RemoveAll<IGoogleCredentialVerifier>();
+            services.AddSingleton<IGoogleCredentialVerifier>(GoogleVerifier);
         });
     }
 

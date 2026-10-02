@@ -23,6 +23,9 @@ using CulinaryBlog.Infrastructure.Persistence.Seed;
 using CulinaryBlog.Infrastructure.Authentication;
 using CulinaryBlog.Infrastructure.BackgroundJobs;
 using CulinaryBlog.Infrastructure.Email;
+using CulinaryBlog.Infrastructure.Storage;
+using CulinaryBlog.API.Health;
+using CulinaryBlog.Application.Authentication.Commands;
 using Hangfire;
 using Hangfire.PostgreSql;
 using System.Text.Json;
@@ -93,12 +96,19 @@ builder.Services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
 builder.Services.AddSingleton<IRefreshTokenGenerator, RefreshTokenGenerator>();
 builder.Services.AddSingleton<IWelcomeEmailQueue, HangfireWelcomeEmailQueue>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+builder.Services.AddSingleton<ImageFileValidator>();
+builder.Services.AddSingleton<IFileStorageService, MinioFileStorageService>();
+builder.Services.AddHttpClient("google-oauth", client => client.BaseAddress = new Uri("https://oauth2.googleapis.com/"));
+builder.Services.AddScoped<IGoogleCredentialVerifier, GoogleCredentialVerifier>();
+builder.Services.AddOptions<GoogleAuthOptions>().Bind(builder.Configuration.GetSection("Authentication:Google"));
+builder.Services.AddOptions<MinioOptions>().Bind(builder.Configuration.GetSection("Minio"));
 builder.Services.AddOptions<SmtpOptions>()
     .Bind(builder.Configuration.GetSection("Email:Smtp"))
     .Validate(options => builder.Environment.IsDevelopment() || options.EnableSsl,
         "SMTP TLS is required outside Development.")
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddCulinaryHealthChecks();
 
 if (!builder.Environment.IsEnvironment("Testing"))
 {
@@ -303,15 +313,7 @@ app.UseAuthorization();
 
 
 // =========================
-// Health Check
-// =========================
-
-app.MapGet("/health", () =>
-    Results.Ok(new
-    {
-        status = "Healthy",
-        message = "Backend .NET 10 is running!"
-    }));
+app.MapCulinaryHealthChecks();
 
 
 // =========================
@@ -326,6 +328,7 @@ var auth =
     app.MapGroup("/api/v1/auth");
 
 auth.MapTokenEndpoints();
+auth.MapAccountEndpoints();
 
 // =========================
 // FR-RCP-001
