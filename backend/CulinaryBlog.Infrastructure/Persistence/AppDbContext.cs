@@ -46,33 +46,44 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     }
 
     private void PrepareRecipeVersions()
+{
+    ChangeTracker.DetectChanges();
+
+    foreach (var recipe in ChangeTracker.Entries<Recipe>().ToList())
     {
-        ChangeTracker.DetectChanges();
-        foreach (var recipe in ChangeTracker.Entries<Recipe>().ToList())
+        var nutrition = recipe.Reference(x => x.Nutrition).TargetEntry;
+
+        var nutritionChanged =
+            nutrition?.State is EntityState.Added
+                or EntityState.Modified
+                or EntityState.Deleted;
+
+        if (recipe.State is not (EntityState.Added or EntityState.Modified)
+            && !nutritionChanged)
         {
-            var nutrition = recipe.Reference(x => x.Nutrition).TargetEntry;
-            if (recipe.State is not (EntityState.Added or EntityState.Modified) &&
-                !(recipe.State == EntityState.Unchanged &&
-                  nutrition?.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
-                continue;
+            continue;
+        }
 
-            // Preserve the original token for the SQL WHERE predicate, including legacy empty tokens.
-            var version = recipe.Property(x => x.RowVersion);
-            var nextVersion = Guid.NewGuid().ToByteArray();
-            version.CurrentValue = nextVersion;
-            if (recipe.State != EntityState.Added)
-                version.IsModified = true;
+        // Recipe.RowVersion is the single concurrency token
+        // for the Recipes table. Nutrition shares the same table,
+        // so it must not have a second concurrency property mapped
+        // to the same physical column.
+        if (recipe.State == EntityState.Unchanged)
+        {
+            recipe.State = EntityState.Modified;
+        }
 
-            if (nutrition is not null && nutrition.State != EntityState.Deleted)
-            {
-                var ownedVersion = nutrition.Property<byte[]>(nameof(Recipe.RowVersion));
-                ownedVersion.OriginalValue = version.OriginalValue;
-                ownedVersion.CurrentValue = nextVersion;
-                if (nutrition.State != EntityState.Added)
-                    ownedVersion.IsModified = true;
-            }
+        var version = recipe.Property(x => x.RowVersion);
+        var nextVersion = Guid.NewGuid().ToByteArray();
+
+        version.CurrentValue = nextVersion;
+
+        if (recipe.State != EntityState.Added)
+        {
+            version.IsModified = true;
         }
     }
+}
 
     // =========================
     // Model Configuration

@@ -3,6 +3,7 @@ using CulinaryBlog.Domain.Entities;
 using CulinaryBlog.Domain.Enums;
 using CulinaryBlog.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using CulinaryBlog.Application.Recipes.DTOs;
 
 namespace CulinaryBlog.Infrastructure.Repositories;
 
@@ -15,50 +16,243 @@ public sealed class RecipeRepository : IRecipeRepository
         _context = context;
     }
 
-    public Task<Recipe?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
-        => _context.Recipes.FirstOrDefaultAsync(recipe => recipe.Id == id, cancellationToken);
-
-    public Task<Recipe?> GetForLifecycleAsync(Guid id, CancellationToken cancellationToken = default)
-        => _context.Recipes.Include(recipe => recipe.Ingredients).Include(recipe => recipe.Steps)
-            .FirstOrDefaultAsync(recipe => recipe.Id == id, cancellationToken);
-
-    public async Task AddAsync(Recipe recipe, CancellationToken cancellationToken = default)
-        => await _context.Recipes.AddAsync(recipe, cancellationToken);
-
-    public void Update(Recipe recipe, byte[] originalRowVersion)
-    {
-        ArgumentNullException.ThrowIfNull(originalRowVersion);
-        var entry = _context.Entry(recipe);
-        if (entry.State != EntityState.Unchanged && entry.State != EntityState.Modified)
-            throw new InvalidOperationException("Load a tracked Recipe with GetByIdAsync before updating it.");
-
-        // Mark only the root, not its Author, Category, or child collections.
-        entry.State = EntityState.Modified;
-        entry.Property(x => x.RowVersion).OriginalValue = originalRowVersion.ToArray();
-    }
-
-    public Task<bool> SlugExistsAsync(string slug, Guid? excludeRecipeId = null,
+    public Task<Recipe?> GetByIdAsync(
+        Guid id,
         CancellationToken cancellationToken = default)
-        => _context.Recipes.IgnoreQueryFilters().AnyAsync(
-            recipe => recipe.Slug == slug && recipe.Id != excludeRecipeId, cancellationToken);
+        => _context.Recipes.FirstOrDefaultAsync(
+            recipe => recipe.Id == id,
+            cancellationToken);
 
-    private IQueryable<Recipe> BuildVisibleQuery(string? userId, bool isAdmin)
+    public Task<Recipe?> GetForLifecycleAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => _context.Recipes
+            .Include(recipe => recipe.Ingredients)
+            .Include(recipe => recipe.Steps)
+            .FirstOrDefaultAsync(
+                recipe => recipe.Id == id,
+                cancellationToken);
+
+    public Task<Recipe?> GetForStepMutationAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
     {
-        var query = _context.Recipes.AsNoTracking().Where(recipe => !recipe.IsDeleted);
-        if (isAdmin) return query;
-        return !string.IsNullOrWhiteSpace(userId)
-            ? query.Where(recipe => recipe.Status == RecipeStatus.Published ||
-                ((recipe.Status == RecipeStatus.Draft || recipe.Status == RecipeStatus.Archived) && recipe.AuthorId == userId))
-            : query.Where(recipe => recipe.Status == RecipeStatus.Published);
+        return _context.Recipes
+            .Include(recipe => recipe.Steps
+                .OrderBy(step => step.StepNumber))
+            .FirstOrDefaultAsync(
+                recipe => recipe.Id == id,
+                cancellationToken);
     }
 
-    public Task<int> CountVisibleAsync(string? userId, bool isAdmin,
-        CancellationToken cancellationToken = default) => BuildVisibleQuery(userId, isAdmin).CountAsync(cancellationToken);
+    public async Task AddAsync(
+        Recipe recipe,
+        CancellationToken cancellationToken = default)
+        => await _context.Recipes.AddAsync(
+            recipe,
+            cancellationToken);
 
-    public async Task<IReadOnlyList<Recipe>> GetVisibleAsync(int page, int pageSize, string? userId,
-        bool isAdmin, CancellationToken cancellationToken = default) => await BuildVisibleQuery(userId, isAdmin)
-            .Include(recipe => recipe.Images).OrderByDescending(recipe => recipe.CreatedAt)
-            .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+    public async Task AddStepAsync(
+        RecipeStep step,
+        CancellationToken cancellationToken = default)
+        => await _context.RecipeSteps.AddAsync(
+            step,
+            cancellationToken);
+
+    public void Update(
+    Recipe recipe,
+    byte[] originalRowVersion)
+{
+    ArgumentNullException.ThrowIfNull(originalRowVersion);
+
+    var entry = _context.Entry(recipe);
+
+    if (entry.State != EntityState.Unchanged &&
+        entry.State != EntityState.Modified)
+    {
+        throw new InvalidOperationException(
+            "Load a tracked Recipe with GetByIdAsync before updating it.");
+    }
+
+    // Mark only the root, not its Author, Category, or existing child collections.
+    entry.State = EntityState.Modified;
+
+    entry.Property(x => x.RowVersion)
+        .OriginalValue = originalRowVersion.ToArray();
+
+    // RecipeStep has an application-generated Guid key.
+    // Explicitly mark newly added steps as Added so EF generates
+    // INSERT instead of UPDATE.
+    foreach (var step in recipe.Steps)
+    {
+        var stepEntry = _context.Entry(step);
+
+        if (stepEntry.State == EntityState.Detached)
+        {
+            stepEntry.State = EntityState.Added;
+        }
+    }
+}
+
+    public Task<bool> SlugExistsAsync(
+        string slug,
+        Guid? excludeRecipeId = null,
+        CancellationToken cancellationToken = default)
+        => _context.Recipes
+            .IgnoreQueryFilters()
+            .AnyAsync(
+                recipe =>
+                    recipe.Slug == slug &&
+                    recipe.Id != excludeRecipeId,
+                cancellationToken);
+
+    // ============================================================
+    // GET /api/v1/recipes
+    // Visibility + filters
+    // ============================================================
+
+    private IQueryable<Recipe> BuildVisibleQuery(
+        string? userId,
+        bool isAdmin,
+        Guid? categoryId,
+        RecipeDifficulty? difficulty,
+        int? maxCookTime,
+        int? minServings)
+    {
+        var query = _context.Recipes
+            .AsNoTracking()
+            .Where(recipe => !recipe.IsDeleted);
+
+        // Visibility
+        if (!isAdmin)
+        {
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                query = query.Where(recipe =>
+                    recipe.Status == RecipeStatus.Published ||
+                    ((recipe.Status == RecipeStatus.Draft ||
+                      recipe.Status == RecipeStatus.Archived) &&
+                     recipe.AuthorId == userId));
+            }
+            else
+            {
+                query = query.Where(recipe =>
+                    recipe.Status == RecipeStatus.Published);
+            }
+        }
+
+        // Filter: categoryId
+        if (categoryId.HasValue)
+        {
+            query = query.Where(recipe =>
+                recipe.CategoryId == categoryId.Value);
+        }
+
+        // Filter: difficulty
+        if (difficulty.HasValue)
+        {
+            query = query.Where(recipe =>
+                recipe.Difficulty == difficulty.Value);
+        }
+
+        // Filter: maxCookTime
+        if (maxCookTime.HasValue)
+        {
+            query = query.Where(recipe =>
+                recipe.CookTime <= maxCookTime.Value);
+        }
+
+        // Filter: minServings
+        if (minServings.HasValue)
+        {
+            query = query.Where(recipe =>
+                recipe.Servings >= minServings.Value);
+        }
+
+        return query;
+    }
+
+    public Task<int> CountVisibleAsync(
+        string? userId,
+        bool isAdmin,
+        Guid? categoryId,
+        RecipeDifficulty? difficulty,
+        int? maxCookTime,
+        int? minServings,
+        CancellationToken cancellationToken = default)
+    {
+        return BuildVisibleQuery(
+                userId,
+                isAdmin,
+                categoryId,
+                difficulty,
+                maxCookTime,
+                minServings)
+            .CountAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Recipe>> GetVisibleAsync(
+        int page,
+        int pageSize,
+        string? userId,
+        bool isAdmin,
+        Guid? categoryId,
+        RecipeDifficulty? difficulty,
+        int? maxCookTime,
+        int? minServings,
+        string sortBy,
+        string sortOrder,
+        CancellationToken cancellationToken = default)
+    {
+        var query = BuildVisibleQuery(
+            userId,
+            isAdmin,
+            categoryId,
+            difficulty,
+            maxCookTime,
+            minServings);
+
+        var descending = sortOrder.Equals(
+            "desc",
+            StringComparison.OrdinalIgnoreCase);
+
+        query = sortBy.ToLowerInvariant() switch
+        {
+            "title" => descending
+                ? query
+                    .OrderByDescending(recipe => recipe.Title)
+                    .ThenBy(recipe => recipe.Id)
+                : query
+                    .OrderBy(recipe => recipe.Title)
+                    .ThenBy(recipe => recipe.Id),
+
+            "createdat" => descending
+                ? query
+                    .OrderByDescending(recipe => recipe.CreatedAt)
+                    .ThenBy(recipe => recipe.Id)
+                : query
+                    .OrderBy(recipe => recipe.CreatedAt)
+                    .ThenBy(recipe => recipe.Id),
+
+            _ => descending
+                ? query
+                    .OrderByDescending(recipe => recipe.CreatedAt)
+                    .ThenBy(recipe => recipe.Id)
+                : query
+                    .OrderBy(recipe => recipe.CreatedAt)
+                    .ThenBy(recipe => recipe.Id)
+        };
+
+        return await query
+            .Include(recipe => recipe.Images)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+    }
+
+    // ============================================================
+    // Category queries
+    // ============================================================
 
     private IQueryable<Recipe> BuildCategoryQuery(
         Guid categoryId,
@@ -67,9 +261,9 @@ public sealed class RecipeRepository : IRecipeRepository
     {
         var query = _context.Recipes
             .AsNoTracking()
-            .Where(r =>
-                r.CategoryId == categoryId &&
-                !r.IsDeleted);
+            .Where(recipe =>
+                recipe.CategoryId == categoryId &&
+                !recipe.IsDeleted);
 
         if (isAdmin)
         {
@@ -78,14 +272,14 @@ public sealed class RecipeRepository : IRecipeRepository
 
         if (!string.IsNullOrWhiteSpace(userId))
         {
-            return query.Where(r =>
-                r.Status == RecipeStatus.Published ||
-                (r.Status == RecipeStatus.Draft &&
-                 r.AuthorId == userId));
+            return query.Where(recipe =>
+                recipe.Status == RecipeStatus.Published ||
+                (recipe.Status == RecipeStatus.Draft &&
+                 recipe.AuthorId == userId));
         }
 
-        return query.Where(r =>
-            r.Status == RecipeStatus.Published);
+        return query.Where(recipe =>
+            recipe.Status == RecipeStatus.Published);
     }
 
     public Task<int> CountByCategoryAsync(
@@ -113,56 +307,111 @@ public sealed class RecipeRepository : IRecipeRepository
                 categoryId,
                 userId,
                 isAdmin)
-            .Include(r => r.Images)
-            .OrderByDescending(r => r.CreatedAt)
+            .Include(recipe => recipe.Images)
+            .OrderByDescending(recipe => recipe.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
     }
+
+    // ============================================================
+    // Recipe detail by slug
+    // ============================================================
+
     public async Task<Recipe?> GetBySlugAsync(
         string slug,
         string? userId,
         bool isAdmin,
         CancellationToken cancellationToken = default)
     {
-    var query = _context.Recipes
+        var query = _context.Recipes
+            .AsNoTracking()
+            .Where(recipe =>
+                recipe.Slug == slug &&
+                !recipe.IsDeleted);
+
+        if (!isAdmin)
+        {
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                query = query.Where(recipe =>
+                    recipe.Status == RecipeStatus.Published ||
+                    ((recipe.Status == RecipeStatus.Draft ||
+                      recipe.Status == RecipeStatus.Archived) &&
+                     recipe.AuthorId == userId));
+            }
+            else
+            {
+                query = query.Where(recipe =>
+                    recipe.Status == RecipeStatus.Published);
+            }
+        }
+
+        return await query
+            .Include(recipe => recipe.Category)
+            .Include(recipe => recipe.Author)
+            .Include(recipe => recipe.Nutrition)
+            .Include(recipe => recipe.Ingredients
+                .Where(ingredient => !ingredient.IsDeleted)
+                .OrderBy(ingredient => ingredient.OrderIndex))
+            .Include(recipe => recipe.Steps
+                .Where(step => !step.IsDeleted)
+                .OrderBy(step => step.StepNumber))
+            .Include(recipe => recipe.Images
+                .Where(image => !image.IsDeleted)
+                .OrderBy(image => image.OrderIndex))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    // ============================================================
+    // Category statistics
+    // ============================================================
+
+    public async Task<IReadOnlyList<RecipeSuggestionDto>> GetSuggestionsAsync(
+    string normalizedQuery,
+    CancellationToken cancellationToken = default)
+{
+    var recipeSuggestions = await _context.Recipes
         .AsNoTracking()
-        .Where(r =>
-            r.Slug == slug &&
-            !r.IsDeleted);
+        .Where(recipe =>
+            !recipe.IsDeleted &&
+            recipe.Status == RecipeStatus.Published &&
+            recipe.Title.ToLower().StartsWith(normalizedQuery))
+        .Select(recipe => new RecipeSuggestionDto(
+            recipe.Title,
+            "recipe",
+            recipe.Slug))
+        .Take(10)
+        .ToListAsync(cancellationToken);
 
-    if (!isAdmin)
-    {
-        if (!string.IsNullOrWhiteSpace(userId))
-        {
-            query = query.Where(r =>
-                r.Status == RecipeStatus.Published ||
-                ((r.Status == RecipeStatus.Draft || r.Status == RecipeStatus.Archived) &&
-                 r.AuthorId == userId));
-        }
-        else
-        {
-            query = query.Where(r =>
-                r.Status == RecipeStatus.Published);
-        }
-    }
+    var categorySuggestions = await _context.Categories
+        .AsNoTracking()
+        .Where(category =>
+            !category.IsDeleted &&
+            category.Name.ToLower().StartsWith(normalizedQuery))
+        .Select(category => new RecipeSuggestionDto(
+            category.Name,
+            "category",
+            category.Slug))
+        .Take(10)
+        .ToListAsync(cancellationToken);
 
-    return await query
-        .Include(r => r.Category)
-        .Include(r => r.Author)
-        .Include(r => r.Nutrition)
-        .Include(r => r.Ingredients
-            .Where(i => !i.IsDeleted)
-            .OrderBy(i => i.OrderIndex))
-        .Include(r => r.Steps
-            .Where(s => !s.IsDeleted)
-            .OrderBy(s => s.StepNumber))
-        .Include(r => r.Images
-            .Where(i => !i.IsDeleted)
-            .OrderBy(i => i.OrderIndex))
-        .FirstOrDefaultAsync(cancellationToken);
-    }
-
+    return recipeSuggestions
+        .Concat(categorySuggestions)
+        .GroupBy(
+            suggestion => $"{suggestion.Type}:{suggestion.Text}",
+            StringComparer.OrdinalIgnoreCase)
+        .Select(group => group.First())
+        .OrderBy(suggestion =>
+            suggestion.Text.Equals(
+                normalizedQuery,
+                StringComparison.OrdinalIgnoreCase)
+                ? 0
+                : 1)
+        .ThenBy(suggestion => suggestion.Text)
+        .Take(10)
+        .ToList();
+}
     public Task<int> CountPublishedByCategoryAsync(
         Guid categoryId,
         CancellationToken cancellationToken = default)
