@@ -62,8 +62,8 @@ public sealed class CreateRecipeTests
         Assert.Equal(nutrition ? 0m : (decimal?)null, saved.Nutrition.Fat);
         Assert.Null(saved.Nutrition.Carbs);
         Assert.Equal(saved.Nutrition.Calories, dto.Nutrition.Calories);
-        Assert.Equal(saved.CreatedAt, dto.CreatedAt);
-        Assert.Equal(saved.UpdatedAt, dto.UpdatedAt);
+        Assert.Equal(PostgreSqlDateTime.Normalize(saved.CreatedAt), PostgreSqlDateTime.Normalize(dto.CreatedAt));
+        Assert.Equal(PostgreSqlDateTime.Normalize(saved.UpdatedAt), PostgreSqlDateTime.Normalize(dto.UpdatedAt));
         Assert.Empty(saved.Steps);
         Assert.Empty(saved.Ingredients);
     }
