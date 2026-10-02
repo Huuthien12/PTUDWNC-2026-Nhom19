@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace CulinaryBlog.Infrastructure.Persistence.Migrations;
 
+[Migration("20261002200000_AddRecipeFullTextSearch")]
 public partial class AddRecipeFullTextSearch : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
