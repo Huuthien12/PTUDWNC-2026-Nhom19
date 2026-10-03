@@ -29,6 +29,7 @@ using CulinaryBlog.Application.Authentication.Commands;
 using Hangfire;
 using Hangfire.PostgreSql;
 using System.Text.Json;
+using CulinaryBlog.Domain.Enums;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -89,6 +90,7 @@ builder.Services.AddTransient(
 
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
+builder.Services.AddScoped<ISearchHistoryRepository, SearchHistoryRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IIdentityService, IdentityService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
@@ -344,24 +346,48 @@ recipes.MapGet("/", async (
     HttpContext context,
     int? page,
     int? pageSize,
+    Guid? categoryId,
+    RecipeDifficulty? difficulty,
+    int? maxCookTime,
+    int? minServings,
+    string? sortBy,
+    string? sortOrder,
     ISender sender,
     CancellationToken cancellationToken) =>
 {
-    var currentPage = Math.Max(page ?? 1, 1);
-    var currentPageSize = Math.Clamp(pageSize ?? 12, 1, 50);
-    var userId = context.User.Identity?.IsAuthenticated == true
-        ? context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-        : null;
+    var userId =
+        context.User.Identity?.IsAuthenticated == true
+            ? context.User.FindFirst(
+                System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            : null;
+
     var isAdmin = context.User.IsInRole("Admin");
 
     var result = await sender.Send(
-        new GetRecipesQuery(currentPage, currentPageSize, userId, isAdmin),
+        new GetRecipesQuery(
+            page ?? 1,
+            pageSize ?? 12,
+            userId,
+            isAdmin,
+            categoryId,
+            difficulty,
+            maxCookTime,
+            minServings,
+            string.IsNullOrWhiteSpace(sortBy) ? "createdAt" : sortBy,
+            string.IsNullOrWhiteSpace(sortOrder) ? "desc" : sortOrder),
         cancellationToken);
 
     return Results.Ok(result);
 });
 
-
+recipes.MapGet("/search", async (
+    string? q, int? page, int? pageSize, ISender sender,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await sender.Send(
+        new SearchRecipesQuery(q ?? string.Empty, page ?? 1, pageSize ?? 12),
+         cancellationToken));
+});
 // =========================
 // Login
 // POST /api/v1/auth/login

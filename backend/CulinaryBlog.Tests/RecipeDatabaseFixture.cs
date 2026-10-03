@@ -24,9 +24,21 @@ public sealed class RecipeDatabaseFixture : IAsyncDisposable
         }.ConnectionString;
     }
 
-    public AppDbContext NewContext() => new(_postgresConnection is null
-        ? new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options
-        : new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(_postgresConnection).Options);
+    public AppDbContext NewContext()
+{
+    var builder = new DbContextOptionsBuilder<AppDbContext>();
+
+    if (_postgresConnection is null)
+    {
+        builder.UseSqlite(_connection);
+    }
+    else
+    {
+        builder.UseNpgsql(_postgresConnection);
+    }
+
+    return new AppDbContext(builder.Options);
+}
 
     public async Task<Guid> InitializeAsync(bool beforeVersionMigration = false)
     {
@@ -37,6 +49,10 @@ public sealed class RecipeDatabaseFixture : IAsyncDisposable
                 ? "20260927062905_AddRefreshTokenRevokedAt" : null);
         else
             await context.Database.EnsureCreatedAsync();
+
+        if (beforeVersionMigration && _postgresConnection is not null)
+            return await SeedHistoricalRecipeAsync(context);
+
         var recipe = new Recipe
         {
             Title = "Original recipe", Slug = "original-recipe",
@@ -47,6 +63,24 @@ public sealed class RecipeDatabaseFixture : IAsyncDisposable
         await new RecipeRepository(context).AddAsync(recipe);
         await context.SaveChangesAsync();
         return recipe.Id;
+    }
+
+    private static async Task<Guid> SeedHistoricalRecipeAsync(AppDbContext context)
+    {
+        var author = new ApplicationUser { UserName = "recipe-test" };
+        var category = new Category { Name = "Test category", Slug = "test-category" };
+        context.Users.Add(author);
+        context.Categories.Add(category);
+        await context.SaveChangesAsync();
+
+        var id = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        var version = Guid.NewGuid().ToByteArray();
+        await context.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Recipes" ("Id", "Title", "Slug", "Description", "Instructions", "PrepTime", "CookTime", "Servings", "Difficulty", "Status", "CategoryId", "AuthorId", "Nutrition_Calories", "CreatedAt", "UpdatedAt", "IsDeleted", "RowVersion")
+            VALUES ({id}, {"Original recipe"}, {"original-recipe"}, {""}, {""}, {0}, {0}, {0}, {(short)1}, {(short)1}, {category.Id}, {author.Id}, {100m}, {now}, {now}, {false}, {version})
+            """);
+        return id;
     }
 
     public async ValueTask DisposeAsync()
