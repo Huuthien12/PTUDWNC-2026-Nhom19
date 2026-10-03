@@ -1,6 +1,7 @@
 using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Application.Recipes.DTOs;
 using MediatR;
+using Microsoft.Extensions.Logging;
 
 namespace CulinaryBlog.Application.Recipes.Queries;
 
@@ -13,13 +14,16 @@ public sealed class GetRecipeSuggestionsQueryHandler
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICacheService _cache;
+    private readonly ILogger<GetRecipeSuggestionsQueryHandler> _logger;
 
     public GetRecipeSuggestionsQueryHandler(
         IUnitOfWork unitOfWork,
-        ICacheService cache)
+        ICacheService cache,
+        ILogger<GetRecipeSuggestionsQueryHandler> logger)
     {
         _unitOfWork = unitOfWork;
         _cache = cache;
+        _logger = logger;
     }
 
     public async Task<RecipeSuggestionsDto> Handle(
@@ -41,10 +45,9 @@ public sealed class GetRecipeSuggestionsQueryHandler
                 return cached;
             }
         }
-        catch
+        catch (Exception exception) when (exception.GetType().Namespace == "StackExchange.Redis")
         {
-            // Redis không kh? d?ng:
-            // ti?p t?c query PostgreSQL theo SRS A3.
+            _logger.LogWarning(exception, "Suggestions cache read failed.");
         }
 
         var items = await _unitOfWork.Recipes.GetSuggestionsAsync(
@@ -61,9 +64,9 @@ public sealed class GetRecipeSuggestionsQueryHandler
                 TimeSpan.FromMinutes(1),
                 cancellationToken);
         }
-        catch
+        catch (Exception exception) when (exception.GetType().Namespace == "StackExchange.Redis")
         {
-            // Redis l?i không ðý?c làm request Suggestions th?t b?i.
+            _logger.LogWarning(exception, "Suggestions cache write failed.");
         }
 
         return result;

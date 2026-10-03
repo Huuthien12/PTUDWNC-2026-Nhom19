@@ -352,88 +352,6 @@ recipes.MapGet("/", async (
     ISender sender,
     CancellationToken cancellationToken) =>
 {
-    var currentPage = page ?? 1;
-    var currentPageSize = pageSize ?? 12;
-
-    // SRS: page >= 1
-    if (currentPage < 1)
-    {
-        return Results.Problem(
-            type: "INVALID_PAGE",
-            title: "Invalid page.",
-            statusCode: StatusCodes.Status400BadRequest,
-            detail: "Page must be greater than or equal to 1.");
-    }
-
-    // SRS: pageSize từ 1 đến 50
-    if (currentPageSize < 1 || currentPageSize > 50)
-    {
-        return Results.Problem(
-            type: "INVALID_PAGE_SIZE",
-            title: "Invalid page size.",
-            statusCode: StatusCodes.Status400BadRequest,
-            detail: "PageSize must be between 1 and 50.");
-    }
-
-    // Filter: maxCookTime >= 0
-    if (maxCookTime.HasValue && maxCookTime.Value < 0)
-    {
-        return Results.Problem(
-            type: "INVALID_MAX_COOK_TIME",
-            title: "Invalid max cook time.",
-            statusCode: StatusCodes.Status400BadRequest,
-            detail: "MaxCookTime must be greater than or equal to 0.");
-    }
-
-    // Filter: minServings >= 1
-    if (minServings.HasValue && minServings.Value < 1)
-    {
-        return Results.Problem(
-            type: "INVALID_MIN_SERVINGS",
-            title: "Invalid minimum servings.",
-            statusCode: StatusCodes.Status400BadRequest,
-            detail: "MinServings must be greater than or equal to 1.");
-    }
-
-    var normalizedSortBy =
-        string.IsNullOrWhiteSpace(sortBy)
-            ? "createdAt"
-            : sortBy.Trim();
-
-    var normalizedSortOrder =
-        string.IsNullOrWhiteSpace(sortOrder)
-            ? "desc"
-            : sortOrder.Trim();
-
-    // SRS hỗ trợ createdAt và title
-    if (!normalizedSortBy.Equals(
-            "createdAt",
-            StringComparison.OrdinalIgnoreCase) &&
-        !normalizedSortBy.Equals(
-            "title",
-            StringComparison.OrdinalIgnoreCase))
-    {
-        return Results.Problem(
-            type: "INVALID_SORT_BY",
-            title: "Invalid sort field.",
-            statusCode: StatusCodes.Status400BadRequest,
-            detail: "SortBy must be either createdAt or title.");
-    }
-
-    if (!normalizedSortOrder.Equals(
-            "asc",
-            StringComparison.OrdinalIgnoreCase) &&
-        !normalizedSortOrder.Equals(
-            "desc",
-            StringComparison.OrdinalIgnoreCase))
-    {
-        return Results.Problem(
-            type: "INVALID_SORT_ORDER",
-            title: "Invalid sort order.",
-            statusCode: StatusCodes.Status400BadRequest,
-            detail: "SortOrder must be either asc or desc.");
-    }
-
     var userId =
         context.User.Identity?.IsAuthenticated == true
             ? context.User.FindFirst(
@@ -444,16 +362,16 @@ recipes.MapGet("/", async (
 
     var result = await sender.Send(
         new GetRecipesQuery(
-            currentPage,
-            currentPageSize,
+            page ?? 1,
+            pageSize ?? 12,
             userId,
             isAdmin,
             categoryId,
             difficulty,
             maxCookTime,
             minServings,
-            normalizedSortBy,
-            normalizedSortOrder),
+            string.IsNullOrWhiteSpace(sortBy) ? "createdAt" : sortBy,
+            string.IsNullOrWhiteSpace(sortOrder) ? "desc" : sortOrder),
         cancellationToken);
 
     return Results.Ok(result);
