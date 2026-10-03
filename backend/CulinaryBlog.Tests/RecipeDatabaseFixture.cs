@@ -24,9 +24,21 @@ public sealed class RecipeDatabaseFixture : IAsyncDisposable
         }.ConnectionString;
     }
 
-    public AppDbContext NewContext() => new(_postgresConnection is null
-        ? new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options
-        : new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(_postgresConnection).Options);
+    public AppDbContext NewContext()
+{
+    var builder = new DbContextOptionsBuilder<AppDbContext>();
+
+    if (_postgresConnection is null)
+    {
+        builder.UseSqlite(_connection);
+    }
+    else
+    {
+        builder.UseNpgsql(_postgresConnection);
+    }
+
+    return new AppDbContext(builder.Options);
+}
 
     public async Task<Guid> InitializeAsync(bool beforeVersionMigration = false)
     {

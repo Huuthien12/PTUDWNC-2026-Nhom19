@@ -32,7 +32,17 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
         CategoryId = recipe.CategoryId;
         AuthorId = recipe.AuthorId;
     }
+    public async Task ResetAsync()
+    {
 
+        await using var db = Database.NewContext();
+
+        var recipe = await db.Recipes.SingleAsync(
+            x => x.Slug == "original-recipe");
+
+        CategoryId = recipe.CategoryId;
+        AuthorId = recipe.AuthorId;
+    }
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -78,15 +88,35 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
     }
 
     // Deterministically exercises the provider error path after the slug precheck succeeds.
-    private sealed class SlugConstraintUnitOfWork(ICategoryRepository categories, IRecipeRepository recipes) : IUnitOfWork
-    {
-        public ICategoryRepository Categories => categories;
-        public IRecipeRepository Recipes => recipes;
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-            => throw new DbUpdateException("Concurrent slug insert", new PostgresException(
-                "duplicate key", "ERROR", "ERROR", PostgresErrorCodes.UniqueViolation,
+   private sealed class SlugConstraintUnitOfWork(
+   ICategoryRepository categories,
+    IRecipeRepository recipes,
+    ISearchHistoryRepository searchHistories) : IUnitOfWork
+{
+    public ICategoryRepository Categories => categories;
+
+    public IRecipeRepository Recipes => recipes;
+
+    public ISearchHistoryRepository SearchHistories => searchHistories;
+
+    public Task<int> SaveChangesAsync(
+        CancellationToken cancellationToken = default)
+        => throw new DbUpdateException(
+            "Concurrent slug insert",
+            new PostgresException(
+                "duplicate key",
+                "ERROR",
+                "ERROR",
+                PostgresErrorCodes.UniqueViolation,
                 constraintName: "IX_Recipes_Slug"));
+
+    public async Task ExecuteInTransactionAsync(
+        Func<CancellationToken, Task> action,
+        CancellationToken cancellationToken = default)
+    {
+        await action(cancellationToken);
     }
+}
 }
 
 public sealed class RecordingRecipeCache : ICacheService

@@ -29,7 +29,8 @@ public class RecipeStepConfiguration
             .HasMaxLength(500);
 
         builder.HasIndex(x => new { x.RecipeId, x.StepNumber })
-            .IsUnique();
+            .IsUnique()
+            .HasFilter("\"IsDeleted\" = FALSE");
 
         builder.HasOne(x => x.Recipe)
             .WithMany(x => x.Steps)

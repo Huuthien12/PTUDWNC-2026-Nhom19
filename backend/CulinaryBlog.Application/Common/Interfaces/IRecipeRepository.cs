@@ -1,21 +1,49 @@
 using CulinaryBlog.Application.Common.Models;
 using CulinaryBlog.Domain.Entities;
+using CulinaryBlog.Domain.Enums;
+using CulinaryBlog.Application.Recipes.DTOs;
 
 namespace CulinaryBlog.Application.Common.Interfaces;
 
 public interface IRecipeRepository
 {
-    Task<int> CountVisibleAsync(string? userId, bool isAdmin, CancellationToken cancellationToken = default);
+    Task<int> CountVisibleAsync(
+        string? userId,
+        bool isAdmin,
+        Guid? categoryId,
+        RecipeDifficulty? difficulty,
+        int? maxCookTime,
+        int? minServings,
+        CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<Recipe>> GetVisibleAsync(int page, int pageSize, string? userId,
-        bool isAdmin, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Recipe>> GetVisibleAsync(
+        int page,
+        int pageSize,
+        string? userId,
+        bool isAdmin,
+        Guid? categoryId,
+        RecipeDifficulty? difficulty,
+        int? maxCookTime,
+        int? minServings,
+        string sortBy,
+        string sortOrder,
+        CancellationToken cancellationToken = default);
 
-    // Returns a tracked recipe, including its owned Nutrition, for editing.
-    Task<Recipe?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<Recipe?> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
 
-    Task<Recipe?> GetForLifecycleAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<Recipe?> GetForLifecycleAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
 
-    Task AddAsync(Recipe recipe, CancellationToken cancellationToken = default);
+    Task AddAsync(
+        Recipe recipe,
+        CancellationToken cancellationToken = default);
+
+    Task AddStepAsync(
+        RecipeStep step,
+        CancellationToken cancellationToken = default);
 
     void AddIngredient(RecipeIngredient ingredient);
 
@@ -31,7 +59,9 @@ public interface IRecipeRepository
         string tsQuery, int page, int pageSize,
         CancellationToken cancellationToken = default);
 
-    Task<bool> SlugExistsAsync(string slug, Guid? excludeRecipeId = null,
+    Task<bool> SlugExistsAsync(
+        string slug,
+        Guid? excludeRecipeId = null,
         CancellationToken cancellationToken = default);
 
     Task<int> CountByCategoryAsync(
@@ -60,5 +90,13 @@ public interface IRecipeRepository
         string slug,
         string? userId,
         bool isAdmin,
+        CancellationToken cancellationToken = default);
+
+    Task<Recipe?> GetForStepMutationAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<RecipeSuggestionDto>> GetSuggestionsAsync(
+        string normalizedQuery,
         CancellationToken cancellationToken = default);
 }
