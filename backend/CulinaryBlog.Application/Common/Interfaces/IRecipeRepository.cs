@@ -92,6 +92,22 @@ public interface IRecipeRepository
         bool isAdmin,
         CancellationToken cancellationToken = default);
 
+    // ---- RecipeImage mutations (FR-RCP-008) ----
+
+    // Returns a tracked recipe with its (non-deleted) Images for RecipeImage mutations.
+    Task<Recipe?> GetForImagesAsync(Guid id, CancellationToken cancellationToken = default);
+
+    // New RecipeImage rows have client-generated GUIDs, so they must be tracked explicitly as Added.
+    void AddImage(RecipeImage image);
+
+    // RecipeImage rows are physically deleted (SRS FR-RCP-008 step 13).
+    void RemoveImage(RecipeImage image);
+
+    // Runs several SaveChanges calls atomically (used when the DB unique-primary index
+    // forces "demote old primary" and "promote new primary" to be separate statements).
+    Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken = default);
+
     Task<Recipe?> GetForStepMutationAsync(
         Guid id,
         CancellationToken cancellationToken = default);

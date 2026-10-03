@@ -97,6 +97,7 @@ builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
 builder.Services.AddSingleton<IRefreshTokenGenerator, RefreshTokenGenerator>();
 builder.Services.AddSingleton<IWelcomeEmailQueue, HangfireWelcomeEmailQueue>();
+builder.Services.AddSingleton<IImageCleanupQueue, HangfireImageCleanupQueue>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddSingleton<ImageFileValidator>();
 builder.Services.AddSingleton<IFileStorageService, MinioFileStorageService>();
@@ -275,6 +276,8 @@ builder.Services.AddCors(options =>
             .WithOrigins("http://localhost:3000")
             .AllowAnyHeader()
             .AllowAnyMethod()
+            // The new Recipe RowVersion of a 204 image delete is only delivered in the ETag header.
+            .WithExposedHeaders("ETag")
             .AllowCredentials();
     });
 });
@@ -721,6 +724,7 @@ categories.MapDelete("/{id:guid}", async (
 // =========================
 
 app.MapRecipeEndpoints();
+app.MapRecipeImageEndpoints();
 
 app.Run();
 

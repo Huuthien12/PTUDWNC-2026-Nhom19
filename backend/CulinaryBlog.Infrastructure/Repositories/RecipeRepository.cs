@@ -35,6 +35,37 @@ public sealed class RecipeRepository : IRecipeRepository
                 recipe => recipe.Id == id,
                 cancellationToken);
 
+    public Task<Recipe?> GetForImagesAsync(Guid id, CancellationToken cancellationToken = default)
+        => _context.Recipes.Include(recipe => recipe.Images)
+            .FirstOrDefaultAsync(recipe => recipe.Id == id, cancellationToken);
+
+    public void AddImage(RecipeImage image)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        _context.RecipeImages.Add(image);
+    }
+
+    public void RemoveImage(RecipeImage image)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        _context.RecipeImages.Remove(image);
+    }
+
+    public async Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        // Already inside a caller-owned transaction: join it instead of nesting.
+        if (_context.Database.CurrentTransaction is not null)
+            return await operation(cancellationToken);
+
+        // Leaving the scope without CommitAsync (any exception, e.g. a stale RowVersion) rolls back.
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        var result = await operation(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return result;
+    }
+
     public Task<Recipe?> GetForStepMutationAsync(
         Guid id,
         CancellationToken cancellationToken = default)

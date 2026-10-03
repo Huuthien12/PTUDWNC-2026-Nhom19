@@ -23,6 +23,8 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
     public string AuthorId { get; private set; } = "";
     public bool FailWithSlugConstraint { get; set; }
     public RecordingRecipeCache Cache { get; } = new();
+    public FakeFileStorageService Storage { get; } = new();
+    public RecordingImageCleanupQueue ImageCleanup { get; } = new();
 
     public async Task InitializeAsync()
     {
@@ -59,6 +61,10 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
             services.AddScoped(_ => Database.NewContext());
             services.RemoveAll<ICacheService>();
             services.AddSingleton<ICacheService>(Cache);
+            services.RemoveAll<IFileStorageService>();
+            services.AddSingleton<IFileStorageService>(Storage);
+            services.RemoveAll<IImageCleanupQueue>();
+            services.AddSingleton<IImageCleanupQueue>(ImageCleanup);
             if (FailWithSlugConstraint)
             {
                 services.RemoveAll<IUnitOfWork>();
