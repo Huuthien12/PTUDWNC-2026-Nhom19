@@ -1,3 +1,4 @@
+using CulinaryBlog.Application.Common.Models;
 using CulinaryBlog.Domain.Entities;
 
 namespace CulinaryBlog.Application.Common.Interfaces;
@@ -16,9 +17,19 @@ public interface IRecipeRepository
 
     Task AddAsync(Recipe recipe, CancellationToken cancellationToken = default);
 
+    void AddIngredient(RecipeIngredient ingredient);
+
     // Use the client's decoded Base64 token, not the token from a fresh database read.
     // Empty tokens are supported for legacy rows; request validation is the caller's responsibility.
     void Update(Recipe recipe, byte[] originalRowVersion);
+
+    void UpdateForChildMutation(Recipe recipe, byte[] originalRowVersion);
+
+    Task<int> CountSearchAsync(string tsQuery, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<SearchRecipeResult>> SearchAsync(
+        string tsQuery, int page, int pageSize,
+        CancellationToken cancellationToken = default);
 
     Task<bool> SlugExistsAsync(string slug, Guid? excludeRecipeId = null,
         CancellationToken cancellationToken = default);

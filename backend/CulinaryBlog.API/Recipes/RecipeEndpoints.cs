@@ -54,6 +54,45 @@ public static class RecipeEndpoints
         }).RequireAuthorization(policy => policy
             .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)
             .RequireAuthenticatedUser().RequireRole("Author", "Admin"));
+
+        app.MapPost("/api/v1/recipes/{id:guid}/ingredients", async (
+            Guid id, [FromBody] CreateRecipeIngredientRequest request, ClaimsPrincipal user,
+            ISender sender, CancellationToken cancellationToken) =>
+        {
+            var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new UnauthorizedAccessException();
+            var ingredient = await sender.Send(new AddRecipeIngredientCommand(
+                id, request, userId, user.IsInRole("Admin")), cancellationToken);
+            return Results.Created($"/api/v1/recipes/{id}/ingredients/{ingredient.Id}", ingredient);
+        }).RequireAuthorization(policy => policy
+            .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)
+            .RequireAuthenticatedUser().RequireRole("Author", "Admin"));
+
+        app.MapPut("/api/v1/recipes/{id:guid}/ingredients/{ingId:guid}", async (
+            Guid id, Guid ingId, [FromBody] UpdateRecipeIngredientRequest request, ClaimsPrincipal user,
+            ISender sender, CancellationToken cancellationToken) =>
+        {
+            var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new UnauthorizedAccessException();
+            return Results.Ok(await sender.Send(new UpdateRecipeIngredientCommand(
+                id, ingId, request, userId, user.IsInRole("Admin")), cancellationToken));
+        }).RequireAuthorization(policy => policy
+            .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)
+            .RequireAuthenticatedUser().RequireRole("Author", "Admin"));
+
+        app.MapDelete("/api/v1/recipes/{id:guid}/ingredients/{ingId:guid}", async (
+            Guid id, Guid ingId, [FromBody] LifecycleRequest request, HttpContext context, ClaimsPrincipal user,
+            ISender sender, CancellationToken cancellationToken) =>
+        {
+            var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new UnauthorizedAccessException();
+            var rowVersion = await sender.Send(new DeleteRecipeIngredientCommand(
+                id, ingId, request.RowVersion, userId, user.IsInRole("Admin")), cancellationToken);
+            context.Response.Headers.ETag = $"\"{rowVersion}\"";
+            return Results.NoContent();
+        }).RequireAuthorization(policy => policy
+            .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)
+            .RequireAuthenticatedUser().RequireRole("Author", "Admin"));
     }
 
 }

@@ -105,10 +105,10 @@ public sealed class UpdateRecipeTests
         Assert.Equal(status, dto.Status);
         Assert.Equal(before.Slug, saved.Slug);
         Assert.Equal(before.Slug, dto.Slug);
-        Assert.Equal(before.PublishedAt, saved.PublishedAt);
-        Assert.Equal(before.CreatedAt, saved.CreatedAt);
+        Assert.Equal(PostgreSqlDateTime.Normalize(before.PublishedAt), PostgreSqlDateTime.Normalize(saved.PublishedAt));
+        Assert.Equal(PostgreSqlDateTime.Normalize(before.CreatedAt), PostgreSqlDateTime.Normalize(saved.CreatedAt));
         Assert.True(saved.UpdatedAt > before.UpdatedAt);
-        Assert.Equal(saved.UpdatedAt, dto.UpdatedAt);
+        Assert.Equal(PostgreSqlDateTime.Normalize(saved.UpdatedAt), PostgreSqlDateTime.Normalize(dto.UpdatedAt));
         Assert.Equal("Existing title", saved.Title);
         Assert.Equal("Updated description", saved.Description);
         Assert.Equal("Updated instructions", saved.Instructions);
@@ -149,7 +149,7 @@ public sealed class UpdateRecipeTests
         var saved = await db.Recipes.SingleAsync();
         Assert.Equal(before.Title, saved.Title);
         Assert.Equal(before.RowVersion, saved.RowVersion);
-        Assert.Equal(before.UpdatedAt, saved.UpdatedAt);
+        Assert.Equal(PostgreSqlDateTime.Normalize(before.UpdatedAt), PostgreSqlDateTime.Normalize(saved.UpdatedAt));
         Assert.Empty(factory.Cache.RemovedKeys);
     }
 
@@ -248,7 +248,7 @@ public sealed class UpdateRecipeTests
         Assert.Equal(before.CategoryId, saved.CategoryId);
         Assert.Equal(200m, saved.Nutrition.Calories);
         Assert.Equal(current.RowVersion, Convert.ToBase64String(saved.RowVersion));
-        Assert.Equal(current.UpdatedAt, saved.UpdatedAt);
+        Assert.Equal(PostgreSqlDateTime.Normalize(current.UpdatedAt), PostgreSqlDateTime.Normalize(saved.UpdatedAt));
         Assert.Empty(factory.Cache.RemovedKeys);
     }
 

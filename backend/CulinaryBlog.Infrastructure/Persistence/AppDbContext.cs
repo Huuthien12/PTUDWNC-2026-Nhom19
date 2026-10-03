@@ -2,6 +2,7 @@ using CulinaryBlog.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using NpgsqlTypes;
 
 namespace CulinaryBlog.Infrastructure.Persistence;
 
@@ -51,9 +52,18 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         foreach (var recipe in ChangeTracker.Entries<Recipe>().ToList())
         {
             var nutrition = recipe.Reference(x => x.Nutrition).TargetEntry;
+            var nutritionChanged = nutrition?.State is EntityState.Added or EntityState.Modified or EntityState.Deleted;
+            var childChanged =
+                ChangeTracker.Entries<RecipeIngredient>().Any(x =>
+                    x.Entity.RecipeId == recipe.Entity.Id &&
+                    x.State is EntityState.Added or EntityState.Modified or EntityState.Deleted) ||
+                ChangeTracker.Entries<RecipeStep>().Any(x =>
+                    x.Entity.RecipeId == recipe.Entity.Id &&
+                    x.State is EntityState.Added or EntityState.Modified or EntityState.Deleted);
             if (recipe.State is not (EntityState.Added or EntityState.Modified) &&
                 !(recipe.State == EntityState.Unchanged &&
-                  nutrition?.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+                  (nutritionChanged ||
+                   childChanged)))
                 continue;
 
             // Preserve the original token for the SQL WHERE predicate, including legacy empty tokens.
@@ -68,7 +78,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
                 var ownedVersion = nutrition.Property<byte[]>(nameof(Recipe.RowVersion));
                 ownedVersion.OriginalValue = version.OriginalValue;
                 ownedVersion.CurrentValue = nextVersion;
-                if (nutrition.State != EntityState.Added)
+                if (nutrition.State != EntityState.Added && (nutritionChanged || !childChanged))
                     ownedVersion.IsModified = true;
             }
         }
@@ -87,6 +97,15 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.ApplyConfigurationsFromAssembly(
             typeof(AppDbContext).Assembly
         );
+
+        if (Database.IsNpgsql())
+        {
+            builder.Entity<Recipe>().Property<NpgsqlTsVector>("SearchVector")
+                .HasColumnType("tsvector");
+            builder.Entity<Recipe>().HasIndex("SearchVector")
+                .HasDatabaseName("IDX_Recipe_Search")
+                .HasMethod("GIN");
+        }
 
 
         // =========================

@@ -1,8 +1,10 @@
 using CulinaryBlog.Application.Common.Interfaces;
+using CulinaryBlog.Application.Common.Models;
 using CulinaryBlog.Domain.Entities;
 using CulinaryBlog.Domain.Enums;
 using CulinaryBlog.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace CulinaryBlog.Infrastructure.Repositories;
 
@@ -25,6 +27,8 @@ public sealed class RecipeRepository : IRecipeRepository
     public async Task AddAsync(Recipe recipe, CancellationToken cancellationToken = default)
         => await _context.Recipes.AddAsync(recipe, cancellationToken);
 
+    public void AddIngredient(RecipeIngredient ingredient) => _context.RecipeIngredients.Add(ingredient);
+
     public void Update(Recipe recipe, byte[] originalRowVersion)
     {
         ArgumentNullException.ThrowIfNull(originalRowVersion);
@@ -35,6 +39,60 @@ public sealed class RecipeRepository : IRecipeRepository
         // Mark only the root, not its Author, Category, or child collections.
         entry.State = EntityState.Modified;
         entry.Property(x => x.RowVersion).OriginalValue = originalRowVersion.ToArray();
+    }
+
+    public void UpdateForChildMutation(Recipe recipe, byte[] originalRowVersion)
+    {
+        var entry = _context.Entry(recipe);
+        entry.Property(x => x.RowVersion).OriginalValue = originalRowVersion.ToArray();
+    }
+
+    public Task<int> CountSearchAsync(string tsQuery, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT count(*)::int AS "Value"
+            FROM "Recipes"
+            WHERE "IsDeleted" = false
+              AND "Status" = 2
+              AND "SearchVector" @@ to_tsquery('simple', unaccent(@query))
+            """;
+        return _context.Database.SqlQueryRaw<int>(
+            sql, new NpgsqlParameter("query", tsQuery)).SingleAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<SearchRecipeResult>> SearchAsync(
+        string tsQuery, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT "Id", ts_rank("SearchVector", to_tsquery('simple', unaccent(@query))) AS "Score"
+            FROM "Recipes"
+            WHERE "IsDeleted" = false
+              AND "Status" = 2
+              AND "SearchVector" @@ to_tsquery('simple', unaccent(@query))
+            ORDER BY "Score" DESC, "CreatedAt" DESC, "Id" ASC
+            OFFSET @offset LIMIT @limit
+            """;
+        var hits = await _context.Database.SqlQueryRaw<SearchHit>(
+            sql,
+            new NpgsqlParameter("query", tsQuery),
+            new NpgsqlParameter("offset", (page - 1) * pageSize),
+            new NpgsqlParameter("limit", pageSize)).ToListAsync(cancellationToken);
+        if (hits.Count == 0) return [];
+
+        var ids = hits.Select(hit => hit.Id).ToArray();
+        var recipes = await _context.Recipes.AsNoTracking()
+            .Include(recipe => recipe.Images)
+            .Where(recipe => ids.Contains(recipe.Id))
+            .ToDictionaryAsync(recipe => recipe.Id, cancellationToken);
+        return hits.Where(hit => recipes.ContainsKey(hit.Id))
+            .Select(hit => new SearchRecipeResult(recipes[hit.Id], hit.Score))
+            .ToList();
+    }
+
+    private sealed class SearchHit
+    {
+        public Guid Id { get; set; }
+        public double Score { get; set; }
     }
 
     public Task<bool> SlugExistsAsync(string slug, Guid? excludeRecipeId = null,

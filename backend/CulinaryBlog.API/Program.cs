@@ -358,6 +358,15 @@ recipes.MapGet("/", async (
     return Results.Ok(result);
 });
 
+recipes.MapGet("/search", async (
+    string? q, int? page, int? pageSize, ISender sender,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await sender.Send(
+        new SearchRecipesQuery(q ?? string.Empty, page ?? 1, pageSize ?? 12),
+        cancellationToken));
+});
+
 
 // =========================
 // Login
