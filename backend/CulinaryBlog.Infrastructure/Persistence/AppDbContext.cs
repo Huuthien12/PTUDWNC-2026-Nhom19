@@ -2,6 +2,7 @@ using CulinaryBlog.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using NpgsqlTypes;
 
 namespace CulinaryBlog.Infrastructure.Persistence;
 
@@ -60,8 +61,21 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
                 or EntityState.Modified
                 or EntityState.Deleted;
 
+        var childChanged =
+            ChangeTracker.Entries<RecipeIngredient>().Any(entry =>
+                entry.Entity.RecipeId == recipe.Entity.Id &&
+                entry.State is EntityState.Added
+                    or EntityState.Modified
+                    or EntityState.Deleted) ||
+            ChangeTracker.Entries<RecipeStep>().Any(entry =>
+                entry.Entity.RecipeId == recipe.Entity.Id &&
+                entry.State is EntityState.Added
+                    or EntityState.Modified
+                    or EntityState.Deleted);
+
         if (recipe.State is not (EntityState.Added or EntityState.Modified)
-            && !nutritionChanged)
+            && !nutritionChanged
+            && !childChanged)
         {
             continue;
         }
@@ -100,6 +114,15 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.ApplyConfigurationsFromAssembly(
             typeof(AppDbContext).Assembly
         );
+
+        if (Database.IsNpgsql())
+        {
+            builder.Entity<Recipe>().Property<NpgsqlTsVector>("SearchVector")
+                .HasColumnType("tsvector");
+            builder.Entity<Recipe>().HasIndex("SearchVector")
+                .HasDatabaseName("IDX_Recipe_Search")
+                .HasMethod("GIN");
+        }
 
 
         // =========================

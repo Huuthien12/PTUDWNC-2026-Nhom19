@@ -3,6 +3,7 @@ using System;
 using CulinaryBlog.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -12,9 +13,11 @@ using NpgsqlTypes;
 namespace CulinaryBlog.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261002160937_AddRecipeFullTextSearch")]
+    partial class AddRecipeFullTextSearch
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -381,8 +384,7 @@ namespace CulinaryBlog.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("RecipeId", "StepNumber")
-                        .IsUnique()
-                        .HasFilter("\"IsDeleted\" = FALSE");
+                        .IsUnique();
 
                     b.ToTable("RecipeSteps", null, t =>
                         {
@@ -440,35 +442,6 @@ namespace CulinaryBlog.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("RefreshTokens");
-                });
-
-            modelBuilder.Entity("CulinaryBlog.Domain.Entities.SearchHistory", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Query")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime>("SearchedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "Query")
-                        .IsUnique();
-
-                    b.HasIndex("UserId", "SearchedAt");
-
-                    b.ToTable("SearchHistories", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -639,6 +612,12 @@ namespace CulinaryBlog.Infrastructure.Persistence.Migrations
                                 .HasColumnType("numeric")
                                 .HasColumnName("Nutrition_Protein");
 
+                            b1.Property<byte[]>("RowVersion")
+                                .IsConcurrencyToken()
+                                .IsRequired()
+                                .HasColumnType("bytea")
+                                .HasColumnName("RowVersion");
+
                             b1.HasKey("RecipeId");
 
                             b1.ToTable("Recipes");
@@ -697,15 +676,6 @@ namespace CulinaryBlog.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("CulinaryBlog.Domain.Entities.SearchHistory", b =>
-                {
-                    b.HasOne("CulinaryBlog.Domain.Entities.ApplicationUser", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
