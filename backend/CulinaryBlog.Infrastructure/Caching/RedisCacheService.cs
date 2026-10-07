@@ -38,16 +38,18 @@ public sealed class RedisCacheService : ICacheService
         string key,
         T value,
         TimeSpan expiration,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool useAbsoluteExpiration = false)
     {
         var json = JsonSerializer.Serialize(
             value,
             JsonOptions);
 
-        var options = new DistributedCacheEntryOptions
-        {
-            SlidingExpiration = expiration
-        };
+        var options = new DistributedCacheEntryOptions();
+        if (useAbsoluteExpiration)
+            options.AbsoluteExpirationRelativeToNow = expiration;
+        else
+            options.SlidingExpiration = expiration;
 
         await _cache.SetStringAsync(
             key,
