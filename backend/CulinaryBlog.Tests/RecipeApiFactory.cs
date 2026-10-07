@@ -128,11 +128,12 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
 public sealed class RecordingRecipeCache : ICacheService
 {
     public List<string> RemovedKeys { get; } = [];
+    public Func<string, Task>? OnRemoveAsync { get; set; }
     public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default) => Task.FromResult(default(T));
     public Task SetAsync<T>(string key, T value, TimeSpan expiration, CancellationToken cancellationToken = default, bool useAbsoluteExpiration = false) => Task.CompletedTask;
     public Task RemoveAsync(string key, CancellationToken cancellationToken = default)
     {
         RemovedKeys.Add(key);
-        return Task.CompletedTask;
+        return OnRemoveAsync?.Invoke(key) ?? Task.CompletedTask;
     }
 }

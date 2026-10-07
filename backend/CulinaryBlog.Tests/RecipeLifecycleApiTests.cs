@@ -64,16 +64,28 @@ public sealed class RecipeLifecycleApiTests
         using var client = factory.Client(role: null);
 
         await AssertProblem(await client.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/publish", Body(recipe)), 401, "AUTH_TOKEN_INVALID");
+        Assert.Empty(factory.Cache.RemovedKeys);
     }
 
     [Theory]
     [InlineData("publish", RecipeStatus.Draft, RecipeStatus.Published)]
     [InlineData("unpublish", RecipeStatus.Published, RecipeStatus.Draft)]
     [InlineData("archive", RecipeStatus.Draft, RecipeStatus.Archived)]
+    [InlineData("archive", RecipeStatus.Published, RecipeStatus.Archived)]
+    [InlineData("publish", RecipeStatus.Published, RecipeStatus.Published)]
+    [InlineData("unpublish", RecipeStatus.Draft, RecipeStatus.Draft)]
     public async Task Owner_can_apply_each_mapped_lifecycle_action(string route, RecipeStatus beforeStatus, RecipeStatus expectedStatus)
     {
         await using var factory = new RecipeApiFactory();
         var recipe = await SeedAsync(factory, beforeStatus);
+        factory.Cache.OnRemoveAsync = async _ =>
+        {
+            await using var committedDb = factory.Database.NewContext();
+            var committed = await committedDb.Recipes.SingleAsync(x => x.Id == recipe.Id);
+            Assert.Equal(expectedStatus, committed.Status);
+            Assert.NotEqual(recipe.RowVersion, committed.RowVersion);
+            Assert.Equal(recipe.PublishedAt, committed.PublishedAt);
+        };
         using var client = factory.Client();
 
         var response = await client.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/{route}", Body(recipe));
@@ -82,6 +94,15 @@ public sealed class RecipeLifecycleApiTests
         var dto = (await response.Content.ReadFromJsonAsync<RecipeDto>())!;
         Assert.Equal(expectedStatus, dto.Status);
         Assert.NotEqual(Convert.ToBase64String(recipe.RowVersion), dto.RowVersion);
+        var expectedKeys = (beforeStatus == RecipeStatus.Published) != (expectedStatus == RecipeStatus.Published)
+            ? new[] { $"recipe:{recipe.Slug}", "categories:all" }
+            : new[] { $"recipe:{recipe.Slug}" };
+        Assert.Equal(expectedKeys, factory.Cache.RemovedKeys);
+        await using var db = factory.Database.NewContext();
+        var saved = await db.Recipes.SingleAsync(x => x.Id == recipe.Id);
+        Assert.Equal(expectedStatus, saved.Status);
+        Assert.Equal(dto.RowVersion, Convert.ToBase64String(saved.RowVersion));
+        Assert.Equal(recipe.PublishedAt, saved.PublishedAt);
     }
 
     [Theory]
@@ -97,6 +118,7 @@ public sealed class RecipeLifecycleApiTests
 
         await AssertProblem(await otherAuthor.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/{route}", Body(recipe)), 403, "RECIPE_FORBIDDEN");
         await AssertProblem(await owner.PatchAsJsonAsync($"/api/v1/recipes/{Guid.NewGuid()}/{route}", Body(recipe)), 404, "RECIPE_NOT_FOUND");
+        Assert.Empty(factory.Cache.RemovedKeys);
     }
 
     [Fact]
@@ -115,6 +137,8 @@ public sealed class RecipeLifecycleApiTests
         var repeated = (await second.Content.ReadFromJsonAsync<RecipeDto>())!;
         Assert.Equal(RecipeStatus.Archived, repeated.Status);
         Assert.NotEmpty(Convert.FromBase64String(repeated.RowVersion));
+        Assert.NotEqual(archived.RowVersion, repeated.RowVersion);
+        Assert.Equal(new[] { $"recipe:{recipe.Slug}", $"recipe:{recipe.Slug}" }, factory.Cache.RemovedKeys);
     }
 
     [Fact]
@@ -128,6 +152,7 @@ public sealed class RecipeLifecycleApiTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(RecipeStatus.Published, (await response.Content.ReadFromJsonAsync<RecipeDto>())!.Status);
+        Assert.Equal(new[] { $"recipe:{recipe.Slug}", "categories:all" }, factory.Cache.RemovedKeys);
     }
 
     [Fact]
@@ -143,6 +168,7 @@ public sealed class RecipeLifecycleApiTests
         using var admin = factory.Client("Admin", userId: "admin-user");
 
         await AssertProblem(await admin.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/archive", Body(recipe)), 404, "RECIPE_NOT_FOUND");
+        Assert.Empty(factory.Cache.RemovedKeys);
     }
 
     [Fact]
@@ -155,12 +181,79 @@ public sealed class RecipeLifecycleApiTests
         var winner = await client.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/publish", Body(recipe));
         Assert.Equal(HttpStatusCode.OK, winner.StatusCode);
         var current = (await winner.Content.ReadFromJsonAsync<RecipeDto>())!;
+        Assert.Equal(new[] { $"recipe:{recipe.Slug}", "categories:all" }, factory.Cache.RemovedKeys);
+        factory.Cache.RemovedKeys.Clear();
         await AssertProblem(await client.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/unpublish", Body(recipe)), 422, "RECIPE_CONCURRENCY_CONFLICT");
 
         await using var db = factory.Database.NewContext();
         var saved = await db.Recipes.SingleAsync(x => x.Id == recipe.Id);
         Assert.Equal(RecipeStatus.Published, saved.Status);
         Assert.Equal(current.RowVersion, Convert.ToBase64String(saved.RowVersion));
+        Assert.Empty(factory.Cache.RemovedKeys);
+    }
+
+    [Theory]
+    [InlineData("publish", "RECIPE_PUBLISH_INVALID_STATE")]
+    [InlineData("unpublish", "RECIPE_UNPUBLISH_INVALID_STATE")]
+    public async Task Invalid_lifecycle_transition_does_not_evict_cache(string route, string errorCode)
+    {
+        await using var factory = new RecipeApiFactory();
+        var recipe = await SeedAsync(factory, RecipeStatus.Archived);
+        using var client = factory.Client();
+
+        await AssertProblem(await client.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/{route}", Body(recipe)), 400, errorCode);
+
+        Assert.Empty(factory.Cache.RemovedKeys);
+    }
+
+    [Fact]
+    public async Task Failed_lifecycle_save_does_not_evict_cache()
+    {
+        await using var factory = new RecipeApiFactory { FailWithSlugConstraint = true };
+        var recipe = await SeedAsync(factory);
+        using var client = factory.Client();
+
+        var response = await client.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/publish", Body(recipe));
+
+        await AssertProblem(response, 409, "RECIPE_SLUG_EXISTS");
+        Assert.Empty(factory.Cache.RemovedKeys);
+        await using var db = factory.Database.NewContext();
+        var saved = await db.Recipes.SingleAsync(x => x.Id == recipe.Id);
+        Assert.Equal(RecipeStatus.Draft, saved.Status);
+        Assert.Equal(recipe.RowVersion, saved.RowVersion);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Cache_failure_after_lifecycle_commit_does_not_undo_saved_state(bool failCategoryRemoval)
+    {
+        await using var factory = new RecipeApiFactory();
+        var recipe = await SeedAsync(factory, RecipeStatus.Published);
+        var observedCommittedState = false;
+        factory.Cache.OnRemoveAsync = async key =>
+        {
+            await using var db = factory.Database.NewContext();
+            var saved = await db.Recipes.SingleAsync(x => x.Id == recipe.Id);
+            Assert.Equal(RecipeStatus.Draft, saved.Status);
+            Assert.NotEqual(recipe.RowVersion, saved.RowVersion);
+            observedCommittedState = true;
+            if (key == (failCategoryRemoval ? "categories:all" : $"recipe:{recipe.Slug}"))
+                throw new InvalidOperationException("Test cache removal failure");
+        };
+        using var client = factory.Client();
+
+        var response = await client.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/unpublish", Body(recipe));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.True(observedCommittedState);
+        Assert.Equal(failCategoryRemoval
+            ? new[] { $"recipe:{recipe.Slug}", "categories:all" }
+            : new[] { $"recipe:{recipe.Slug}" }, factory.Cache.RemovedKeys);
+        await using var verification = factory.Database.NewContext();
+        var persisted = await verification.Recipes.SingleAsync(x => x.Id == recipe.Id);
+        Assert.Equal(RecipeStatus.Draft, persisted.Status);
+        Assert.Equal(recipe.PublishedAt, persisted.PublishedAt);
     }
 
     [Fact]
