@@ -20,7 +20,7 @@ public sealed class CreateRecipeCommandValidator : AbstractValidator<CreateRecip
     }
 }
 
-public sealed class CreateRecipeCommandHandler(IUnitOfWork unitOfWork)
+public sealed class CreateRecipeCommandHandler(IUnitOfWork unitOfWork, ICacheService cache)
     : IRequestHandler<CreateRecipeCommand, RecipeDto>
 {
     public async Task<RecipeDto> Handle(CreateRecipeCommand command, CancellationToken cancellationToken)
@@ -51,6 +51,8 @@ public sealed class CreateRecipeCommandHandler(IUnitOfWork unitOfWork)
         await unitOfWork.Recipes.AddAsync(recipe, cancellationToken);
         // Owned nutrition and the root are persisted by one atomic SaveChanges.
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        // No outer transaction: the atomic Recipe/Nutrition save has committed before eviction.
+        await cache.RemoveAsync($"recipe:{recipe.Slug}", cancellationToken);
         return new RecipeDto(recipe.Id, recipe.Title, recipe.Slug, recipe.Description,
             recipe.Instructions, recipe.CategoryId, recipe.AuthorId, recipe.PrepTime,
             recipe.CookTime, recipe.Servings, recipe.Difficulty, recipe.Status,
