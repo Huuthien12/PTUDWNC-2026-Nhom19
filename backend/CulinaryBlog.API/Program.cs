@@ -61,6 +61,8 @@ builder.Services.AddStackExchangeRedisCache(options =>
 });
 
 builder.Services.AddScoped<ICacheService, RedisCacheService>();
+builder.Services.AddOptions<RecipeDetailCacheOptions>()
+    .Bind(builder.Configuration.GetSection(RecipeDetailCacheOptions.SectionName));
 
 
 // =========================
