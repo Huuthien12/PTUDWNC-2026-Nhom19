@@ -85,6 +85,17 @@ export async function establishSession(request: { email: string; password: strin
   });
 }
 
+export async function establishGoogleSession(request: {
+  idToken?: string; authorizationCode?: string; codeVerifier?: string;
+}): Promise<AuthResponse> {
+  return withSessionLock(async () => {
+    const response = await httpClient<AuthResponse>("/api/v1/auth/google", {
+      method: "POST", body: JSON.stringify(request), cache: "no-store", signal: AbortSignal.timeout(15000),
+    });
+    return saveSession(response, crypto.randomUUID());
+  });
+}
+
 export async function establishRegisteredSession(request: {
   fullName: string; email: string; userName: string; password: string;
 }): Promise<AuthResponse> {

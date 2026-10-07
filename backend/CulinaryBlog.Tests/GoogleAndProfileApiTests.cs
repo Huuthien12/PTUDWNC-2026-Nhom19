@@ -4,8 +4,11 @@ using System.Net.Http.Json;
 using CulinaryBlog.Application.Authentication.Commands;
 using CulinaryBlog.Application.Authentication.DTOs;
 using CulinaryBlog.Domain.Entities;
+using CulinaryBlog.Domain.Exceptions;
+using CulinaryBlog.Infrastructure.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -41,6 +44,59 @@ public sealed class GoogleAndProfileApiTests
         var response = await factory.CreateClient().PostAsJsonAsync("/api/v1/auth/google", new { idToken = "invalid" });
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Google_code_login_requires_and_forwards_the_pkce_verifier()
+    {
+        await using var factory = new AuthApiFactory();
+        await using (var db = factory.NewContext()) await db.Database.EnsureCreatedAsync();
+        factory.GoogleVerifier.Identity = new GoogleIdentity("google-code", "code@test.local", "Code User", null);
+
+        var client = factory.CreateClient();
+        var missing = await client.PostAsJsonAsync("/api/v1/auth/google", new { authorizationCode = "code" });
+        var response = await client.PostAsJsonAsync("/api/v1/auth/google", new { authorizationCode = "code", codeVerifier = "pkce-verifier" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("code", factory.GoogleVerifier.AuthorizationCode);
+        Assert.Equal("pkce-verifier", factory.GoogleVerifier.CodeVerifier);
+    }
+
+    [Fact]
+    public async Task Google_code_exchange_forwards_the_pkce_verifier_to_google()
+    {
+        var handler = new RecordingHandler();
+        var verifier = new GoogleCredentialVerifier(
+            Options.Create(new GoogleAuthOptions { ClientId = "client", ClientSecret = "secret", RedirectUri = "https://app.test/login" }),
+            new SingleClientFactory(new HttpClient(handler) { BaseAddress = new Uri("https://oauth2.googleapis.com/") }));
+
+        await verifier.VerifyAsync(null, "authorization-code", "pkce-verifier");
+
+        Assert.Contains("code=authorization-code", handler.Body);
+        Assert.Contains("code_verifier=pkce-verifier", handler.Body);
+        Assert.Contains("redirect_uri=https%3A%2F%2Fapp.test%2Flogin", handler.Body);
+    }
+
+    [Fact]
+    public async Task Google_code_exchange_reports_safe_google_error_details()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.BadRequest,
+            JsonContent.Create(new { error = "invalid_grant", error_description = "Authorization code expired." }));
+        var verifier = new GoogleCredentialVerifier(
+            Options.Create(new GoogleAuthOptions { ClientId = "client", ClientSecret = "secret", RedirectUri = "https://app.test/login" }),
+            new SingleClientFactory(new HttpClient(handler) { BaseAddress = new Uri("https://oauth2.googleapis.com/") }));
+
+        var exception = await Assert.ThrowsAsync<ExternalAuthenticationException>(() =>
+            verifier.VerifyAsync(null, "authorization-code", "pkce-verifier"));
+
+        Assert.Equal("GOOGLE_TOKEN_EXCHANGE_FAILED", exception.ErrorCode);
+        Assert.Contains("HTTP 400", exception.Message);
+        Assert.Contains("invalid_grant", exception.Message);
+        Assert.Contains("Authorization code expired.", exception.Message);
+        Assert.DoesNotContain("authorization-code", exception.Message);
+        Assert.DoesNotContain("pkce-verifier", exception.Message);
+        Assert.DoesNotContain("secret", exception.Message);
     }
 
     [Fact]
@@ -109,5 +165,21 @@ public sealed class GoogleAndProfileApiTests
 
         Assert.Equal(HttpStatusCode.BadRequest, patch.StatusCode);
         Assert.Equal("application/problem+json", patch.Content.Headers.ContentType?.MediaType);
+    }
+
+    private sealed class SingleClientFactory(HttpClient client) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => client;
+    }
+
+    private sealed class RecordingHandler(HttpStatusCode status = HttpStatusCode.OK, HttpContent? responseContent = null) : HttpMessageHandler
+    {
+        public string Body { get; private set; } = string.Empty;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Body = await request.Content!.ReadAsStringAsync(cancellationToken);
+            return new(status) { Content = responseContent ?? JsonContent.Create(new { id_token = "not-a-jwt" }) };
+        }
     }
 }

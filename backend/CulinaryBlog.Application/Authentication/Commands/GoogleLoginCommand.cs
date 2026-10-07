@@ -5,7 +5,7 @@ using MediatR;
 
 namespace CulinaryBlog.Application.Authentication.Commands;
 
-public sealed record GoogleLoginCommand(string? IdToken, string? AuthorizationCode)
+public sealed record GoogleLoginCommand(string? IdToken, string? AuthorizationCode, string? CodeVerifier)
     : IRequest<AuthResponseDto>;
 
 public sealed class GoogleLoginCommandValidator : AbstractValidator<GoogleLoginCommand>
@@ -14,8 +14,9 @@ public sealed class GoogleLoginCommandValidator : AbstractValidator<GoogleLoginC
     {
         RuleFor(command => command)
             .Must(command => !string.IsNullOrWhiteSpace(command.IdToken) ||
-                             !string.IsNullOrWhiteSpace(command.AuthorizationCode))
-            .WithMessage("An ID token or authorization code is required.");
+                             (!string.IsNullOrWhiteSpace(command.AuthorizationCode) &&
+                              !string.IsNullOrWhiteSpace(command.CodeVerifier)))
+            .WithMessage("An ID token or authorization code with PKCE verifier is required.");
     }
 }
 
@@ -29,7 +30,7 @@ public sealed class GoogleLoginCommandHandler(
 {
     public async Task<AuthResponseDto> Handle(GoogleLoginCommand command, CancellationToken cancellationToken)
     {
-        var google = await verifier.VerifyAsync(command.IdToken, command.AuthorizationCode, cancellationToken)
+        var google = await verifier.VerifyAsync(command.IdToken, command.AuthorizationCode, command.CodeVerifier, cancellationToken)
             ?? throw new UnauthorizedAccessException();
         var user = await identity.GoogleLoginAsync(
             google.Subject, google.Email, google.FullName, google.AvatarUrl, cancellationToken);
@@ -52,7 +53,7 @@ public sealed class GoogleLoginCommandHandler(
 
 public interface IGoogleCredentialVerifier
 {
-    Task<GoogleIdentity?> VerifyAsync(string? idToken, string? authorizationCode,
+    Task<GoogleIdentity?> VerifyAsync(string? idToken, string? authorizationCode, string? codeVerifier,
         CancellationToken cancellationToken = default);
 }
 
