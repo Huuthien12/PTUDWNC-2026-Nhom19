@@ -7,6 +7,8 @@ import { buildUpdateRecipePayload, initialRecipeValues, mapRecipeError, nutritio
   type FieldErrors, type RecipeField, type RecipeFormValues } from "@/services/recipe-form";
 import type { Category } from "@/types/category";
 import { ApiError } from "@/services/api-client";
+import IngredientEditor from "./IngredientEditor";
+import type { RecipeIngredient } from "@/types/recipe";
 
 const labels: Record<RecipeField, string> = {
   title: "Tiêu đề", description: "Mô tả", categoryId: "Danh mục", prepTime: "Chuẩn bị (phút)",
@@ -20,6 +22,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [recipeId, setRecipeId] = useState<string | null>(null);
   const [rowVersion, setRowVersion] = useState("");
+  const [ingredients, setIngredients] = useState<RecipeIngredient[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [message, setMessage] = useState("");
@@ -33,6 +36,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
       setRecipeId(recipe.id);
       setRowVersion(recipe.rowVersion);
       setValues(recipeValuesFromDetail(recipe));
+      setIngredients(recipe.ingredients);
       setCategories(items);
       setState("ready");
     }).catch((error: unknown) => {
@@ -40,6 +44,12 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
     });
     return () => { active = false; };
   }, [slug]);
+
+  async function reloadIngredients() {
+    const recipe = await getRecipeBySlug(slug);
+    setRowVersion(recipe.rowVersion);
+    setIngredients(recipe.ingredients);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -100,6 +110,8 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
         <fieldset className="space-y-4"><legend className="font-semibold">Dinh dưỡng</legend>
           <div className="grid gap-4 sm:grid-cols-2">{nutritionFields.map((field) => control(field, "number"))}</div>
         </fieldset>
+        <IngredientEditor key={rowVersion} recipeId={recipeId ?? ""} initialIngredients={ingredients} rowVersion={rowVersion}
+          onRowVersionChange={setRowVersion} onReload={reloadIngredients} />
         <button type="submit" className="rounded-lg bg-orange-600 px-5 py-3 font-semibold text-white disabled:opacity-50">
           {pending ? "Đang lưu..." : "Lưu thay đổi"}
         </button>
