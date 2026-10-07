@@ -452,6 +452,39 @@ public sealed class RecipeRepository : IRecipeRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    public Task<RecipeDetailAccessResult?> GetDetailAccessBySlugAsync(
+        string slug,
+        string? userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Recipes
+            .AsNoTracking()
+            .Where(recipe => recipe.Slug == slug && !recipe.IsDeleted);
+
+        // Match GetBySlugAsync: invisible recipes return null, including for cache checks.
+        if (!isAdmin)
+        {
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                query = query.Where(recipe =>
+                    recipe.Status == RecipeStatus.Published ||
+                    ((recipe.Status == RecipeStatus.Draft ||
+                      recipe.Status == RecipeStatus.Archived) &&
+                     recipe.AuthorId == userId));
+            }
+            else
+            {
+                query = query.Where(recipe => recipe.Status == RecipeStatus.Published);
+            }
+        }
+
+        return query
+            .Select(recipe => new RecipeDetailAccessResult(
+                recipe.Id, recipe.Slug, recipe.Status, recipe.RowVersion))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     // ============================================================
     // Category statistics
     // ============================================================
