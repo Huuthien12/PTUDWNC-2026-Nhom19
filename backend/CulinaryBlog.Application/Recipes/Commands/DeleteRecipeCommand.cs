@@ -1,4 +1,5 @@
 using CulinaryBlog.Application.Common.Interfaces;
+using CulinaryBlog.Domain.Enums;
 using CulinaryBlog.Domain.Exceptions;
 using FluentValidation;
 using MediatR;
@@ -16,7 +17,7 @@ public sealed class DeleteRecipeCommandValidator : AbstractValidator<DeleteRecip
     });
 }
 
-public sealed class DeleteRecipeCommandHandler(IUnitOfWork unitOfWork) : IRequestHandler<DeleteRecipeCommand>
+public sealed class DeleteRecipeCommandHandler(IUnitOfWork unitOfWork, ICacheService cache) : IRequestHandler<DeleteRecipeCommand>
 {
     public async Task Handle(DeleteRecipeCommand command, CancellationToken cancellationToken)
     {
@@ -25,8 +26,15 @@ public sealed class DeleteRecipeCommandHandler(IUnitOfWork unitOfWork) : IReques
         if (!command.IsAdmin && recipe.AuthorId != command.UserId)
             throw new ForbiddenException("RECIPE_FORBIDDEN", "Only the author or an Admin may delete this recipe.");
 
+        var slug = recipe.Slug;
+        var wasPublished = recipe.Status == RecipeStatus.Published;
         recipe.SoftDelete();
         unitOfWork.Recipes.Update(recipe, Convert.FromBase64String(command.RowVersion));
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        // No outer transaction: SaveChanges has committed before eviction.
+        // Repeated deletes are filtered out by the repository and never reach eviction.
+        await cache.RemoveAsync($"recipe:{slug}", cancellationToken);
+        if (wasPublished)
+            await cache.RemoveAsync("categories:all", cancellationToken);
     }
 }
