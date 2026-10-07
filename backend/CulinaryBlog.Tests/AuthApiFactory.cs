@@ -48,8 +48,15 @@ public sealed class RecordingWelcomeEmailQueue : IWelcomeEmailQueue
 public sealed class FakeGoogleCredentialVerifier : IGoogleCredentialVerifier
 {
     public GoogleIdentity? Identity { get; set; }
-    public Task<GoogleIdentity?> VerifyAsync(string? idToken, string? authorizationCode,
-        CancellationToken cancellationToken = default) => Task.FromResult(Identity);
+    public string? AuthorizationCode { get; private set; }
+    public string? CodeVerifier { get; private set; }
+    public Task<GoogleIdentity?> VerifyAsync(string? idToken, string? authorizationCode, string? codeVerifier,
+        CancellationToken cancellationToken = default)
+    {
+        AuthorizationCode = authorizationCode;
+        CodeVerifier = codeVerifier;
+        return Task.FromResult(Identity);
+    }
 }
 
 public sealed class AuthApiFactory : WebApplicationFactory<Program>

@@ -1,23 +1,46 @@
 ﻿"use client";
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError } from "@/services/api-client";
-import { login } from "@/services/auth-service";
+import { login, loginWithGoogle } from "@/services/auth-service";
 import { loginDestination } from "@/services/auth-navigation";
+import { beginGoogleLogin, consumeGoogleCallback } from "@/services/google-oauth";
 
 export default function LoginForm({ next, reason }: { next?: string; reason?: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState("");
+  const completingGoogle = useRef(false);
+
+  useEffect(() => {
+    if (!searchParams.get("code") && !searchParams.get("error") || completingGoogle.current) return;
+    completingGoogle.current = true;
+    setError("");
+    setLoading(true);
+    void (async () => {
+      try {
+        await loginWithGoogle(consumeGoogleCallback(searchParams));
+        setSuccess("Đăng nhập Google thành công. Đang chuyển hướng...");
+        router.replace(loginDestination(next));
+      } catch (googleError) {
+        setError(googleError instanceof Error ? googleError.message : "Không thể đăng nhập bằng Google.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [next, router, searchParams]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     setError("");
+    setSuccess("");
 
     if (!email.trim() || !password) {
       setError("\u0056\u0075\u0069 \u006c\u00f2\u006e\u0067 \u006e\u0068\u1ead\u0070 \u0065\u006d\u0061\u0069\u006c \u0076\u00e0 \u006d\u1ead\u0074 \u006b\u0068\u1ea9\u0075.");
@@ -52,6 +75,19 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
     }
   }
 
+  async function handleGoogleLogin() {
+    if (loading) return;
+    setError("");
+    setSuccess("");
+    setLoading(true);
+    try {
+      await beginGoogleLogin();
+    } catch (googleError) {
+      setError(googleError instanceof Error ? googleError.message : "Không thể bắt đầu đăng nhập Google.");
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-md items-center justify-center px-4">
       <div className="w-full rounded-xl border bg-white p-6 shadow-sm">
@@ -70,6 +106,7 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
             {error}
           </div>
         )}
+        {success && <p role="status" className="mb-4 text-sm text-green-700">{success}</p>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -120,6 +157,10 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
               : "\u0110\u0103ng nh\u1eadp"}
           </button>
         </form>
+        <button type="button" disabled={loading} onClick={() => void handleGoogleLogin()}
+          className="mt-3 w-full rounded-lg border px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-50">
+          {loading ? "Đang xác thực..." : "Đăng nhập với Google"}
+        </button>
       </div>
     </div>
   );
