@@ -50,9 +50,11 @@ public sealed class UpdateRecipeCommandHandler(IUnitOfWork unitOfWork,
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         // This is the existing cache affected by moving a Published recipe between categories.
-        // Recipe output-cache tags do not exist yet; do not invent unused cache keys.
         if (invalidateCategoryCounts)
             await cache.RemoveAsync("categories:all", cancellationToken);
+
+        // This update has no outer transaction: SaveChanges above must succeed before eviction.
+        await cache.RemoveAsync($"recipe:{recipe.Slug}", cancellationToken);
 
         return new RecipeDto(recipe.Id, recipe.Title, recipe.Slug, recipe.Description,
             recipe.Instructions, recipe.CategoryId, recipe.AuthorId, recipe.PrepTime,
