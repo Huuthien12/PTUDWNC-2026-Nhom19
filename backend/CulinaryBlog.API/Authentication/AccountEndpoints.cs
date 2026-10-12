@@ -10,7 +10,7 @@ public static class AccountEndpoints
     public static void MapAccountEndpoints(this RouteGroupBuilder auth)
     {
         auth.MapPost("/google", async (GoogleLoginRequest request, ISender sender, CancellationToken cancellationToken) =>
-            Results.Ok(await sender.Send(new GoogleLoginCommand(request.IdToken, request.AuthorizationCode), cancellationToken)));
+            Results.Ok(await sender.Send(new GoogleLoginCommand(request.IdToken, request.AuthorizationCode, request.CodeVerifier), cancellationToken)));
 
         auth.MapGet("/me", async (ClaimsPrincipal user, ISender sender, CancellationToken cancellationToken) =>
             Results.Ok(await sender.Send(new GetCurrentUserQuery(UserId(user)), cancellationToken)))
@@ -28,5 +28,5 @@ public static class AccountEndpoints
         ?? throw new UnauthorizedAccessException();
 }
 
-public sealed record GoogleLoginRequest(string? IdToken, string? AuthorizationCode);
+public sealed record GoogleLoginRequest(string? IdToken, string? AuthorizationCode, string? CodeVerifier);
 public sealed record UpdateProfileRequest(string? FullName, string? AvatarUrl);

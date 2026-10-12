@@ -43,6 +43,7 @@ public sealed class GlobalExceptionMiddleware(
             ForbiddenException forbidden => (StatusCodes.Status403Forbidden, forbidden.ErrorCode, "Forbidden.", forbidden.Message),
             ConcurrencyException concurrency => (StatusCodes.Status422UnprocessableEntity, concurrency.ErrorCode, "Optimistic concurrency conflict.", concurrency.Message),
             ServiceUnavailableException unavailable => (StatusCodes.Status503ServiceUnavailable, unavailable.ErrorCode, "Service unavailable.", unavailable.Message),
+            ExternalAuthenticationException authentication => (StatusCodes.Status401Unauthorized, authentication.ErrorCode, "Authentication failed.", authentication.Message),
             DbUpdateConcurrencyException => (StatusCodes.Status422UnprocessableEntity, "RECIPE_CONCURRENCY_CONFLICT", "Optimistic concurrency conflict.", "The resource was updated by another request. Reload and try again."),
             DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "IX_Recipes_Slug" } } => (StatusCodes.Status409Conflict, "RECIPE_SLUG_EXISTS", "Resource conflict.", "Recipe slug already exists."),
             UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "AUTH_TOKEN_INVALID", "Unauthorized.", "Authentication is required."),
