@@ -239,17 +239,15 @@ public sealed class RecipeLifecycleApiTests
             Assert.NotEqual(recipe.RowVersion, saved.RowVersion);
             observedCommittedState = true;
             if (key == (failCategoryRemoval ? "categories:all" : $"recipe:{recipe.Slug}"))
-                throw new InvalidOperationException("Test cache removal failure");
+                throw new IOException("Test cache removal failure");
         };
         using var client = factory.Client();
 
         var response = await client.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/unpublish", Body(recipe));
 
-        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(observedCommittedState);
-        Assert.Equal(failCategoryRemoval
-            ? new[] { $"recipe:{recipe.Slug}", "categories:all" }
-            : new[] { $"recipe:{recipe.Slug}" }, factory.Cache.RemovedKeys);
+        Assert.Equal(new[] { $"recipe:{recipe.Slug}", "categories:all" }, factory.Cache.RemovedKeys);
         await using var verification = factory.Database.NewContext();
         var persisted = await verification.Recipes.SingleAsync(x => x.Id == recipe.Id);
         Assert.Equal(RecipeStatus.Draft, persisted.Status);
@@ -378,7 +376,7 @@ public sealed class RecipeLifecycleApiTests
             Assert.True(saved.IsDeleted);
             Assert.NotEqual(recipe.RowVersion, saved.RowVersion);
             if (key == (failCategoryRemoval ? "categories:all" : $"recipe:{recipe.Slug}"))
-                throw new InvalidOperationException("Test cache removal failure");
+                throw new IOException("Test cache removal failure");
         };
         using var client = factory.Client();
 
@@ -387,10 +385,8 @@ public sealed class RecipeLifecycleApiTests
             Content = JsonContent.Create(Body(recipe))
         });
 
-        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
-        Assert.Equal(failCategoryRemoval
-            ? new[] { $"recipe:{recipe.Slug}", "categories:all" }
-            : new[] { $"recipe:{recipe.Slug}" }, factory.Cache.RemovedKeys);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(new[] { $"recipe:{recipe.Slug}", "categories:all" }, factory.Cache.RemovedKeys);
         await using var verification = factory.Database.NewContext();
         Assert.True((await verification.Recipes.IgnoreQueryFilters().SingleAsync(x => x.Id == recipe.Id)).IsDeleted);
     }

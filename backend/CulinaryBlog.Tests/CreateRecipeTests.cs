@@ -210,14 +210,14 @@ public sealed class CreateRecipeTests
     {
         await using var factory = new RecipeApiFactory();
         await factory.InitializeAsync();
-        factory.Cache.OnRemoveAsync = _ => throw new InvalidOperationException("Test cache removal failure");
+        factory.Cache.OnRemoveAsync = _ => throw new IOException("Test cache removal failure");
         using var client = factory.Client();
         var body = Body(factory);
         body["nutrition"] = new JsonObject { ["calories"] = 150 };
 
         var response = await client.PostAsJsonAsync("/api/v1/recipes", body);
 
-        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal(new[] { "recipe:canh-chua-ca" }, factory.Cache.RemovedKeys);
         await using var db = factory.Database.NewContext();
         var saved = await db.Recipes.SingleAsync(x => x.Slug == "canh-chua-ca");

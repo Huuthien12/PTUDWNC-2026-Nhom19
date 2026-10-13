@@ -13,7 +13,7 @@ public sealed class ChangeRecipeLifecycleCommandValidator : AbstractValidator<Ch
 {
     public ChangeRecipeLifecycleCommandValidator() => RuleFor(x => x.RowVersion).Must(value => { try { var bytes = Convert.FromBase64String(value); return bytes.Length > 0 && Convert.ToBase64String(bytes) == value; } catch { return false; } });
 }
-public sealed class ChangeRecipeLifecycleCommandHandler(IUnitOfWork unitOfWork, ICacheService cache) : IRequestHandler<ChangeRecipeLifecycleCommand, RecipeDto>
+public sealed class ChangeRecipeLifecycleCommandHandler(IUnitOfWork unitOfWork, ICacheService cache, IRecipeCacheInvalidator? invalidator = null) : IRequestHandler<ChangeRecipeLifecycleCommand, RecipeDto>
 {
     public async Task<RecipeDto> Handle(ChangeRecipeLifecycleCommand command, CancellationToken cancellationToken)
     {
@@ -26,9 +26,10 @@ public sealed class ChangeRecipeLifecycleCommandHandler(IUnitOfWork unitOfWork, 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         // No outer transaction: SaveChanges has committed before eviction.
         // Idempotent actions still save a new RowVersion, so their cached DTO must also be evicted.
-        await cache.RemoveAsync($"recipe:{recipe.Slug}", cancellationToken);
+        await cache.RemoveSafelyAsync($"recipe:{recipe.Slug}", cancellationToken);
+        if (invalidator is not null) await invalidator.ListChangedAsync(cancellationToken);
         if (invalidateCategoryCounts)
-            await cache.RemoveAsync("categories:all", cancellationToken);
+            await cache.RemoveSafelyAsync("categories:all", cancellationToken);
         return new RecipeDto(recipe.Id, recipe.Title, recipe.Slug, recipe.Description, recipe.Instructions, recipe.CategoryId, recipe.AuthorId, recipe.PrepTime, recipe.CookTime, recipe.Servings, recipe.Difficulty, recipe.Status, new(recipe.Nutrition.Calories, recipe.Nutrition.Protein, recipe.Nutrition.Carbs, recipe.Nutrition.Fat), Convert.ToBase64String(recipe.RowVersion), recipe.CreatedAt, recipe.UpdatedAt, recipe.PublishedAt);
     }
 }

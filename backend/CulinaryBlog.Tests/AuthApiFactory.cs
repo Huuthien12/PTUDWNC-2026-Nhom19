@@ -60,6 +60,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     public TestClock Clock { get; } = new();
     public RecordingWelcomeEmailQueue WelcomeEmails { get; } = new();
     public FakeGoogleCredentialVerifier GoogleVerifier { get; } = new();
+    public RecordingRecipeInvalidator RecipeInvalidator { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -82,6 +83,9 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<IWelcomeEmailQueue>(WelcomeEmails);
             services.RemoveAll<IGoogleCredentialVerifier>();
             services.AddSingleton<IGoogleCredentialVerifier>(GoogleVerifier);
+            // This fixture intentionally omits Recipe entities; profile cache signals use a recording fake.
+            services.RemoveAll<IRecipeCacheInvalidator>();
+            services.AddSingleton<IRecipeCacheInvalidator>(RecipeInvalidator);
         });
     }
 

@@ -12,7 +12,7 @@ public sealed record UpdateRecipeCommand(Guid Id, UpdateRecipeRequest Request, s
     : IRequest<RecipeDto>;
 
 public sealed class UpdateRecipeCommandHandler(IUnitOfWork unitOfWork,
-    IValidator<UpdateRecipeRequest> validator, ICacheService cache, TimeProvider clock)
+    IValidator<UpdateRecipeRequest> validator, ICacheService cache, TimeProvider clock, IRecipeCacheInvalidator? invalidator = null)
     : IRequestHandler<UpdateRecipeCommand, RecipeDto>
 {
     public async Task<RecipeDto> Handle(UpdateRecipeCommand command, CancellationToken cancellationToken)
@@ -51,10 +51,11 @@ public sealed class UpdateRecipeCommandHandler(IUnitOfWork unitOfWork,
 
         // This is the existing cache affected by moving a Published recipe between categories.
         if (invalidateCategoryCounts)
-            await cache.RemoveAsync("categories:all", cancellationToken);
+            await cache.RemoveSafelyAsync("categories:all", cancellationToken);
 
         // This update has no outer transaction: SaveChanges above must succeed before eviction.
-        await cache.RemoveAsync($"recipe:{recipe.Slug}", cancellationToken);
+        await cache.RemoveSafelyAsync($"recipe:{recipe.Slug}", cancellationToken);
+        if (invalidator is not null) await invalidator.ListChangedAsync(cancellationToken);
 
         return new RecipeDto(recipe.Id, recipe.Title, recipe.Slug, recipe.Description,
             recipe.Instructions, recipe.CategoryId, recipe.AuthorId, recipe.PrepTime,

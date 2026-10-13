@@ -4,6 +4,6 @@ public sealed class RecipeDetailCacheOptions
 {
     public const string SectionName = "Cache:RecipeDetail";
 
-    // Keep disabled until all mutations invalidate Recipe Detail entries.
-    public bool Enabled { get; set; } = false;
+    // Related mutation invalidation is complete; configuration can still disable the cache.
+    public bool Enabled { get; set; } = true;
 }

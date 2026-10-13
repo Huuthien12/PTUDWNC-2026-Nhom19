@@ -34,12 +34,12 @@ public sealed class RecipeDetailCacheTests
             Options.Create(options ?? new RecipeDetailCacheOptions { Enabled = true }));
 
     [Fact]
-    public async Task Default_disabled_uses_only_the_existing_detail_query()
+    public async Task Explicitly_disabled_uses_only_the_existing_detail_query()
     {
         var (repository, cache) = Fakes(Published());
         repository.Access = null;
 
-        var result = await Handler(repository, cache, new RecipeDetailCacheOptions()).Handle(Query, default);
+        var result = await Handler(repository, cache, new RecipeDetailCacheOptions { Enabled = false }).Handle(Query, default);
 
         Assert.Equal(repository.Detail!.Id, result.Id);
         Assert.Equal(0, repository.AccessCalls);
@@ -186,8 +186,48 @@ public sealed class RecipeDetailCacheTests
         Assert.Equal(0, cache.WriteCalls);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Cache_transport_failure_falls_back_to_authorized_database(bool readFailure)
+    {
+        var (repository, cache) = Fakes(Published());
+        if (readFailure) cache.ReadError = new IOException();
+        else cache.WriteError = new TimeoutException();
+        var result = await Handler(repository, cache).Handle(Query, default);
+        Assert.Equal(repository.Detail!.Id, result.Id);
+        Assert.Equal(Query, repository.LastDetailQuery);
+        Assert.Equal(1, repository.DetailCalls);
+    }
+
+    [Fact]
+    public async Task Cache_fallback_does_not_swallow_database_or_permission_failure()
+    {
+        var (repository, cache) = Fakes(Published());
+        cache.ReadError = new IOException();
+        repository.DetailError = new NotFoundException("RECIPE_NOT_FOUND", "Hidden");
+        await Assert.ThrowsAsync<NotFoundException>(() => Handler(repository, cache).Handle(Query, default));
+        repository.DetailError = new InvalidOperationException("Database failure");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Handler(repository, cache).Handle(Query, default));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Cache_cancellation_and_programming_errors_propagate(bool cancellation)
+    {
+        var (repository, cache) = Fakes(Published());
+        cache.ReadError = cancellation ? new OperationCanceledException() : new InvalidOperationException();
+        if (cancellation)
+            await Assert.ThrowsAsync<OperationCanceledException>(() => Handler(repository, cache).Handle(Query, default));
+        else
+            await Assert.ThrowsAsync<InvalidOperationException>(() => Handler(repository, cache).Handle(Query, default));
+    }
+
     private sealed class FakeCache : ICacheService
     {
+        public Exception? ReadError { get; set; }
+        public Exception? WriteError { get; set; }
         public RecipeDetailDto? Cached { get; set; }
         public RecipeDetailDto? Written { get; private set; }
         public int ReadCalls { get; private set; }
@@ -199,6 +239,7 @@ public sealed class RecipeDetailCacheTests
 
         public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
         {
+            if (ReadError is not null) throw ReadError;
             ReadCalls++;
             ReadKey = key;
             return Task.FromResult(Cached is null ? default : (T?)(object)Cached);
@@ -207,6 +248,7 @@ public sealed class RecipeDetailCacheTests
         public Task SetAsync<T>(string key, T value, TimeSpan expiration,
             CancellationToken cancellationToken = default, bool useAbsoluteExpiration = false)
         {
+            if (WriteError is not null) throw WriteError;
             WriteCalls++;
             WriteKey = key;
             Written = (RecipeDetailDto)(object)value!;

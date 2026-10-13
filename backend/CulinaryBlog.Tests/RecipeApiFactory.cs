@@ -12,6 +12,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
+using CulinaryBlog.API.Caching;
+using Microsoft.AspNetCore.OutputCaching;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CulinaryBlog.Tests;
 
@@ -25,6 +28,7 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
     public RecordingRecipeCache Cache { get; } = new();
     public FakeFileStorageService Storage { get; } = new();
     public RecordingImageCleanupQueue ImageCleanup { get; } = new();
+    public TestOutputCacheStore? OutputCache { get; set; }
 
     public async Task InitializeAsync()
     {
@@ -65,6 +69,12 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<IFileStorageService>(Storage);
             services.RemoveAll<IImageCleanupQueue>();
             services.AddSingleton<IImageCleanupQueue>(ImageCleanup);
+            if (OutputCache is not null)
+            {
+                services.RemoveAll<IOutputCacheStore>();
+                services.AddSingleton<IOutputCacheStore>(new ResilientOutputCacheStore(OutputCache,
+                    NullLogger<ResilientOutputCacheStore>.Instance));
+            }
             if (FailWithSlugConstraint)
             {
                 services.RemoveAll<IUnitOfWork>();

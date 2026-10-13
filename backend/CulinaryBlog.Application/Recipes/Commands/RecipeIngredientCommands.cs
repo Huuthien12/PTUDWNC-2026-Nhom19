@@ -48,7 +48,7 @@ public sealed class DeleteRecipeIngredientCommandValidator : AbstractValidator<D
 }
 
 public sealed class AddRecipeIngredientCommandHandler(
-    IUnitOfWork unitOfWork) : IRequestHandler<AddRecipeIngredientCommand, RecipeIngredientDto>
+    IUnitOfWork unitOfWork, IRecipeCacheInvalidator? invalidator = null) : IRequestHandler<AddRecipeIngredientCommand, RecipeIngredientDto>
 {
     public async Task<RecipeIngredientDto> Handle(
         AddRecipeIngredientCommand command,
@@ -69,6 +69,7 @@ public sealed class AddRecipeIngredientCommandHandler(
         unitOfWork.Recipes.AddIngredient(ingredient);
         unitOfWork.Recipes.UpdateForChildMutation(recipe, Decode(request.RowVersion));
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
         return ToDto(ingredient, recipe);
     }
 
@@ -90,7 +91,7 @@ public sealed class AddRecipeIngredientCommandHandler(
 }
 
 public sealed class UpdateRecipeIngredientCommandHandler(
-    IUnitOfWork unitOfWork) : IRequestHandler<UpdateRecipeIngredientCommand, RecipeIngredientDto>
+    IUnitOfWork unitOfWork, IRecipeCacheInvalidator? invalidator = null) : IRequestHandler<UpdateRecipeIngredientCommand, RecipeIngredientDto>
 {
     public async Task<RecipeIngredientDto> Handle(
         UpdateRecipeIngredientCommand command,
@@ -110,12 +111,13 @@ public sealed class UpdateRecipeIngredientCommandHandler(
         ingredient.OrderIndex = request.SortOrder;
         unitOfWork.Recipes.UpdateForChildMutation(recipe, AddRecipeIngredientCommandHandler.Decode(request.RowVersion));
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
         return AddRecipeIngredientCommandHandler.ToDto(ingredient, recipe);
     }
 }
 
 public sealed class DeleteRecipeIngredientCommandHandler(
-    IUnitOfWork unitOfWork) : IRequestHandler<DeleteRecipeIngredientCommand, string>
+    IUnitOfWork unitOfWork, IRecipeCacheInvalidator? invalidator = null) : IRequestHandler<DeleteRecipeIngredientCommand, string>
 {
     public async Task<string> Handle(DeleteRecipeIngredientCommand command, CancellationToken cancellationToken)
     {
@@ -129,6 +131,7 @@ public sealed class DeleteRecipeIngredientCommandHandler(
         ingredient.UpdatedAt = DateTime.UtcNow;
         unitOfWork.Recipes.UpdateForChildMutation(recipe, AddRecipeIngredientCommandHandler.Decode(command.RowVersion));
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
         return Convert.ToBase64String(recipe.RowVersion);
     }
 }

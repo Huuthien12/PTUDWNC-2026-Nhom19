@@ -15,7 +15,7 @@ public sealed class SetPrimaryRecipeImageCommandValidator : AbstractValidator<Se
         => RuleFor(x => x.RowVersion).Must(RecipeRowVersion.IsValid).WithMessage("RowVersion is not valid.");
 }
 
-public sealed class SetPrimaryRecipeImageCommandHandler(IUnitOfWork unitOfWork, TimeProvider clock)
+public sealed class SetPrimaryRecipeImageCommandHandler(IUnitOfWork unitOfWork, TimeProvider clock, IRecipeCacheInvalidator? invalidator = null)
     : IRequestHandler<SetPrimaryRecipeImageCommand, RecipeImageDto>
 {
     public async Task<RecipeImageDto> Handle(SetPrimaryRecipeImageCommand command, CancellationToken cancellationToken)
@@ -41,6 +41,8 @@ public sealed class SetPrimaryRecipeImageCommandHandler(IUnitOfWork unitOfWork, 
             await unitOfWork.SaveChangesAsync(token);
             return true;
         }, cancellationToken);
+
+        if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
 
         return RecipeImageDto.From(image, recipe.RowVersion);
     }
