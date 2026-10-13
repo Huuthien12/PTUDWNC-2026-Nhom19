@@ -409,9 +409,11 @@ internal static class RecipeStepCommandResult
             .Select(step => new RecipeStepDto(
                 step.Id,
                 step.StepNumber,
+                step.Title,
                 step.Description,
                 step.TimerMinutes,
-                step.ImageUrl))
+                step.ImageUrl,
+                Convert.ToBase64String(step.RowVersion)))
             .ToList();
 
         return new RecipeStepListDto(

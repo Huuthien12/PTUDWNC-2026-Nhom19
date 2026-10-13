@@ -6,7 +6,9 @@ import { getRecipeBySlug, updateRecipe } from "@/services/recipe-service";
 import { buildUpdateRecipePayload, initialRecipeValues, mapRecipeError, nutritionFields, recipeValuesFromDetail,
   type FieldErrors, type RecipeField, type RecipeFormValues } from "@/services/recipe-form";
 import type { Category } from "@/types/category";
+import type { RecipeStep } from "@/types/recipe";
 import { ApiError } from "@/services/api-client";
+import RecipeStepManager from "./RecipeStepManager";
 
 const labels: Record<RecipeField, string> = {
   title: "Tiêu đề", description: "Mô tả", categoryId: "Danh mục", prepTime: "Chuẩn bị (phút)",
@@ -19,6 +21,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
   const [values, setValues] = useState<RecipeFormValues>(initialRecipeValues);
   const [categories, setCategories] = useState<Category[]>([]);
   const [recipeId, setRecipeId] = useState<string | null>(null);
+  const [recipeSteps, setRecipeSteps] = useState<RecipeStep[]>([]);
   const [rowVersion, setRowVersion] = useState("");
   const [state, setState] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -34,6 +37,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
       setRowVersion(recipe.rowVersion);
       setValues(recipeValuesFromDetail(recipe));
       setCategories(items);
+      setRecipeSteps(recipe.steps);
       setState("ready");
     }).catch((error: unknown) => {
       if (active) setState(error instanceof ApiError && error.status === 404 ? "missing" : "error");
@@ -105,5 +109,14 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
         </button>
       </fieldset>
     </form>
+    {recipeId && (
+      <div className="mt-6">
+        <RecipeStepManager
+          recipeId={recipeId}
+          initialSteps={recipeSteps}
+          recipeRowVersion={rowVersion}
+        />
+      </div>
+)}
   </main>;
 }
