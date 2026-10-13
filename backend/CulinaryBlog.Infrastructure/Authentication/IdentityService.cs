@@ -102,6 +102,13 @@ public sealed class IdentityService : IIdentityService
                 "USER_INACTIVE");
         }
 
+        if (!await _userManager.GetLockoutEnabledAsync(user))
+            await _userManager.SetLockoutEnabledAsync(user, true);
+
+        if (await _userManager.IsLockedOutAsync(user))
+            return new(false, null, null, null, Array.Empty<string>(), "AUTH_ACCOUNT_LOCKED",
+                LockoutEnd: await _userManager.GetLockoutEndDateAsync(user));
+
         var passwordValid =
             await _userManager.CheckPasswordAsync(
                 user,
@@ -109,14 +116,19 @@ public sealed class IdentityService : IIdentityService
 
         if (!passwordValid)
         {
+            await _userManager.AccessFailedAsync(user);
+            var locked = await _userManager.IsLockedOutAsync(user);
             return new IdentityLoginResult(
                 false,
                 null,
                 null,
                 null,
                 Array.Empty<string>(),
-                "INVALID_CREDENTIALS");
+                locked ? "AUTH_ACCOUNT_LOCKED" : "INVALID_CREDENTIALS",
+                LockoutEnd: locked ? await _userManager.GetLockoutEndDateAsync(user) : null);
         }
+
+        await _userManager.ResetAccessFailedCountAsync(user);
 
         var roles =
     (await _userManager.GetRolesAsync(user)).ToArray();

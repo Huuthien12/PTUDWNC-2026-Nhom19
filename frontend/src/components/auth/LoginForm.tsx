@@ -62,6 +62,8 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
           setError(err.message);
         } else if (err.status === 401) {
           setError("\u0045\u006d\u0061\u0069\u006c \u0068\u006f\u1eb7\u0063 \u006d\u1ead\u0074 \u006b\u0068\u1ea9\u0075 \u006b\u0068\u00f4\u006e\u0067 \u0063\u0068\u00ed\u006e\u0068 \u0078\u00e1\u0063.");
+        } else if (err.status === 423) {
+          setError("Tài khoản tạm khóa sau 5 lần đăng nhập sai. Vui lòng thử lại khi hết thời gian khóa.");
         } else if (err.status === 400) {
           setError("\u0054\u0068\u00f4\u006e\u0067 \u0074\u0069\u006e \u0111\u0103\u006e\u0067 \u006e\u0068\u1ead\u0070 \u006b\u0068\u00f4\u006e\u0067 \u0068\u1ee3\u0070 \u006c\u1ec7.");
         } else {

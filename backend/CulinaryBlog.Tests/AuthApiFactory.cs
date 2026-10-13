@@ -67,6 +67,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     public TestClock Clock { get; } = new();
     public RecordingWelcomeEmailQueue WelcomeEmails { get; } = new();
     public FakeGoogleCredentialVerifier GoogleVerifier { get; } = new();
+    public bool EnableRateLimiting { get; init; }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -77,6 +78,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Audience", "culinary-tests");
         builder.UseSetting("Jwt:ExpirationMinutes", "15");
         builder.UseSetting("Email:Smtp:EnableSsl", "true");
+        builder.UseSetting("RateLimiting:Enabled", EnableRateLimiting.ToString());
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<AppDbContext>();
