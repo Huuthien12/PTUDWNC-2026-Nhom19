@@ -2,14 +2,18 @@
 
 import Link from "next/link";
 import AuthControls from "@/components/auth/AuthControls";
+import SearchBar from "@/components/search/SearchBar";
 import { usePathname } from "next/navigation";
 
 export default function Header() {
   const pathname = usePathname();
   return <header className="cb-header">
     <div className="cb-container cb-header-inner">
-      <Link href="/" className="cb-brand" aria-label="Culinary Blog — Trang chủ">Culinary <span>Blog</span><span className="text-gold" aria-hidden="true">.</span></Link>
-      <nav className="cb-nav" aria-label="Điều hướng chính">
+      <Link href="/" className="cb-brand shrink-0 whitespace-nowrap" aria-label="Culinary Blog — Trang chủ">Culinary <span>Blog</span><span className="text-gold" aria-hidden="true">.</span></Link>
+      <div className="hidden min-w-0 flex-1 justify-center px-4 md:flex">
+        <SearchBar compact />
+      </div>
+      <nav className="cb-nav shrink-0 justify-end" aria-label="Điều hướng chính">
         <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>Trang chủ</Link>
         <Link href="/categories" aria-current={pathname.startsWith("/categories") ? "page" : undefined}>Khám phá danh mục</Link>
         <AuthControls />
