@@ -1,3 +1,6 @@
+import { recipeProxyPath } from "./recipe-cache-policy";
+import { clearRecipeRequests } from "./recipe-requests";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5062";
 
 export class ApiError extends Error {
@@ -13,7 +16,9 @@ export async function httpClient<T>(endpoint: string, options: RequestInit = {})
   if (!headers.has("Content-Type") && typeof options.body === "string") {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`${API_URL}${endpoint}`, { ...options, headers });
+  const target = typeof window !== "undefined" && recipeProxyPath(endpoint, options.method ?? "GET")
+    ? `/api/recipe-cache${endpoint}` : `${API_URL}${endpoint}`;
+  const response = await fetch(target, { ...options, headers });
   if (!response.ok) {
     // Never include request bodies, tokens or server-supplied details in errors/logs.
     let validationFields: string[] = [];
@@ -29,6 +34,7 @@ export async function httpClient<T>(endpoint: string, options: RequestInit = {})
     }
     throw new ApiError(`API request failed with status ${response.status}`, response.status, validationFields);
   }
+  if ((options.method ?? "GET") !== "GET" && recipeProxyPath(endpoint, options.method)) clearRecipeRequests();
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }

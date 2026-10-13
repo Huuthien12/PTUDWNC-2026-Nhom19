@@ -24,6 +24,8 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [loadedSlug, setLoadedSlug] = useState<string | null>(null);
   const submitting = useRef(false);
 
   useEffect(() => {
@@ -34,16 +36,20 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
       setRowVersion(recipe.rowVersion);
       setValues(recipeValuesFromDetail(recipe));
       setCategories(items);
+      setLoadedSlug(slug);
       setState("ready");
     }).catch((error: unknown) => {
-      if (active) setState(error instanceof ApiError && error.status === 404 ? "missing" : "error");
+      if (active) {
+        setLoadedSlug(slug);
+        setState(error instanceof ApiError && error.status === 404 ? "missing" : "error");
+      }
     });
     return () => { active = false; };
-  }, [slug]);
+  }, [slug, attempt]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!recipeId || submitting.current) return;
+    if (!recipeId || submitting.current || !categories.length) return;
     const result = buildUpdateRecipePayload(values, categories.map((category) => category.id), rowVersion);
     setErrors(result.errors ?? {});
     if (result.errors) { setMessage("Vui lòng kiểm tra các trường được đánh dấu."); return; }
@@ -85,15 +91,16 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
     </div>;
   }
 
-  if (state === "loading") return <main className="p-8" role="status">Đang tải công thức...</main>;
+  if (loadedSlug !== slug || state === "loading") return <main className="p-8" role="status">Đang tải công thức...</main>;
   if (state === "missing") return <main className="p-8" role="alert">Không tìm thấy công thức.</main>;
-  if (state === "error") return <main className="p-8" role="alert">Không thể tải công thức để chỉnh sửa.</main>;
+  if (state === "error") return <main className="p-8" role="alert">Không thể tải công thức để chỉnh sửa. <button className="underline" onClick={() => { setState("loading"); setAttempt(value => value + 1); }}>Thử lại</button></main>;
 
   return <main className="mx-auto max-w-3xl px-6 py-10 text-gray-900">
     <h1 className="text-3xl font-bold">Chỉnh sửa công thức</h1>
+    {!categories.length && <p role="status" className="mt-4">Chưa có danh mục khả dụng. <button className="underline" onClick={() => { setState("loading"); setAttempt(value => value + 1); }}>Tải lại danh mục</button></p>}
     <form noValidate aria-busy={pending} onSubmit={submit} className="mt-6 space-y-6 rounded-xl border bg-white p-6">
       {message && <p role="alert" className="text-red-700">{message}</p>}
-      <fieldset disabled={pending} className="space-y-5 disabled:opacity-60">
+      <fieldset disabled={pending || !categories.length} className="space-y-5 disabled:opacity-60">
         {control("title")}{control("description", "textarea")}{control("categoryId", "select")}
         <div className="grid gap-4 sm:grid-cols-3">{control("prepTime", "number")}{control("cookTime", "number")}{control("servings", "number")}</div>
         {control("difficulty", "select")}{control("instructions", "textarea")}

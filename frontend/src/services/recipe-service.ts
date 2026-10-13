@@ -1,5 +1,6 @@
 import { apiClient } from "./api-client";
 import { getSession } from "./auth-session";
+import { publicRecipeRequest } from "./recipe-requests";
 import type { CreateRecipeRequest, RecipeDetail, RecipeDto, UpdateRecipeRequest } from "../types/recipe";
 import type { RecipePage } from "../types/recipe";
 
@@ -7,7 +8,9 @@ export type RecipeLifecycleAction = "publish" | "unpublish" | "archive";
 
 export function getRecipes(page = 1, pageSize = 12): Promise<RecipePage> {
   const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-  return apiClient<RecipePage>(`/api/v1/recipes?${query}`, { auth: getSession() !== null, cache: "no-store" });
+  const endpoint = `/api/v1/recipes?${query}`;
+  if (getSession()) return apiClient<RecipePage>(endpoint, { auth: true, cache: "no-store" });
+  return publicRecipeRequest(endpoint, () => apiClient<RecipePage>(endpoint, { cache: "no-store" }));
 }
 
 export function createRecipe(input: CreateRecipeRequest): Promise<RecipeDto> {
@@ -17,9 +20,9 @@ export function createRecipe(input: CreateRecipeRequest): Promise<RecipeDto> {
 }
 
 export function getRecipeBySlug(slug: string): Promise<RecipeDetail> {
-  return apiClient<RecipeDetail>(`/api/v1/recipes/${encodeURIComponent(slug)}`, {
-    auth: getSession() !== null,
-  });
+  const endpoint = `/api/v1/recipes/${encodeURIComponent(slug)}`;
+  if (getSession()) return apiClient<RecipeDetail>(endpoint, { auth: true, cache: "no-store" });
+  return publicRecipeRequest(endpoint, () => apiClient<RecipeDetail>(endpoint, { cache: "no-store" }));
 }
 
 export function updateRecipe(id: string, input: UpdateRecipeRequest): Promise<RecipeDto> {
