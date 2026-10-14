@@ -1,17 +1,92 @@
 import { recipeProxyPath } from "./recipe-cache-policy";
 import { clearRecipeRequests } from "./recipe-requests";
+import type { ApiErrorKind, ApiProblem } from "@/types/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5062";
 
 export class ApiError extends Error {
-  constructor(message: string, public status: number, public validationFields: string[] = []) {
+  public readonly problem?: ApiProblem;
+  public readonly retryAfter?: number;
+  public readonly kind: ApiErrorKind;
+
+  constructor(
+    message: string,
+    public status: number,
+    public validationFields: string[] = [],
+    options: { problem?: ApiProblem; retryAfter?: number; kind?: ApiErrorKind } = {},
+  ) {
     super(message);
     this.name = "ApiError";
+    this.kind = options.kind ?? "http";
+    this.problem = options.problem;
+    this.retryAfter = options.retryAfter;
+    // Problem details can contain server validation text; never serialize it accidentally.
+    Object.defineProperty(this, "problem", { enumerable: false });
   }
 }
 
 // Raw transport: auth endpoints must never recursively trigger refresh/retry.
 export type HttpOptions = RequestInit & { onResponse?: (response: Response) => void };
+
+const problemFields = new Set(["type", "title", "status", "detail", "instance", "traceId", "errors"]);
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown> : null;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function parseValidationErrors(value: unknown): ApiProblem["errors"] {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const errors = Object.entries(record).flatMap(([field, messages]) => {
+    if (!/^[a-zA-Z$.][a-zA-Z0-9$.]{0,99}$/.test(field)) return [];
+    const values = (Array.isArray(messages) ? messages : [messages]).filter(
+      (message): message is string => typeof message === "string",
+    );
+    return values.length ? [[field, values] as const] : [];
+  });
+  return errors.length ? Object.fromEntries(errors) : undefined;
+}
+
+async function parseProblem(response: Response): Promise<ApiProblem | undefined> {
+  try {
+    const text = await response.text();
+    if (!text || text.length > 65_536) return undefined;
+    const record = asRecord(JSON.parse(text));
+    if (!record || !Object.keys(record).some((key) => problemFields.has(key))) return undefined;
+    const extensions = Object.fromEntries(Object.entries(record).filter(([key]) =>
+      !problemFields.has(key) && key !== "__proto__" && key !== "constructor" && key !== "prototype"));
+    return {
+      type: asString(record.type), title: asString(record.title),
+      status: response.status,
+      detail: asString(record.detail), instance: asString(record.instance), traceId: asString(record.traceId),
+      errors: parseValidationErrors(record.errors),
+      ...(Object.keys(extensions).length ? { extensions } : {}),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+export function parseRetryAfter(value: string | null, now = Date.now()): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value.trim());
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds);
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? undefined : Math.max(0, Math.ceil((timestamp - now) / 1000));
+}
+
+function transportError(error: unknown, signal?: AbortSignal | null): ApiError {
+  const name = error instanceof Error ? error.name : "";
+  const timeout = name === "TimeoutError" || (signal?.aborted && signal.reason instanceof DOMException && signal.reason.name === "TimeoutError");
+  if (timeout) return new ApiError("API request timed out", 0, [], { kind: "timeout" });
+  if (name === "AbortError" || signal?.aborted) return new ApiError("API request was aborted", 0, [], { kind: "aborted" });
+  return new ApiError("API network request failed", 0, [], { kind: "network" });
+}
 
 export async function httpClient<T>(endpoint: string, options: HttpOptions = {}): Promise<T> {
   const { onResponse, ...request } = options;
@@ -21,21 +96,19 @@ export async function httpClient<T>(endpoint: string, options: HttpOptions = {})
   }
   const target = typeof window !== "undefined" && recipeProxyPath(endpoint, request.method ?? "GET")
     ? `/api/recipe-cache${endpoint}` : `${API_URL}${endpoint}`;
-  const response = await fetch(target, { ...request, headers });
+  let response: Response;
+  try {
+    response = await fetch(target, { ...request, headers });
+  } catch (error) {
+    throw transportError(error, request.signal);
+  }
   if (!response.ok) {
-    // Never include request bodies, tokens or server-supplied details in errors/logs.
-    let validationFields: string[] = [];
-    if (response.status === 400) {
-      try {
-        const body: unknown = await response.json();
-        if (body && typeof body === "object" && "errors" in body &&
-            body.errors && typeof body.errors === "object" && !Array.isArray(body.errors)) {
-          // Keep only field paths, never messages/details that could contain secrets.
-          validationFields = Object.keys(body.errors).filter((key) => /^[a-zA-Z$.][a-zA-Z0-9$.]{0,99}$/.test(key));
-        }
-      } catch { /* Binding errors can have an empty or non-JSON body. */ }
-    }
-    throw new ApiError(`API request failed with status ${response.status}`, response.status, validationFields);
+    const problem = await parseProblem(response);
+    const validationFields = Object.keys(problem?.errors ?? {});
+    throw new ApiError(`API request failed with status ${response.status}`, response.status, validationFields, {
+      problem,
+      retryAfter: response.status === 429 ? parseRetryAfter(response.headers.get("Retry-After")) : undefined,
+    });
   }
   onResponse?.(response);
   if ((request.method ?? "GET") !== "GET" && recipeProxyPath(endpoint, request.method)) clearRecipeRequests();
