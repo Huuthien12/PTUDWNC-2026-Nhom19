@@ -1,9 +1,9 @@
 import { expireSession, getSession, getValidSession, refreshSession } from "./auth-session";
-import { ApiError, httpClient } from "./http-client";
+import { ApiError, httpClient, type HttpOptions } from "./http-client";
 import type { AuthSession } from "../types/auth";
 
 export { ApiError } from "./http-client";
-export type ApiOptions = RequestInit & { auth?: boolean };
+export type ApiOptions = HttpOptions & { auth?: boolean };
 
 export async function apiClient<T>(endpoint: string, options: ApiOptions = {}): Promise<T> {
   const { auth = false, ...request } = options;
