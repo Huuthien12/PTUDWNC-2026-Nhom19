@@ -3,9 +3,11 @@ namespace CulinaryBlog.Application.Recipes.DTOs;
 public sealed record RecipeStepDto(
     Guid Id,
     int StepNumber,
+    string? Title,
     string Description,
-    int? DurationMinutes,
-    string? ImageUrl
+    int? TimerMinutes,
+    string? ImageUrl,
+    string RowVersion
 );
 
 public sealed record RecipeStepListDto(

@@ -8,7 +8,8 @@ import { buildUpdateRecipePayload, initialRecipeValues, mapRecipeError, nutritio
 import type { Category } from "@/types/category";
 import { ApiError } from "@/services/api-client";
 import IngredientEditor from "./IngredientEditor";
-import type { RecipeDetail, RecipeIngredient } from "@/types/recipe";
+import RecipeStepManager from "./RecipeStepManager";
+import type { RecipeDetail, RecipeIngredient, RecipeStep } from "@/types/recipe";
 import { useSession } from "@/components/auth/useSession";
 import { canManageIngredients } from "@/services/ingredient-form";
 import { useRecipeMutation } from "./useRecipeMutation";
@@ -24,6 +25,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
   const [values, setValues] = useState<RecipeFormValues>(initialRecipeValues);
   const [categories, setCategories] = useState<Category[]>([]);
   const [recipeId, setRecipeId] = useState<string | null>(null);
+  const [recipeSteps, setRecipeSteps] = useState<RecipeStep[]>([]);
   const [rowVersion, setRowVersion] = useState("");
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "missing" | "error">("loading");
@@ -48,6 +50,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
       setAuthorId(recipe.author.id);
       setIngredients(recipe.ingredients);
       setCategories(items);
+      setRecipeSteps(recipe.steps);
       setState("ready");
     }).catch((error: unknown) => {
       if (active) setState(error instanceof ApiError && error.status === 404 ? "missing" : "error");
@@ -55,13 +58,14 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
     return () => { active = false; };
   }, [slug]);
 
-  async function reloadIngredients() {
+  async function reloadChildren() {
     const recipe = await getRecipeBySlug(slug);
     const incoming = recipeValuesFromDetail(recipe);
     const changed = baseline.current && recipeFields.some((field) => incoming[field] !== baseline.current![field]);
     snapshot.current = recipe;
     setRowVersion(recipe.rowVersion);
     setIngredients(recipe.ingredients);
+    setRecipeSteps(recipe.steps);
     setAuthorId(recipe.author.id);
     if (changed) {
       mutation.invalidate();
@@ -77,7 +81,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
     if (!window.confirm("Tải dữ liệu mới sẽ bỏ bản nháp các trường công thức. Bản nháp nguyên liệu vẫn được giữ. Tiếp tục?")) return;
     if (!mutation.begin(true)) return;
     try {
-      const recipe = await reloadIngredients();
+      const recipe = await reloadChildren();
       baseline.current = recipeValuesFromDetail(recipe);
       setValues(baseline.current);
       setErrors({});
@@ -101,7 +105,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
       setValues(baseline.current);
       setRowVersion(updated.rowVersion);
       mutation.invalidate();
-      const reloaded = await reloadIngredients();
+      const reloaded = await reloadChildren();
       const current = recipeValuesFromDetail(reloaded);
       if (recipeFields.every((field) => current[field] === baseline.current![field])) setMessage("Đã lưu thay đổi.");
     } catch (error) {
@@ -109,7 +113,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
       setErrors(mapped.fields);
       setMessage(mapped.message);
       mutation.invalidate();
-      try { await reloadIngredients(); } catch { setMessage(`${mapped.message} Chưa tải lại được dữ liệu; hãy tải lại trước khi lưu tiếp.`); }
+      try { await reloadChildren(); } catch { setMessage(`${mapped.message} Chưa tải lại được dữ liệu; hãy tải lại trước khi lưu tiếp.`); }
     } finally {
       mutation.end();
     }
@@ -155,12 +159,15 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
         </fieldset>
         {canManageIngredients(session, authorId) && <IngredientEditor key={recipeId} recipeId={recipeId ?? ""}
           initialIngredients={ingredients} rowVersion={rowVersion} mutation={mutation}
-          onRowVersionChange={setRowVersion} onReload={reloadIngredients} />}
+          onRowVersionChange={setRowVersion} onReload={reloadChildren} />}
         <button type="submit" disabled={pending || mutation.needsReload || !canManageIngredients(session, authorId)}
           className="rounded-lg bg-orange-600 px-5 py-3 font-semibold text-white disabled:opacity-50">
           {pending ? "Đang lưu..." : "Lưu thay đổi"}
         </button>
       </fieldset>
     </form>
+    {canManageIngredients(session, authorId) && <div className="mt-6"><RecipeStepManager
+      key={`${recipeId}-steps`} recipeId={recipeId ?? ""} initialSteps={recipeSteps} rowVersion={rowVersion}
+      mutation={mutation} onRowVersionChange={setRowVersion} onReload={reloadChildren} /></div>}
   </main>;
 }

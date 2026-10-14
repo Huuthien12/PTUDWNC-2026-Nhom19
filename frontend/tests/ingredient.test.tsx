@@ -100,6 +100,7 @@ function button(label: string, occurrence = 0) {
   return view!.root.findAllByType("button").filter((node) => text(node) === label)[occurrence];
 }
 function editor() { return view!.root.findByType(IngredientEditor); }
+function rootForm() { return view!.root.findAllByType("form")[0]; }
 function rows() { return editor().findAll((node) => node.type === "div" && typeof node.props.draggable === "boolean"); }
 function input(id: string, field: number) {
   return rows().find((row) => row.findAllByType("input")[0].props.value === id)!.findAllByType("input")[field];
@@ -109,7 +110,7 @@ async function change(id: string, field: number, value: string) {
 }
 function mutations() { return calls.filter((call) => call.method !== "GET"); }
 async function click(label: string, occurrence = 0) { await dispatch(() => button(label, occurrence).props.onClick()); }
-async function submit() { await dispatch(() => { void view!.root.findByType("form").props.onSubmit({ preventDefault() {} }); }); }
+async function submit() { await dispatch(() => { void rootForm().props.onSubmit({ preventDefault() {} }); }); }
 
 test("saving A retains B's dirty fields and a new draft, without a RowVersion remount", async () => {
   await mount();
@@ -189,10 +190,10 @@ test("shared parent/child lock prevents both overlap directions and same-tick do
   const gate = new Promise<void>((resolve) => { release = resolve; });
   intercept = async (_path, method) => { if (method !== "GET") await gate; return undefined; };
   const save = button("Lưu").props.onClick;
-  const rootSubmit = view!.root.findByType("form").props.onSubmit;
+  const rootSubmit = rootForm().props.onSubmit;
   await dispatch(() => { save(); save(); void rootSubmit({ preventDefault() {} }); });
   assert.equal(mutations().length, 1);
-  assert.equal(view!.root.findByProps({ type: "submit" }).props.disabled, true);
+  assert.equal(view!.root.findAllByType("form")[0].findAllByProps({ type: "submit" })[0].props.disabled, true);
   assert.ok(editor().findAllByType("input").every((node) => node.props.disabled));
   await dispatch(() => release());
   intercept = undefined;
@@ -200,7 +201,7 @@ test("shared parent/child lock prevents both overlap directions and same-tick do
   const rootGate = new Promise<void>((resolve) => { releaseRoot = resolve; });
   intercept = async (path, method) => { if (method === "PUT" && !path.includes("/ingredients")) await rootGate; return undefined; };
   const childSave = button("Lưu").props.onClick;
-  const currentSubmit = view!.root.findByType("form").props.onSubmit;
+  const currentSubmit = rootForm().props.onSubmit;
   await dispatch(() => { void currentSubmit({ preventDefault() {} }); childSave(); void currentSubmit({ preventDefault() {} }); });
   assert.equal(mutations().length, 2);
   await dispatch(() => releaseRoot());
@@ -278,7 +279,7 @@ for (const withEtag of [true, false]) test(`DELETE + failed reload blocks subseq
   await click("Xóa");
   assert.equal(editor().props.rowVersion, withEtag ? recipe.rowVersion : Buffer.from("v0").toString("base64"));
   assert.equal(rows().length, 1);
-  await dispatch(() => { staleSave(); void view!.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
+  await dispatch(() => { staleSave(); void rootForm().props.onSubmit({ preventDefault() {} }); });
   assert.equal(mutations().length, 1);
   assert.equal(button("Lưu").props.disabled, true);
   intercept = undefined;
