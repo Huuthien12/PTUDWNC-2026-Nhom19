@@ -44,7 +44,8 @@ public sealed class LoginCommandHandler
                 null,
                 "Bearer",
                 identityResult.ErrorCode
-                    ?? "INVALID_CREDENTIALS");
+                    ?? "INVALID_CREDENTIALS",
+                LockoutEnd: identityResult.LockoutEnd);
         }
 
         var accessToken =

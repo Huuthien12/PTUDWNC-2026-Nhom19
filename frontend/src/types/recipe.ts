@@ -66,6 +66,7 @@ export interface RecipeStep {
   description: string;
   timerMinutes: number | null;
   imageUrl: string | null;
+  rowVersion: string;
 }
 
 export interface RecipeImage {

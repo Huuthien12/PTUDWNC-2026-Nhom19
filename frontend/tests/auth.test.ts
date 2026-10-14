@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import { apiClient, ApiError } from "../src/services/api-client";
-import { login, logout } from "../src/services/auth-service";
+import { login, loginWithGoogle, logout } from "../src/services/auth-service";
 import {
   getSession, getValidSession, refreshSession, expireSession, subscribeSession,
   SESSION_KEY, SESSION_CHANGED, SESSION_EXPIRED,
 } from "../src/services/auth-session";
 import { canAccess, loginDestination } from "../src/services/auth-navigation";
+import { getProfile, updateProfile } from "../src/services/profile-service";
 import type { AuthResponse, AuthSession } from "../src/types/auth";
+import type { UpdateProfileRequest, UserProfile } from "../src/types/profile";
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -54,6 +56,13 @@ function seed(response = auth()): AuthSession {
   return session;
 }
 
+function profile(): UserProfile {
+  return {
+    id: "user-1", fullName: "Author", email: "author@example.test", userName: "author",
+    avatarUrl: null, roles: ["Author"], emailConfirmed: true, createdAt: "2026-01-01T00:00:00Z",
+  };
+}
+
 beforeEach(() => {
   browser = new Browser();
   locks = new Locks();
@@ -89,6 +98,46 @@ test("failed login never enters a refresh loop or creates a session", async () =
   await assert.rejects(login({ email: "author@example.test", password: "wrong" }), ApiError);
   assert.equal(getSession(), null);
   assert.equal(calls.length, 1);
+});
+
+test("Google backend response enters the existing session", async () => {
+  const response = auth("google");
+  respond = async () => Response.json(response);
+  await loginWithGoogle({ authorizationCode: "google-code", codeVerifier: "pkce-verifier" });
+  assert.equal(getSession()?.accessToken, "access-google");
+  assert.equal(calls[0].url.endsWith("/api/v1/auth/google"), true);
+  assert.equal(calls[0].options.body, JSON.stringify({ authorizationCode: "google-code", codeVerifier: "pkce-verifier" }));
+  assert.equal(String(calls[0].options.body).includes("secret"), false);
+});
+
+test("failed Google login does not establish a session", async () => {
+  respond = async () => new Response(null, { status: 401 });
+  await assert.rejects(loginWithGoogle({ idToken: "invalid" }), ApiError);
+  assert.equal(getSession(), null);
+});
+
+test("profile GET uses the authenticated API client", async () => {
+  seed();
+  respond = async () => Response.json(profile());
+  assert.deepEqual(await getProfile(), profile());
+  assert.equal(calls[0].url.endsWith("/api/v1/auth/me"), true);
+  assert.equal(new Headers(calls[0].options.headers).get("Authorization"), "Bearer access-old");
+});
+
+test("profile PATCH sends only editable fields and returns the updated profile", async () => {
+  seed();
+  const updated = { ...profile(), fullName: "Updated Author", avatarUrl: "https://example.test/avatar.png" };
+  respond = async () => Response.json(updated);
+  assert.deepEqual(await updateProfile({ fullName: updated.fullName, avatarUrl: updated.avatarUrl, email: "ignored@example.test" } as UpdateProfileRequest & { email: string }), updated);
+  assert.equal(calls[0].options.method, "PATCH");
+  assert.equal(calls[0].options.body, JSON.stringify({ fullName: updated.fullName, avatarUrl: updated.avatarUrl }));
+  assert.equal(new Headers(calls[0].options.headers).get("Authorization"), "Bearer access-old");
+});
+
+test("profile API errors remain available to the form", async () => {
+  seed();
+  respond = async () => new Response(null, { status: 400 });
+  await assert.rejects(updateProfile({ fullName: "A" }), ApiError);
 });
 
 test("expired requests share one rotation and all use the new bearer", async () => {

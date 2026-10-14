@@ -33,6 +33,10 @@ using CulinaryBlog.Domain.Enums;
 using CulinaryBlog.API.Caching;
 using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using System.Threading.RateLimiting;
+using Microsoft.OpenApi;
+using Scalar.AspNetCore;
+using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 if (builder.Environment.IsEnvironment("Testing"))
@@ -144,6 +148,79 @@ builder.Services.AddOptions<SmtpOptions>()
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddCulinaryHealthChecks();
+builder.Services.AddOpenApi("v1", options =>
+{
+    options.AddDocumentTransformer((document, _, _) =>
+    {
+        document.Info.Version = "v1";
+        document.Components ??= new();
+        document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+        document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT"
+        };
+        return Task.CompletedTask;
+    });
+    options.AddOperationTransformer((operation, context, _) =>
+    {
+        if (context.Description.ActionDescriptor.EndpointMetadata.OfType<IAuthorizeData>().Any())
+        {
+            operation.Security ??= [];
+            operation.Security.Add(new OpenApiSecurityRequirement
+            {
+                [new OpenApiSecuritySchemeReference("Bearer", context.Document)] = []
+            });
+        }
+        return Task.CompletedTask;
+    });
+});
+
+if (!builder.Environment.IsEnvironment("Testing") || builder.Configuration.GetValue<bool>("RateLimiting:Enabled"))
+{
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+        {
+            var path = context.Request.Path;
+            if (!path.StartsWithSegments("/api/v1"))
+                return RateLimitPartition.GetNoLimiter("outside-api");
+
+            var bucket = path.StartsWithSegments("/api/v1/auth") ? "auth" :
+                HttpMethods.IsPost(context.Request.Method) &&
+                path.StartsWithSegments("/api/v1/recipes") &&
+                path.Value?.EndsWith("/images", StringComparison.OrdinalIgnoreCase) == true
+                    ? "upload" : "api";
+            var limit = bucket == "auth" ? 10 : bucket == "upload" ? 5 : 100;
+            var ip = context.Connection.RemoteIpAddress?.MapToIPv6().ToString() ?? "unknown";
+            return RateLimitPartition.GetFixedWindowLimiter($"{bucket}:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = limit,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+        });
+        options.OnRejected = async (rejection, cancellationToken) =>
+        {
+            var context = rejection.HttpContext;
+            var seconds = rejection.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)
+                ? Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds)) : 60;
+            context.Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            context.Response.ContentType = "application/problem+json";
+            await JsonSerializer.SerializeAsync(context.Response.Body, new ProblemDetails
+            {
+                Type = "RATE_LIMIT_EXCEEDED",
+                Title = "Too many requests.",
+                Status = StatusCodes.Status429TooManyRequests,
+                Detail = "Please retry after the indicated delay.",
+                Instance = context.Request.Path
+            }, cancellationToken: cancellationToken);
+        };
+    });
+}
 
 if (!builder.Environment.IsEnvironment("Testing"))
 {
@@ -166,6 +243,9 @@ builder.Services
         options.Password.RequiredLength = 8;
 
         options.User.RequireUniqueEmail = true;
+        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+        options.Lockout.MaxFailedAccessAttempts = 5;
+        options.Lockout.AllowedForNewUsers = true;
     })
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
@@ -344,6 +424,8 @@ if (!app.Environment.IsEnvironment("Testing"))
 // =========================
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseCors("Frontend");
+if (!app.Environment.IsEnvironment("Testing") || app.Configuration.GetValue<bool>("RateLimiting:Enabled"))
+    app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -352,6 +434,11 @@ app.UseOutputCache();
 
 // =========================
 app.MapCulinaryHealthChecks();
+if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
+{
+    app.MapOpenApi();
+    app.MapScalarApiReference();
+}
 
 
 // =========================
@@ -450,6 +537,11 @@ auth.MapPost("/login", async (
 
     if (!result.Succeeded)
     {
+        if (result.ErrorCode == "AUTH_ACCOUNT_LOCKED")
+            return Results.Problem(type: result.ErrorCode, title: "Account locked.",
+                statusCode: StatusCodes.Status423Locked,
+                detail: "Too many failed sign-in attempts. Try again after the lockout ends.",
+                extensions: new Dictionary<string, object?> { ["lockedUntil"] = result.LockoutEnd });
         return Results.Problem(
             type:
                 result.ErrorCode

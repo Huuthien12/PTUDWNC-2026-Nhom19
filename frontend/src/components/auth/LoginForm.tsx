@@ -1,23 +1,46 @@
 ﻿"use client";
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError } from "@/services/api-client";
-import { login } from "@/services/auth-service";
+import { login, loginWithGoogle } from "@/services/auth-service";
 import { loginDestination } from "@/services/auth-navigation";
+import { beginGoogleLogin, consumeGoogleCallback } from "@/services/google-oauth";
 
 export default function LoginForm({ next, reason }: { next?: string; reason?: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState("");
+  const completingGoogle = useRef(false);
+
+  useEffect(() => {
+    if (!searchParams.get("code") && !searchParams.get("error") || completingGoogle.current) return;
+    completingGoogle.current = true;
+    setError("");
+    setLoading(true);
+    void (async () => {
+      try {
+        await loginWithGoogle(consumeGoogleCallback(searchParams));
+        setSuccess("Đăng nhập Google thành công. Đang chuyển hướng...");
+        router.replace(loginDestination(next));
+      } catch (googleError) {
+        setError(googleError instanceof Error ? googleError.message : "Không thể đăng nhập bằng Google.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [next, router, searchParams]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     setError("");
+    setSuccess("");
 
     if (!email.trim() || !password) {
       setError("\u0056\u0075\u0069 \u006c\u00f2\u006e\u0067 \u006e\u0068\u1ead\u0070 \u0065\u006d\u0061\u0069\u006c \u0076\u00e0 \u006d\u1ead\u0074 \u006b\u0068\u1ea9\u0075.");
@@ -39,6 +62,8 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
           setError(err.message);
         } else if (err.status === 401) {
           setError("\u0045\u006d\u0061\u0069\u006c \u0068\u006f\u1eb7\u0063 \u006d\u1ead\u0074 \u006b\u0068\u1ea9\u0075 \u006b\u0068\u00f4\u006e\u0067 \u0063\u0068\u00ed\u006e\u0068 \u0078\u00e1\u0063.");
+        } else if (err.status === 423) {
+          setError("Tài khoản tạm khóa sau 5 lần đăng nhập sai. Vui lòng thử lại khi hết thời gian khóa.");
         } else if (err.status === 400) {
           setError("\u0054\u0068\u00f4\u006e\u0067 \u0074\u0069\u006e \u0111\u0103\u006e\u0067 \u006e\u0068\u1ead\u0070 \u006b\u0068\u00f4\u006e\u0067 \u0068\u1ee3\u0070 \u006c\u1ec7.");
         } else {
@@ -48,6 +73,19 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
         setError("\u004b\u0068\u00f4\u006e\u0067 \u0074\u0068\u1ec3 \u006b\u1ebf\u0074 \u006e\u1ed1\u0069 \u0111\u1ebf\u006e \u006d\u00e1\u0079 \u0063\u0068\u1ee7.");
       }
     } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleLogin() {
+    if (loading) return;
+    setError("");
+    setSuccess("");
+    setLoading(true);
+    try {
+      await beginGoogleLogin();
+    } catch (googleError) {
+      setError(googleError instanceof Error ? googleError.message : "Không thể bắt đầu đăng nhập Google.");
       setLoading(false);
     }
   }
@@ -70,6 +108,7 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
             {error}
           </div>
         )}
+        {success && <p role="status" className="mb-4 text-sm text-green-700">{success}</p>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -120,6 +159,10 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
               : "\u0110\u0103ng nh\u1eadp"}
           </button>
         </form>
+        <button type="button" disabled={loading} onClick={() => void handleGoogleLogin()}
+          className="mt-3 w-full rounded-lg border px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-50">
+          {loading ? "Đang xác thực..." : "Đăng nhập với Google"}
+        </button>
       </div>
     </div>
   );
