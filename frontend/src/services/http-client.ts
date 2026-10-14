@@ -62,7 +62,7 @@ async function parseProblem(response: Response): Promise<ApiProblem | undefined>
       !problemFields.has(key) && key !== "__proto__" && key !== "constructor" && key !== "prototype"));
     return {
       type: asString(record.type), title: asString(record.title),
-      status: typeof record.status === "number" ? record.status : response.status,
+      status: response.status,
       detail: asString(record.detail), instance: asString(record.instance), traceId: asString(record.traceId),
       errors: parseValidationErrors(record.errors),
       ...(Object.keys(extensions).length ? { extensions } : {}),

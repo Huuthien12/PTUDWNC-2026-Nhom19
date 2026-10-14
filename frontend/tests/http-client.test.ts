@@ -39,6 +39,21 @@ test("keeps all required HTTP status codes distinguishable", async () => {
   }
 });
 
+test("uses the HTTP status when a ProblemDetails body reports a different status", async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify({ title: "Too many requests", status: 200 }), {
+    status: 429,
+    headers: { "Retry-After": "12" },
+  });
+
+  await assert.rejects(httpClient("/api/v1/test"), (error: unknown) => {
+    assert.ok(error instanceof ApiError);
+    assert.equal(error.status, 429);
+    assert.equal(error.problem?.status, 429);
+    assert.equal(error.retryAfter, 12);
+    return true;
+  });
+});
+
 test("parses Retry-After delta seconds and HTTP dates", () => {
   assert.equal(parseRetryAfter("5", 0), 5);
   assert.equal(parseRetryAfter("Wed, 21 Oct 2015 07:28:00 GMT", Date.parse("Wed, 21 Oct 2015 07:27:55 GMT")), 5);
