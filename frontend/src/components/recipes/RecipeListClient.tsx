@@ -18,7 +18,8 @@ export default function RecipeListClient({ page }: { page: number }) {
       .catch(() => { if (active) setResult({ page, failed: true }); });
     return () => { active = false; };
   }, [page, attempt]);
-  if (failed) return <><ContentState title="Chưa thể tải công thức" description="Vui lòng thử lại sau." /><button className="cb-button cb-button-secondary" onClick={() => { setResult(null); setAttempt(value => value + 1); }}>Thử tải lại</button></>;
+  if (failed) return <ContentState title="Chưa thể tải công thức" description="Vui lòng thử lại sau."
+    retryAction={<button type="button" className="cb-button cb-button-secondary" onClick={() => { setResult(null); setAttempt(value => value + 1); }}>Thử tải lại</button>} />;
   if (!recipes) return <p role="status">Đang tải công thức...</p>;
   if (!recipes.items.length) return <div className="cb-state"><h2 className="cb-section-title">Chưa có công thức</h2></div>;
   return <><div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">{recipes.items.map((recipe) => <RecipeCard key={recipe.id} recipe={recipe} />)}</div><RecipePagination currentPage={recipes.page} totalPages={recipes.totalPages} /></>;
