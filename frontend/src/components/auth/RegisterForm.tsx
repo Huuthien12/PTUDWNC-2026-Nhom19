@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { register } from "@/services/auth-service";
+import AuthNotice from "@/components/auth/AuthNotice";
 
 export default function RegisterForm() {
   const router = useRouter();
@@ -111,14 +112,22 @@ export default function RegisterForm() {
             </div>
 
             {error && (
-              <div className="mb-5 border border-[#e7b9a8] bg-[#fff4ef] px-4 py-3 text-sm leading-5 text-[#9a4f3c]" role="alert">
+              <AuthNotice
+                kind="error"
+                className="mb-5 border border-[#e7b9a8] bg-[#fff4ef] px-4 py-3 text-sm leading-5 text-[#9a4f3c]"
+                onDismiss={() => setError("")}
+              >
                 {error}
-              </div>
+              </AuthNotice>
             )}
             {success && (
-              <div className="mb-5 border border-[#b9cfad] bg-[#f1f8ed] px-4 py-3 text-sm leading-5 text-[#49613b]" role="status">
-                {success} Đang chuyển đến trang đăng nhập...
-              </div>
+              <AuthNotice
+                kind="success"
+                className="mb-5 border border-[#b9cfad] bg-[#f1f8ed] px-4 py-3 text-sm leading-5 text-[#49613b]"
+                onDismiss={() => setSuccess("")}
+              >
+                {success}
+              </AuthNotice>
             )}
 
             <form className="space-y-5" onSubmit={handleSubmit}>
