@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import RetryButton from "./RetryButton";
 
 export default function ContentState({ title, description, href, action, retry = false, retryAction, headingAs: Heading = "h1" }: {
@@ -9,6 +10,6 @@ export default function ContentState({ title, description, href, action, retry =
     <Heading className="cb-section-title">{title}</Heading>
     <p>{description}</p>
     {retryAction ?? (retry && <RetryButton />)}
-    {href && action && <Link className="cb-button cb-button-secondary" href={href}>{action}</Link>}
+    {href && action && <Button asChild variant="secondary"><Link href={href}>{action}</Link></Button>}
   </section>;
 }
