@@ -1,3 +1,5 @@
+import type { PaginatedResult } from "./api";
+
 export type RecipeDifficulty = 1 | 2 | 3;
 export type RecipeStatus = 1 | 2 | 3;
 
@@ -106,6 +108,4 @@ export interface RecipeSummary {
   servings: number; difficulty: RecipeDifficulty; thumbnailUrl: string | null; publishedAt: string | null;
 }
 
-export interface RecipePage {
-  items: RecipeSummary[]; totalCount: number; page: number; pageSize: number; totalPages: number;
-}
+export interface RecipePage extends PaginatedResult<RecipeSummary> {}
