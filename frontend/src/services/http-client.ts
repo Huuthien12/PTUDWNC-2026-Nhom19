@@ -11,14 +11,17 @@ export class ApiError extends Error {
 }
 
 // Raw transport: auth endpoints must never recursively trigger refresh/retry.
-export async function httpClient<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+export type HttpOptions = RequestInit & { onResponse?: (response: Response) => void };
+
+export async function httpClient<T>(endpoint: string, options: HttpOptions = {}): Promise<T> {
+  const { onResponse, ...request } = options;
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type") && typeof options.body === "string") {
     headers.set("Content-Type", "application/json");
   }
-  const target = typeof window !== "undefined" && recipeProxyPath(endpoint, options.method ?? "GET")
+  const target = typeof window !== "undefined" && recipeProxyPath(endpoint, request.method ?? "GET")
     ? `/api/recipe-cache${endpoint}` : `${API_URL}${endpoint}`;
-  const response = await fetch(target, { ...options, headers });
+  const response = await fetch(target, { ...request, headers });
   if (!response.ok) {
     // Never include request bodies, tokens or server-supplied details in errors/logs.
     let validationFields: string[] = [];
@@ -34,7 +37,8 @@ export async function httpClient<T>(endpoint: string, options: RequestInit = {})
     }
     throw new ApiError(`API request failed with status ${response.status}`, response.status, validationFields);
   }
-  if ((options.method ?? "GET") !== "GET" && recipeProxyPath(endpoint, options.method)) clearRecipeRequests();
+  onResponse?.(response);
+  if ((request.method ?? "GET") !== "GET" && recipeProxyPath(endpoint, request.method)) clearRecipeRequests();
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }

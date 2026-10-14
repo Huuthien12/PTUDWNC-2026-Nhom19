@@ -40,7 +40,8 @@ public sealed record IdentityLoginResult(
     IReadOnlyList<string> Roles,
     string? ErrorCode,
     string? UserName = null,
-    string? AvatarUrl = null);
+    string? AvatarUrl = null,
+    DateTimeOffset? LockoutEnd = null);
 
 public sealed record IdentityRegistrationResult(
     bool Succeeded,

@@ -16,4 +16,5 @@ public sealed record LoginResult(
     string? ErrorCode,
     string? RefreshToken = null,
     DateTime? ExpiresAt = null,
-    AuthUserDto? User = null);
+    AuthUserDto? User = null,
+    DateTimeOffset? LockoutEnd = null);

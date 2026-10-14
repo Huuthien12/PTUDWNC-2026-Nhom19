@@ -42,7 +42,7 @@ public sealed class RecipeStepTests : IAsyncLifetime
         Assert.Single(result!.Items);
         Assert.Equal(1, result.Items[0].StepNumber);
         Assert.Equal("Boil the water", result.Items[0].Description);
-        Assert.Equal(5, result.Items[0].DurationMinutes);
+        Assert.Equal(5, result.Items[0].TimerMinutes);
         Assert.False(string.IsNullOrWhiteSpace(result.RowVersion));
         Assert.NotEqual(originalRowVersion, result.RowVersion);
     }
@@ -161,6 +161,7 @@ public sealed class RecipeStepTests : IAsyncLifetime
             $"/api/v1/recipes/{recipeId}/steps/{stepId}",
             new
             {
+                title = "Finish",
                 description = "Updated description",
                 durationMinutes = 10,
                 imageUrl = "https://example.com/step.jpg",
@@ -175,8 +176,9 @@ public sealed class RecipeStepTests : IAsyncLifetime
         Assert.NotNull(result);
         Assert.Single(result!.Items);
         Assert.Equal(stepId, result.Items[0].Id);
+        Assert.Equal("Finish", result.Items[0].Title);
         Assert.Equal("Updated description", result.Items[0].Description);
-        Assert.Equal(10, result.Items[0].DurationMinutes);
+        Assert.Equal(10, result.Items[0].TimerMinutes);
         Assert.Equal(
             "https://example.com/step.jpg",
             result.Items[0].ImageUrl);
@@ -424,7 +426,9 @@ public sealed class RecipeStepTests : IAsyncLifetime
     private sealed record RecipeStepResponse(
         Guid Id,
         int StepNumber,
+        string? Title,
         string Description,
-        int? DurationMinutes,
-        string? ImageUrl);
+        int? TimerMinutes,
+        string? ImageUrl,
+        string RowVersion);
 }

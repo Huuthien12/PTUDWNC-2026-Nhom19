@@ -9,6 +9,6 @@
     "rootDir": ".",
     "plugins": []
   },
-  "include": ["tests/**/*.ts"],
+  "include": ["tests/**/*.ts", "tests/**/*.tsx"],
   "exclude": ["node_modules", ".next", ".test-build"]
 }
