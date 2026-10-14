@@ -16,7 +16,7 @@ export default function Header() {
           <SearchBar compact />
         </Suspense>
       </div>
-      <nav className="cb-nav shrink-0 justify-end" aria-label="Điều hướng chính">
+      <nav className="cb-nav min-w-0 justify-end" aria-label="Điều hướng chính">
         <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>Trang chủ</Link>
         <Link href="/categories" aria-current={pathname.startsWith("/categories") ? "page" : undefined}>Khám phá danh mục</Link>
         <AuthControls />
