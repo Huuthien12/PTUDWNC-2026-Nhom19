@@ -6,6 +6,7 @@ export default async function Home() {
   let healthStatus = "Chưa kết nối được Backend";
   let isSuccess = false;
   let categories: Category[] = [];
+  let categoriesFailed = false;
 
   try {
     // Sửa cổng từ 5000 thành 5062 theo đúng cổng Backend đang phát
@@ -22,7 +23,7 @@ export default async function Home() {
   try {
     categories = await getCategories();
   } catch {
-    categories = [];
+    categoriesFailed = true;
   }
 
   return (
@@ -62,20 +63,26 @@ export default async function Home() {
           </div>
           <Link href="/categories" className="text-sm font-semibold text-[#254b3b] hover:text-[#18382b]">Xem tất cả →</Link>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {(categories.length ? categories.slice(0, 4) : [
-            { id: "1", name: "Món Việt", slug: "mon-viet" },
-            { id: "2", name: "Bữa sáng", slug: "bua-sang" },
-            { id: "3", name: "Món chay", slug: "mon-chay" },
-            { id: "4", name: "Tráng miệng", slug: "trang-mieng" },
-          ]).map((category, index) => (
+        {categoriesFailed ? (
+          <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-800" role="alert">
+            <p className="font-semibold">Chưa thể tải danh mục.</p>
+            <p className="mt-2 text-sm">Vui lòng tải lại trang hoặc thử lại sau.</p>
+          </div>
+        ) : categories.length === 0 ? (
+          <div className="rounded-3xl border border-[#d8d9cb] bg-white p-6 text-[#61695c]" role="status">
+            Chưa có danh mục để hiển thị.
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {categories.slice(0, 4).map((category, index) => (
             <Link key={category.id} href={`/categories/${category.slug}`} className="group rounded-3xl border border-[#d8d9cb] bg-white p-6 hover:-translate-y-1 hover:border-[#254b3b] hover:shadow-[0_14px_32px_rgba(37,75,59,.08)]">
               <span className="text-3xl" aria-hidden="true">{["🍲", "☀️", "🌿", "🍰"][index]}</span>
               <h3 className="mt-5 font-serif text-2xl text-[#1d2b22] group-hover:text-[#254b3b]">{category.name}</h3>
               <span className="mt-4 block text-sm font-semibold text-[#61695c]">Khám phá ngay →</span>
             </Link>
           ))}
-        </div>
+          </div>
+        )}
       </section>
 
       <section className="mx-auto mb-12 w-[min(100%-3rem,1160px)] rounded-3xl bg-[#dce4d3] px-6 py-8 sm:px-10">
