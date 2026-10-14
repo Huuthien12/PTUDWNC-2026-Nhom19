@@ -11,14 +11,16 @@ public sealed record CreateRecipeStepRequest(
     string Description,
     int? DurationMinutes = null,
     string? ImageUrl = null,
-    string? RowVersion = null
+    string? RowVersion = null,
+    string? Title = null
 );
 
 public sealed record UpdateRecipeStepRequest(
     string Description,
     int? DurationMinutes = null,
     string? ImageUrl = null,
-    string? RowVersion = null
+    string? RowVersion = null,
+    string? Title = null
 );
 
 public sealed record DeleteRecipeStepRequest(
@@ -56,6 +58,9 @@ public sealed class CreateRecipeStepCommandValidator
         RuleFor(x => x.Request.Description)
             .NotEmpty()
             .MaximumLength(2000);
+
+        RuleFor(x => x.Request.Title)
+            .MaximumLength(200);
 
         RuleFor(x => x.Request.DurationMinutes)
             .GreaterThanOrEqualTo(0)
@@ -96,6 +101,9 @@ public sealed class UpdateRecipeStepCommandValidator
         RuleFor(x => x.Request.Description)
             .NotEmpty()
             .MaximumLength(2000);
+
+        RuleFor(x => x.Request.Title)
+            .MaximumLength(200);
 
         RuleFor(x => x.Request.DurationMinutes)
             .GreaterThanOrEqualTo(0)
@@ -205,6 +213,7 @@ public sealed class CreateRecipeStepCommandHandler(
         {
             RecipeId = recipe.Id,
             StepNumber = nextStepNumber,
+            Title = request.Title,
             Description = request.Description,
             TimerMinutes = request.DurationMinutes,
             ImageUrl = request.ImageUrl
@@ -276,6 +285,7 @@ public sealed class UpdateRecipeStepCommandHandler(
         var originalRowVersion =
             Convert.FromBase64String(request.RowVersion!);
 
+        step.Title = request.Title;
         step.Description = request.Description;
         step.TimerMinutes = request.DurationMinutes;
         step.ImageUrl = request.ImageUrl;

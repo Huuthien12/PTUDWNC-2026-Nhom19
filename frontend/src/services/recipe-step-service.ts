@@ -4,9 +4,11 @@ import type { RecipeStep } from "../types/recipe";
 interface RecipeStepApiItem {
   id: string;
   stepNumber: number;
+  title: string | null;
   description: string;
-  durationMinutes: number | null;
+  timerMinutes: number | null;
   imageUrl: string | null;
+  rowVersion: string;
 }
 
 interface RecipeStepApiResult {
@@ -41,11 +43,11 @@ function normalizeResult(
     items: result.items.map((step) => ({
       id: step.id,
       stepNumber: step.stepNumber,
-      title: null,
+      title: step.title,
       description: step.description,
-      timerMinutes: step.durationMinutes,
+      timerMinutes: step.timerMinutes,
       imageUrl: step.imageUrl,
-      rowVersion: result.rowVersion,
+      rowVersion: step.rowVersion,
     })),
     rowVersion: result.rowVersion,
   };
@@ -61,6 +63,7 @@ export async function createRecipeStep(
       method: "POST",
       auth: true,
       body: JSON.stringify({
+        title: input.title ?? null,
         description: input.description,
         durationMinutes: input.timerMinutes ?? null,
         imageUrl: null,
@@ -83,7 +86,7 @@ export async function updateRecipeStep(
       method: "PUT",
       auth: true,
       body: JSON.stringify({
-        stepNumber: input.stepNumber,
+        title: input.title ?? null,
         description: input.description,
         durationMinutes: input.timerMinutes ?? null,
         imageUrl: null,
@@ -99,13 +102,19 @@ export async function deleteRecipeStep(
   recipeId: string,
   stepId: string,
   rowVersion: string,
-): Promise<void> {
+): Promise<string | null> {
+  let nextVersion: string | null = null;
   await apiClient<void>(
     `/api/v1/recipes/${encodeURIComponent(recipeId)}/steps/${encodeURIComponent(stepId)}`,
     {
       method: "DELETE",
       auth: true,
       body: JSON.stringify({ rowVersion }),
+      onResponse: (response) => {
+        const etag = response.headers.get("ETag");
+        nextVersion = etag?.match(/^"([A-Za-z0-9+/]+={0,2})"$/)?.[1] ?? null;
+      },
     },
   );
+  return nextVersion;
 }

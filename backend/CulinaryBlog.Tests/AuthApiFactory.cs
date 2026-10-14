@@ -48,8 +48,15 @@ public sealed class RecordingWelcomeEmailQueue : IWelcomeEmailQueue
 public sealed class FakeGoogleCredentialVerifier : IGoogleCredentialVerifier
 {
     public GoogleIdentity? Identity { get; set; }
-    public Task<GoogleIdentity?> VerifyAsync(string? idToken, string? authorizationCode,
-        CancellationToken cancellationToken = default) => Task.FromResult(Identity);
+    public string? AuthorizationCode { get; private set; }
+    public string? CodeVerifier { get; private set; }
+    public Task<GoogleIdentity?> VerifyAsync(string? idToken, string? authorizationCode, string? codeVerifier,
+        CancellationToken cancellationToken = default)
+    {
+        AuthorizationCode = authorizationCode;
+        CodeVerifier = codeVerifier;
+        return Task.FromResult(Identity);
+    }
 }
 
 public sealed class AuthApiFactory : WebApplicationFactory<Program>
@@ -60,6 +67,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     public TestClock Clock { get; } = new();
     public RecordingWelcomeEmailQueue WelcomeEmails { get; } = new();
     public FakeGoogleCredentialVerifier GoogleVerifier { get; } = new();
+    public bool EnableRateLimiting { get; init; }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -70,6 +78,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Audience", "culinary-tests");
         builder.UseSetting("Jwt:ExpirationMinutes", "15");
         builder.UseSetting("Email:Smtp:EnableSsl", "true");
+        builder.UseSetting("RateLimiting:Enabled", EnableRateLimiting.ToString());
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<AppDbContext>();

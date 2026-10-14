@@ -6,6 +6,14 @@ import { changeRecipeLifecycle, createRecipe, deleteRecipe } from "../src/servic
 import { dashboardActions, lifecycleErrorMessage } from "../src/services/recipe-dashboard";
 import { canAccess, loginDestination } from "../src/services/auth-navigation";
 import { SESSION_KEY } from "../src/services/auth-session";
+import { maxImageUploadBytes, validateImageUpload } from "../src/services/image-upload";
+
+test("image upload validation blocks invalid files before transport", () => {
+  assert.equal(validateImageUpload({ size: maxImageUploadBytes, type: "image/jpeg" } as File), null);
+  assert.ok(validateImageUpload({ size: maxImageUploadBytes + 1, type: "image/jpeg" } as File));
+  assert.ok(validateImageUpload({ size: 1, type: "image/gif" } as File));
+  assert.ok(validateImageUpload(null));
+});
 
 const categoryId = "11111111-1111-1111-1111-111111111111";
 const valid = { ...initialRecipeValues, title: "Canh chua", categoryId, prepTime: "10", cookTime: "20", servings: "2" };

@@ -30,3 +30,7 @@ public sealed class ConcurrencyException(
 public sealed class ServiceUnavailableException(
     string errorCode,
     string? detail = null) : DomainException(errorCode, detail);
+
+public sealed class ExternalAuthenticationException(
+    string errorCode,
+    string? detail = null) : DomainException(errorCode, detail);
