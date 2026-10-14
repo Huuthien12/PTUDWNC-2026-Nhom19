@@ -576,6 +576,8 @@ Có thể tạo một công thức hoàn chỉnh gồm thông tin, dinh dưỡng
 - Loading / Empty State.
 - Tối ưu request dữ liệu.
 
+Tài liệu triển khai và kiểm chứng Member 3: [Buổi 5 — Recipe cache](doc/lab5_cache_member3.md).
+
 ### Member 4 – Lương Hữu Thiện
 
 **Backend**

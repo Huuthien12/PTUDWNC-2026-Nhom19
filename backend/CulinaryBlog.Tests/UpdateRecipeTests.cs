@@ -128,8 +128,9 @@ public sealed class UpdateRecipeTests
         Assert.True(saved.Images.Single().IsPrimary);
         Assert.Equal(Convert.ToBase64String(saved.RowVersion), dto.RowVersion);
         Assert.NotEqual(Convert.ToBase64String(before.RowVersion), dto.RowVersion);
-        if (status == RecipeStatus.Published) Assert.Equal("categories:all", Assert.Single(factory.Cache.RemovedKeys));
-        else Assert.Empty(factory.Cache.RemovedKeys);
+        Assert.Equal(status == RecipeStatus.Published
+            ? new[] { "categories:all", $"recipe:{before.Slug}" }
+            : new[] { $"recipe:{before.Slug}" }, factory.Cache.RemovedKeys);
     }
 
     [Theory]
@@ -169,6 +170,7 @@ public sealed class UpdateRecipeTests
         Assert.Equal(before.Title, db.Recipes.Local.Single().Title);
         using var client = factory.Client(userId: "other-author");
         await AssertProblem(await client.PutAsJsonAsync($"/api/v1/recipes/{before.Id}", invalid), 403, "RECIPE_FORBIDDEN");
+        Assert.Empty(factory.Cache.RemovedKeys);
     }
 
     [Theory]
@@ -217,7 +219,7 @@ public sealed class UpdateRecipeTests
         Assert.Equal(saved.CategoryId, before.CategoryId);
         Assert.Equal(Convert.ToBase64String(saved.RowVersion), dto.RowVersion);
         Assert.NotEqual(Convert.ToBase64String(before.RowVersion), dto.RowVersion);
-        Assert.Empty(factory.Cache.RemovedKeys);
+        Assert.Equal($"recipe:{before.Slug}", Assert.Single(factory.Cache.RemovedKeys));
     }
 
     [Fact]
@@ -231,6 +233,8 @@ public sealed class UpdateRecipeTests
         var first = await client.PutAsJsonAsync($"/api/v1/recipes/{before.Id}", winner);
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         var current = (await first.Content.ReadFromJsonAsync<RecipeDto>())!;
+        Assert.Equal($"recipe:{before.Slug}", Assert.Single(factory.Cache.RemovedKeys));
+        factory.Cache.RemovedKeys.Clear(); // Observe only eviction attempts from the stale update below.
         var category = new Category { Name = "Moved", Slug = "moved" };
         await using (var db = factory.Database.NewContext())
         {

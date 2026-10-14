@@ -10,7 +10,8 @@ public interface ICacheService
         string key,
         T value,
         TimeSpan expiration,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool useAbsoluteExpiration = false);
 
     Task RemoveAsync(
         string key,

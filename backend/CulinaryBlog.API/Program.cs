@@ -30,12 +30,17 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using System.Text.Json;
 using CulinaryBlog.Domain.Enums;
+using CulinaryBlog.API.Caching;
+using Microsoft.AspNetCore.OutputCaching;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Threading.RateLimiting;
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
+if (builder.Environment.IsEnvironment("Testing"))
+    builder.Logging.ClearProviders(); // Isolated test hosts must not write Windows Event Log.
 
 var connectionString =
     builder.Configuration.GetConnectionString("DefaultConnection")
@@ -65,6 +70,33 @@ builder.Services.AddStackExchangeRedisCache(options =>
 });
 
 builder.Services.AddScoped<ICacheService, RedisCacheService>();
+builder.Services.AddOutputCache(options => options.AddPolicy("RecipeList", policy => policy
+    .Expire(TimeSpan.FromMinutes(2))
+    .SetVaryByQuery("*")
+    .Tag("recipes")
+    .With(context => context.HttpContext.User.Identity?.IsAuthenticated != true &&
+        !context.HttpContext.Request.Headers.ContainsKey("Authorization") &&
+        !context.HttpContext.Request.Headers.ContainsKey("Cookie"))));
+// Production uses the Redis-native Output Cache store, not IDistributedCache.
+// Test hosts deliberately use the built-in in-memory store with no network connection.
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddStackExchangeRedisOutputCache(options =>
+    {
+        options.Configuration = redisConnection;
+        options.InstanceName = "culinary:output:";
+    });
+var outputStore = builder.Services.Last(service => service.ServiceType == typeof(IOutputCacheStore));
+builder.Services.RemoveAll<IOutputCacheStore>();
+builder.Services.AddSingleton<IOutputCacheStore>(services =>
+{
+    var inner = outputStore.ImplementationInstance as IOutputCacheStore
+        ?? (IOutputCacheStore)(outputStore.ImplementationFactory?.Invoke(services)
+            ?? ActivatorUtilities.CreateInstance(services, outputStore.ImplementationType!));
+    return new ResilientOutputCacheStore(inner, services.GetRequiredService<ILogger<ResilientOutputCacheStore>>());
+});
+builder.Services.AddScoped<IRecipeCacheInvalidator, RecipeCacheInvalidator>();
+builder.Services.AddOptions<RecipeDetailCacheOptions>()
+    .Bind(builder.Configuration.GetSection(RecipeDetailCacheOptions.SectionName));
 
 
 // =========================
@@ -397,6 +429,7 @@ if (!app.Environment.IsEnvironment("Testing") || app.Configuration.GetValue<bool
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseOutputCache();
 
 
 // =========================
@@ -465,7 +498,7 @@ recipes.MapGet("/", async (
         cancellationToken);
 
     return Results.Ok(result);
-});
+}).CacheOutput("RecipeList");
 
 recipes.MapGet("/search", async (
     string? q, int? page, int? pageSize, ISender sender,

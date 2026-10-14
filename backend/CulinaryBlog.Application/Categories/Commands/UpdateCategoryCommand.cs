@@ -18,13 +18,15 @@ public sealed class UpdateCategoryCommandHandler
 
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICacheService _cacheService;
+    private readonly IRecipeCacheInvalidator? _invalidator;
 
     public UpdateCategoryCommandHandler(
         IUnitOfWork unitOfWork,
-        ICacheService cacheService)
+        ICacheService cacheService, IRecipeCacheInvalidator? invalidator = null)
     {
         _unitOfWork = unitOfWork;
         _cacheService = cacheService;
+        _invalidator = invalidator;
     }
 
     public async Task<CategoryDto?> Handle(
@@ -83,9 +85,11 @@ public sealed class UpdateCategoryCommandHandler
             cancellationToken);
 
         // Category đã thay đổi -> xóa cache danh sách cũ
-        await _cacheService.RemoveAsync(
+        await _cacheService.RemoveSafelyAsync(
             CategoriesCacheKey,
             cancellationToken);
+
+        if (_invalidator is not null) await _invalidator.CategoryChangedAsync(category.Id, cancellationToken);
 
         // recipeCount chỉ tính các Recipe Published
         var recipeCount =

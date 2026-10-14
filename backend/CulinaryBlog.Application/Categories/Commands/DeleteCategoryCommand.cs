@@ -65,7 +65,7 @@ public sealed class DeleteCategoryCommandHandler
             cancellationToken);
 
         // 4. Invalidate Redis
-        await _cacheService.RemoveAsync(
+        await _cacheService.RemoveSafelyAsync(
             CategoriesCacheKey,
             cancellationToken);
 

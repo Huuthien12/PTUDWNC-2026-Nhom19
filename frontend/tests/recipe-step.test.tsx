@@ -50,7 +50,7 @@ beforeEach(() => {
     ingredients: [ingredient()], steps: [step("A", 1), step("B", 2)], images: [] };
   calls = [];
   globalThis.fetch = async (url, options = {}) => {
-    const path = new URL(String(url)).pathname;
+    const path = new URL(String(url), "http://localhost").pathname;
     const method = options.method ?? "GET";
     const body = options.body ? JSON.parse(String(options.body)) : {};
     calls.push({ path, method, body });

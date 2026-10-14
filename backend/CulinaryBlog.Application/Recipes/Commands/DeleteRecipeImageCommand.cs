@@ -16,7 +16,7 @@ public sealed class DeleteRecipeImageCommandValidator : AbstractValidator<Delete
 }
 
 public sealed class DeleteRecipeImageCommandHandler(IUnitOfWork unitOfWork, IImageCleanupQueue cleanup,
-    TimeProvider clock) : IRequestHandler<DeleteRecipeImageCommand, RecipeImageDeleteResult>
+    TimeProvider clock, IRecipeCacheInvalidator? invalidator = null) : IRequestHandler<DeleteRecipeImageCommand, RecipeImageDeleteResult>
 {
     public async Task<RecipeImageDeleteResult> Handle(DeleteRecipeImageCommand command, CancellationToken cancellationToken)
     {
@@ -48,6 +48,8 @@ public sealed class DeleteRecipeImageCommandHandler(IUnitOfWork unitOfWork, IIma
         // Only after the DB commit: a rolled-back delete must never remove files (step 14).
         foreach (var key in objectKeys)
             RecipeImageAccess.TryEnqueueDelete(cleanup, key);
+
+        if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
 
         return new RecipeImageDeleteResult(RecipeRowVersion.Encode(recipe.RowVersion));
     }

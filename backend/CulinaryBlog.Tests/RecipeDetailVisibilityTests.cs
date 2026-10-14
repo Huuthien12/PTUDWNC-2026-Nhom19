@@ -57,4 +57,68 @@ public sealed class RecipeDetailVisibilityTests : IAsyncLifetime
         var recipe = await new RecipeRepository(db).GetBySlugAsync(slug, userId, admin);
         Assert.Equal(visible, recipe is not null);
     }
+
+    [Theory]
+    [InlineData("published", null, false, true)]
+    [InlineData("own-draft", "owner", false, true)]
+    [InlineData("own-draft", "other", true, true)]
+    [InlineData("own-draft", null, false, false)]
+    [InlineData("own-draft", "other", false, false)]
+    [InlineData("own-draft", "   ", false, false)]
+    [InlineData("archived", "owner", false, true)]
+    [InlineData("archived", "other", true, true)]
+    [InlineData("archived", null, false, false)]
+    [InlineData("archived", "other", false, false)]
+    [InlineData("deleted", null, false, false)]
+    [InlineData("deleted", "owner", false, false)]
+    [InlineData("deleted", "other", true, false)]
+    [InlineData("missing", null, false, false)]
+    [InlineData("missing", "owner", true, false)]
+    public async Task Detail_access_projection_matches_existing_visibility(
+        string slug, string? userId, bool admin, bool visible)
+    {
+        await using var db = NewContext();
+        var repository = new RecipeRepository(db);
+
+        var access = await repository.GetDetailAccessBySlugAsync(slug, userId, admin);
+
+        Assert.Equal(visible, access is not null);
+        Assert.Empty(db.ChangeTracker.Entries());
+        var detail = await repository.GetBySlugAsync(slug, userId, admin);
+        Assert.Equal(detail is not null, access is not null);
+        if (detail is not null)
+        {
+            Assert.Equal(detail.Id, access!.Id);
+            Assert.Equal(detail.Slug, access.Slug);
+            Assert.Equal(detail.Status, access.Status);
+            Assert.Equal(detail.RowVersion, access.RowVersion);
+        }
+    }
+
+    [Fact]
+    public async Task Detail_access_projection_returns_the_persisted_version_without_tracking()
+    {
+        Guid id;
+        byte[] persistedVersion;
+        await using (var writer = NewContext())
+        {
+            var recipe = await writer.Recipes.SingleAsync(item => item.Slug == "published");
+            recipe.Title = "Updated title";
+            await writer.SaveChangesAsync();
+            id = recipe.Id;
+            persistedVersion = recipe.RowVersion.ToArray();
+        }
+
+        await using var reader = NewContext();
+        var access = await new RecipeRepository(reader)
+            .GetDetailAccessBySlugAsync("published", null, false);
+
+        Assert.NotNull(access);
+        Assert.Equal(id, access.Id);
+        Assert.Equal("published", access.Slug);
+        Assert.Equal(RecipeStatus.Published, access.Status);
+        Assert.NotEmpty(persistedVersion);
+        Assert.Equal(persistedVersion, access.RowVersion);
+        Assert.Empty(reader.ChangeTracker.Entries());
+    }
 }

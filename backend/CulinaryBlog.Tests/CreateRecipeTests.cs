@@ -28,6 +28,20 @@ public sealed class CreateRecipeTests
         await using var factory = new RecipeApiFactory();
         await factory.InitializeAsync();
         using var client = factory.Client(role);
+        var observedCommittedState = false;
+        factory.Cache.OnRemoveAsync = async key =>
+        {
+            Assert.Equal("recipe:canh-chua-ca", key);
+            await using var committedDb = factory.Database.NewContext();
+            var committed = await committedDb.Recipes.SingleAsync(x => x.Slug == "canh-chua-ca");
+            Assert.Equal(RecipeStatus.Draft, committed.Status);
+            Assert.Equal(factory.AuthorId, committed.AuthorId);
+            Assert.Equal(nutrition ? 150m : (decimal?)null, committed.Nutrition.Calories);
+            Assert.Equal(nutrition ? 12.5m : (decimal?)null, committed.Nutrition.Protein);
+            Assert.Equal(nutrition ? 0m : (decimal?)null, committed.Nutrition.Fat);
+            Assert.Null(committed.Nutrition.Carbs);
+            observedCommittedState = true;
+        };
         var body = Body(factory);
         body["authorId"] = "forged-user";
         body["status"] = 2;
@@ -42,7 +56,10 @@ public sealed class CreateRecipeTests
         }
         var response = await client.PostAsJsonAsync("/api/v1/recipes", body);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.True(observedCommittedState);
         var dto = (await response.Content.ReadFromJsonAsync<RecipeDto>())!;
+        Assert.Equal(new[] { $"recipe:{dto.Slug}" }, factory.Cache.RemovedKeys);
+        Assert.DoesNotContain("categories:all", factory.Cache.RemovedKeys);
         Assert.Equal("/api/v1/recipes/canh-chua-ca", response.Headers.Location?.ToString());
         Assert.Equal(factory.AuthorId, dto.AuthorId);
         Assert.Equal(RecipeStatus.Draft, dto.Status);
@@ -80,6 +97,7 @@ public sealed class CreateRecipeTests
         using var client = factory.Client(role, expired, subject);
         var response = await client.PostAsJsonAsync("/api/v1/recipes", Body(factory));
         Assert.Equal(status, (int)response.StatusCode);
+        Assert.Empty(factory.Cache.RemovedKeys);
         await using var db = factory.Database.NewContext();
         Assert.Equal(1, await db.Recipes.CountAsync());
     }
@@ -97,6 +115,7 @@ public sealed class CreateRecipeTests
 
         var response = await client.PostAsJsonAsync("/api/v1/recipes", Body(factory));
         Assert.Equal(401, (int)response.StatusCode);
+        Assert.Empty(factory.Cache.RemovedKeys);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
         var problem = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
         Assert.Equal("AUTH_TOKEN_INVALID", (string?)problem["type"]);
@@ -126,6 +145,7 @@ public sealed class CreateRecipeTests
         else body[field] = value;
         var response = await client.PostAsJsonAsync("/api/v1/recipes", body);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(factory.Cache.RemovedKeys);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
         var problem = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
         Assert.Equal("VALIDATION_ERROR", (string?)problem["type"]);
@@ -144,6 +164,7 @@ public sealed class CreateRecipeTests
         using var client = factory.Client();
         var response = await client.PostAsync("/api/v1/recipes", new StringContent(json, Encoding.UTF8, "application/json"));
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(factory.Cache.RemovedKeys);
     }
 
     [Theory]
@@ -164,6 +185,7 @@ public sealed class CreateRecipeTests
         body["title"] = "Original recipe";
         var response = await client.PostAsJsonAsync("/api/v1/recipes", body);
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Empty(factory.Cache.RemovedKeys);
         Assert.Equal("RECIPE_SLUG_EXISTS", (string?)JsonNode.Parse(await response.Content.ReadAsStringAsync())!["type"]);
         await using var verify = factory.Database.NewContext();
         Assert.Equal(1, await verify.Recipes.IgnoreQueryFilters().CountAsync());
@@ -177,9 +199,31 @@ public sealed class CreateRecipeTests
         using var client = factory.Client();
         var response = await client.PostAsJsonAsync("/api/v1/recipes", Body(factory));
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Empty(factory.Cache.RemovedKeys);
         Assert.Equal("RECIPE_SLUG_EXISTS", (string?)JsonNode.Parse(await response.Content.ReadAsStringAsync())!["type"]);
         await using var db = factory.Database.NewContext();
         Assert.Equal(1, await db.Recipes.CountAsync());
+    }
+
+    [Fact]
+    public async Task Cache_failure_after_create_commit_keeps_saved_recipe_and_nutrition()
+    {
+        await using var factory = new RecipeApiFactory();
+        await factory.InitializeAsync();
+        factory.Cache.OnRemoveAsync = _ => throw new IOException("Test cache removal failure");
+        using var client = factory.Client();
+        var body = Body(factory);
+        body["nutrition"] = new JsonObject { ["calories"] = 150 };
+
+        var response = await client.PostAsJsonAsync("/api/v1/recipes", body);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(new[] { "recipe:canh-chua-ca" }, factory.Cache.RemovedKeys);
+        await using var db = factory.Database.NewContext();
+        var saved = await db.Recipes.SingleAsync(x => x.Slug == "canh-chua-ca");
+        Assert.Equal(RecipeStatus.Draft, saved.Status);
+        Assert.Equal(factory.AuthorId, saved.AuthorId);
+        Assert.Equal(150m, saved.Nutrition.Calories);
     }
 
     [Fact]

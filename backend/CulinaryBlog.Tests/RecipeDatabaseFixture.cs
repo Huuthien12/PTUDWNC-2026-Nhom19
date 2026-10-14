@@ -5,12 +5,14 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace CulinaryBlog.Tests;
 
 // Dedicated relational fixture: keeps the complete production Recipe model and save pipeline.
 public sealed class RecipeDatabaseFixture : IAsyncDisposable
 {
+    public SaveChangesInterceptor? SaveInterceptor { get; set; }
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
     private readonly string? _postgresConnection = CreatePostgresConnection();
 
@@ -37,6 +39,7 @@ public sealed class RecipeDatabaseFixture : IAsyncDisposable
         builder.UseNpgsql(_postgresConnection);
     }
 
+    if (SaveInterceptor is not null) builder.AddInterceptors(SaveInterceptor);
     return new AppDbContext(builder.Options);
 }
 

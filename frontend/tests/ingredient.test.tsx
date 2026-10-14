@@ -46,7 +46,7 @@ beforeEach(() => {
   calls = [];
   intercept = undefined;
   globalThis.fetch = async (url, options = {}) => {
-    const path = new URL(String(url)).pathname;
+    const path = new URL(String(url), "http://localhost").pathname;
     const method = options.method ?? "GET";
     const body = options.body ? JSON.parse(String(options.body)) : {};
     calls.push({ path, method, body });

@@ -76,7 +76,7 @@ public sealed class CreateCategoryCommandHandler
             cancellationToken);
 
         // Category đã thay đổi -> xóa cache cũ
-        await _cacheService.RemoveAsync(
+        await _cacheService.RemoveSafelyAsync(
             CategoriesCacheKey,
             cancellationToken);
 

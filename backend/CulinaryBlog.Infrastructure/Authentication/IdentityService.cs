@@ -8,13 +8,15 @@ public sealed class IdentityService : IIdentityService
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
+    private readonly IRecipeCacheInvalidator? _recipeCache;
 
     public IdentityService(
         UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole> roleManager)
+        RoleManager<IdentityRole> roleManager, IRecipeCacheInvalidator? recipeCache = null)
     {
         _userManager = userManager;
         _roleManager = roleManager;
+        _recipeCache = recipeCache;
     }
 
     public async Task<IdentityRegistrationResult> RegisterAsync(
@@ -210,6 +212,8 @@ public sealed class IdentityService : IIdentityService
         if (fullName is not null) user.FullName = fullName.Trim();
         if (avatarUrl is not null) user.AvatarUrl = string.IsNullOrWhiteSpace(avatarUrl) ? null : avatarUrl;
         if (!(await _userManager.UpdateAsync(user)).Succeeded) return null;
+        // Identity's UpdateAsync has completed its SaveChanges before invalidation.
+        if (_recipeCache is not null) await _recipeCache.AuthorChangedAsync(userId, cancellationToken);
         return await ToProfileAsync(user);
     }
 

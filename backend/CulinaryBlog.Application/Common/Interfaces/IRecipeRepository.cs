@@ -92,6 +92,12 @@ public interface IRecipeRepository
         bool isAdmin,
         CancellationToken cancellationToken = default);
 
+    Task<RecipeDetailAccessResult?> GetDetailAccessBySlugAsync(
+        string slug,
+        string? userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default);
+
     // ---- RecipeImage mutations (FR-RCP-008) ----
 
     // Returns a tracked recipe with its (non-deleted) Images for RecipeImage mutations.

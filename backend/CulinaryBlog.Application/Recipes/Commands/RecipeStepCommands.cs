@@ -171,7 +171,7 @@ public sealed class DeleteRecipeStepCommandValidator
 public sealed class CreateRecipeStepCommandHandler(
     IUnitOfWork unitOfWork,
     IValidator<CreateRecipeStepCommand> validator,
-    TimeProvider clock)
+    TimeProvider clock, IRecipeCacheInvalidator? invalidator = null)
     : IRequestHandler<CreateRecipeStepCommand, RecipeStepListDto>
 {
     public async Task<RecipeStepListDto> Handle(
@@ -236,6 +236,7 @@ public sealed class CreateRecipeStepCommandHandler(
         await unitOfWork.SaveChangesAsync(
             cancellationToken);
 
+        if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
         return RecipeStepCommandResult.CreateResult(recipe);
     }
 }
@@ -243,7 +244,7 @@ public sealed class CreateRecipeStepCommandHandler(
 public sealed class UpdateRecipeStepCommandHandler(
     IUnitOfWork unitOfWork,
     IValidator<UpdateRecipeStepCommand> validator,
-    TimeProvider clock)
+    TimeProvider clock, IRecipeCacheInvalidator? invalidator = null)
     : IRequestHandler<UpdateRecipeStepCommand, RecipeStepListDto>
 {
     public async Task<RecipeStepListDto> Handle(
@@ -302,6 +303,7 @@ public sealed class UpdateRecipeStepCommandHandler(
         await unitOfWork.SaveChangesAsync(
             cancellationToken);
 
+        if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
         return RecipeStepCommandResult.CreateResult(recipe);
     }
 }
@@ -309,7 +311,7 @@ public sealed class UpdateRecipeStepCommandHandler(
 public sealed class DeleteRecipeStepCommandHandler(
     IUnitOfWork unitOfWork,
     IValidator<DeleteRecipeStepCommand> validator,
-    TimeProvider clock)
+    TimeProvider clock, IRecipeCacheInvalidator? invalidator = null)
     : IRequestHandler<DeleteRecipeStepCommand, string>
 {
     public async Task<string> Handle(
@@ -404,6 +406,7 @@ public sealed class DeleteRecipeStepCommandHandler(
         },
         cancellationToken);
 
+    if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
     return Convert.ToBase64String(recipe.RowVersion);
     }
 }

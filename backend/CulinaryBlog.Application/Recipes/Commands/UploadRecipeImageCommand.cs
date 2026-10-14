@@ -22,7 +22,7 @@ public sealed class UploadRecipeImageCommandValidator : AbstractValidator<Upload
 }
 
 public sealed class UploadRecipeImageCommandHandler(IUnitOfWork unitOfWork, IFileStorageService storage,
-    IImageCleanupQueue cleanup, TimeProvider clock) : IRequestHandler<UploadRecipeImageCommand, RecipeImageDto>
+    IImageCleanupQueue cleanup, TimeProvider clock, IRecipeCacheInvalidator? invalidator = null) : IRequestHandler<UploadRecipeImageCommand, RecipeImageDto>
 {
     public async Task<RecipeImageDto> Handle(UploadRecipeImageCommand command, CancellationToken cancellationToken)
     {
@@ -35,6 +35,7 @@ public sealed class UploadRecipeImageCommandHandler(IUnitOfWork unitOfWork, IFil
 
         // 400 for invalid MIME/size/signature, 503 when MinIO is down; nothing is written to the DB then.
         var stored = await storage.StoreAsync(recipe.Id, command.Content, command.ContentType, cancellationToken);
+        RecipeImageDto result;
         try
         {
             var image = recipe.CreateImage(stored.Url, command.AltText);
@@ -42,7 +43,7 @@ public sealed class UploadRecipeImageCommandHandler(IUnitOfWork unitOfWork, IFil
             recipe.UpdatedAt = clock.GetUtcNow().UtcDateTime;
             unitOfWork.Recipes.Update(recipe, expected);
             await unitOfWork.SaveChangesAsync(cancellationToken);
-            return RecipeImageDto.From(image, recipe.RowVersion);
+            result = RecipeImageDto.From(image, recipe.RowVersion);
         }
         catch
         {
@@ -50,5 +51,7 @@ public sealed class UploadRecipeImageCommandHandler(IUnitOfWork unitOfWork, IFil
             RecipeImageAccess.TryEnqueueDelete(cleanup, stored.ObjectKey);
             throw;
         }
+        if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
+        return result;
     }
 }

@@ -12,13 +12,15 @@ type PageProps = { params: Promise<{ slug: string }> };
 export default function RecipeDetailPage({ params }: PageProps) {
   const { slug } = use(params);
   const [recipe, setRecipe] = useState<RecipeDetail | null>(null);
+  const [loadedSlug, setLoadedSlug] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<"loading" | "missing" | "error" | "ready">("loading");
   const session = useSession();
   const mutation = useRecipeMutation();
-  useEffect(() => { let active = true; void getRecipeBySlug(slug).then(value => { if (active) { setRecipe(value); setState("ready"); } }).catch((error: unknown) => { if (active) setState(error instanceof ApiError && error.status === 404 ? "missing" : "error"); }); return () => { active = false; }; }, [slug]);
-  if (state === "loading") return <main className="p-8" role="status">Đang tải công thức...</main>;
+  useEffect(() => { let active = true; void getRecipeBySlug(slug).then(value => { if (active) { setRecipe(value); setLoadedSlug(slug); setState("ready"); } }).catch((error: unknown) => { if (active) { setLoadedSlug(slug); setState(error instanceof ApiError && error.status === 404 ? "missing" : "error"); } }); return () => { active = false; }; }, [slug, attempt]);
+  if (loadedSlug !== slug || state === "loading") return <main className="p-8" role="status">Đang tải công thức...</main>;
   if (state === "missing") return <main className="p-8" role="alert">Không tìm thấy công thức.</main>;
-  if (state === "error" || !recipe) return <main className="p-8" role="alert">Không thể tải công thức.</main>;
+  if (state === "error" || !recipe) return <main className="p-8" role="alert">Không thể tải công thức. <button onClick={() => { setState("loading"); setAttempt(value => value + 1); }}>Thử lại</button></main>;
   const image = recipe.images.find(item => item.isPrimary) ?? recipe.images[0];
   const canEditRecipe = canManageIngredients(session, recipe.author.id);
   const canEditIngredients = canEditRecipe;
