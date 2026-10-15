@@ -1,5 +1,12 @@
 using CulinaryBlog.API.Middleware;
+using CulinaryBlog.Domain.Exceptions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Primitives;
 using Xunit;
 
 namespace CulinaryBlog.Tests;
@@ -53,6 +60,56 @@ public sealed class CorrelationIdMiddlewareTests
         var effectiveId = context.Response.Headers[CorrelationIdMiddleware.HeaderName].ToString();
         Assert.NotEqual(unsafeId, effectiveId);
         Assert.True(Guid.TryParseExact(effectiveId, "N", out _));
+    }
+
+    [Fact]
+    public async Task Multiple_client_ids_are_replaced_with_one_generated_id()
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Headers[CorrelationIdMiddleware.HeaderName] =
+            new StringValues(["value-one", "value-two"]);
+        var middleware = CreateMiddleware();
+
+        await middleware.InvokeAsync(context);
+
+        var responseIds = context.Response.Headers[CorrelationIdMiddleware.HeaderName];
+        Assert.Equal(1, responseIds.Count);
+        Assert.DoesNotContain(responseIds.ToString(), new[] { "value-one", "value-two" });
+        Assert.True(Guid.TryParseExact(responseIds.ToString(), "N", out _));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("lab8-test-123")]
+    public async Task Handled_error_response_returns_effective_id(string? suppliedId)
+    {
+        using var host = await new HostBuilder()
+            .ConfigureWebHost(builder => builder
+                .UseTestServer()
+                .ConfigureServices(services => services.AddLogging())
+                .Configure(app =>
+                {
+                    app.UseMiddleware<CorrelationIdMiddleware>();
+                    app.UseMiddleware<GlobalExceptionMiddleware>();
+                    app.Run(_ => Task.FromException(
+                        new NotFoundException("TEST_NOT_FOUND", "Missing.")));
+                }))
+            .StartAsync();
+        using var client = host.GetTestClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/test");
+        if (suppliedId is not null)
+            request.Headers.Add(CorrelationIdMiddleware.HeaderName, suppliedId);
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(StatusCodes.Status404NotFound, (int)response.StatusCode);
+        Assert.True(response.Headers.TryGetValues(CorrelationIdMiddleware.HeaderName, out var values));
+        var responseIds = values.ToArray();
+        var effectiveId = Assert.Single(responseIds);
+        if (suppliedId is null)
+            Assert.True(Guid.TryParseExact(effectiveId, "N", out _));
+        else
+            Assert.Equal(suppliedId, effectiveId);
     }
 
     [Fact]

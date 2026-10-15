@@ -27,9 +27,10 @@ public sealed class GlobalExceptionMiddleware(
                 exception is not ServiceUnavailableException)
             {
                 logger.LogError(
-                    "Unhandled request error ({ExceptionType}) for {RequestPath}",
+                    "Unhandled request error ({ExceptionType}) for {RequestPath} at {ExceptionStackTrace}",
                     exception.GetType().Name,
-                    context.Request.Path);
+                    context.Request.Path,
+                    exception.StackTrace);
             }
             else if (problem.Status >= StatusCodes.Status500InternalServerError)
             {

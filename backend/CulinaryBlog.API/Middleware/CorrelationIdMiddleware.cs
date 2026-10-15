@@ -12,7 +12,15 @@ public sealed class CorrelationIdMiddleware(
     {
         var correlationId = GetCorrelationId(context.Request);
         context.Items[ItemKey] = correlationId;
-        context.Response.Headers[HeaderName] = correlationId;
+        if (!context.Response.HasStarted)
+        {
+            context.Response.Headers[HeaderName] = correlationId;
+            context.Response.OnStarting(() =>
+            {
+                context.Response.Headers[HeaderName] = correlationId;
+                return Task.CompletedTask;
+            });
+        }
 
         using (logger.BeginScope(new Dictionary<string, object>
                {

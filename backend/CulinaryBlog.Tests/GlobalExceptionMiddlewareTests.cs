@@ -12,6 +12,8 @@ namespace CulinaryBlog.Tests;
 
 public sealed class GlobalExceptionMiddlewareTests
 {
+    private const string SensitiveSentinel = "SECRET-RESET-TOKEN-DO-NOT-LOG";
+
     [Theory]
     [InlineData(404, "CATEGORY_NOT_FOUND")]
     [InlineData(409, "CATEGORY_NAME_EXISTS")]
@@ -56,23 +58,31 @@ public sealed class GlobalExceptionMiddlewareTests
     [Fact]
     public async Task Maps_unexpected_exceptions_to_safe_problem_details()
     {
-        var (context, body, logger) = await InvokeAsync(
-            new InvalidOperationException("Database password: secret-value"));
+        var (context, body, logger) = await InvokeAsync(ThrowSensitiveException);
 
         Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
         Assert.StartsWith("application/problem+json", context.Response.ContentType);
-        Assert.DoesNotContain("secret-value", body);
+        Assert.DoesNotContain(SensitiveSentinel, body);
         Assert.DoesNotContain("InvalidOperationException", body);
+        Assert.DoesNotContain(nameof(ThrowSensitiveException), body);
 
         using var document = JsonDocument.Parse(body);
         Assert.Equal("INTERNAL_SERVER_ERROR", document.RootElement.GetProperty("type").GetString());
         Assert.Equal("test-trace-id", document.RootElement.GetProperty("traceId").GetString());
-        Assert.Contains(logger.Entries, entry => entry.Level == LogLevel.Error);
-        Assert.DoesNotContain("secret-value", logger.AllText);
+        var error = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.Equal(nameof(InvalidOperationException), error.Properties["ExceptionType"]);
+        var stackTrace = Assert.IsType<string>(error.Properties["ExceptionStackTrace"]);
+        Assert.Contains(nameof(ThrowSensitiveException), stackTrace);
+        Assert.Null(error.Exception);
+        Assert.DoesNotContain(SensitiveSentinel, logger.AllText);
     }
 
     private static async Task<(DefaultHttpContext Context, string Body, RecordingLogger<GlobalExceptionMiddleware> Logger)>
         InvokeAsync(Exception exception)
+        => await InvokeAsync(_ => Task.FromException(exception));
+
+    private static async Task<(DefaultHttpContext Context, string Body, RecordingLogger<GlobalExceptionMiddleware> Logger)>
+        InvokeAsync(RequestDelegate next)
     {
         var context = new DefaultHttpContext();
         context.Request.Path = "/api/v1/test";
@@ -80,12 +90,17 @@ public sealed class GlobalExceptionMiddlewareTests
         context.Response.Body = new MemoryStream();
 
         var logger = new RecordingLogger<GlobalExceptionMiddleware>();
-        var middleware = new GlobalExceptionMiddleware(_ => Task.FromException(exception), logger);
+        var middleware = new GlobalExceptionMiddleware(next, logger);
 
         await middleware.InvokeAsync(context);
 
         context.Response.Body.Position = 0;
         using var reader = new StreamReader(context.Response.Body, leaveOpen: true);
         return (context, await reader.ReadToEndAsync(), logger);
+    }
+
+    private static Task ThrowSensitiveException(HttpContext _)
+    {
+        throw new InvalidOperationException(SensitiveSentinel);
     }
 }
