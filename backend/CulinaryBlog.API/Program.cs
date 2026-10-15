@@ -146,6 +146,14 @@ builder.Services.AddOptions<SmtpOptions>()
     .Validate(options => builder.Environment.IsDevelopment() || options.EnableSsl,
         "SMTP TLS is required outside Development.")
     .ValidateOnStart();
+builder.Services.AddOptions<PasswordResetOptions>()
+    .Bind(builder.Configuration.GetSection(PasswordResetOptions.SectionName))
+    .Validate(options => Uri.TryCreate(options.FrontendBaseUrl, UriKind.Absolute, out _),
+        "PasswordReset:FrontendBaseUrl must be an absolute URL.")
+    .Validate(options => builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing") ||
+        Uri.TryCreate(options.FrontendBaseUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps,
+        "Password reset links must use HTTPS outside Development.")
+    .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddCulinaryHealthChecks();
 builder.Services.AddOpenApi("v1", options =>

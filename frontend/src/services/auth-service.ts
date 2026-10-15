@@ -20,6 +20,17 @@ export interface ChangePasswordRequest {
   confirmNewPassword: string;
 }
 
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  email: string;
+  token: string;
+  newPassword: string;
+  confirmNewPassword: string;
+}
+
 export type LoginResponse = AuthResponse;
 
 export interface GoogleLoginRequest {
@@ -47,5 +58,21 @@ export function changePassword(request: ChangePasswordRequest): Promise<void> {
     method: "POST",
     auth: true,
     body: JSON.stringify(request),
+  });
+}
+
+export function forgotPassword(request: ForgotPasswordRequest): Promise<void> {
+  return apiClient<void>("/api/v1/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify(request),
+    cache: "no-store",
+  });
+}
+
+export function resetPassword(request: ResetPasswordRequest): Promise<void> {
+  return apiClient<void>("/api/v1/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify(request),
+    cache: "no-store",
   });
 }

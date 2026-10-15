@@ -45,6 +45,29 @@ public sealed class RecordingWelcomeEmailQueue : IWelcomeEmailQueue
     }
 }
 
+public sealed class RecordingEmailService : IEmailService
+{
+    public List<(string Email, string FullName, string Token)> PasswordResets { get; } = [];
+    public bool FailPasswordResetDelivery { get; set; }
+
+    public Task SendWelcomeEmailAsync(
+        string email,
+        string fullName,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task SendPasswordResetEmailAsync(
+        string email,
+        string fullName,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (FailPasswordResetDelivery) throw new InvalidOperationException("Test email failure.");
+        PasswordResets.Add((email, fullName, token));
+        return Task.CompletedTask;
+    }
+}
+
 public sealed class FakeGoogleCredentialVerifier : IGoogleCredentialVerifier
 {
     public GoogleIdentity? Identity { get; set; }
@@ -66,6 +89,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     public string DatabasePath { get; } = Path.Combine(Path.GetTempPath(), $"culinary-auth-tests-{Guid.NewGuid():N}.db");
     public TestClock Clock { get; } = new();
     public RecordingWelcomeEmailQueue WelcomeEmails { get; } = new();
+    public RecordingEmailService Emails { get; } = new();
     public FakeGoogleCredentialVerifier GoogleVerifier { get; } = new();
     public RecordingRecipeInvalidator RecipeInvalidator { get; } = new();
     public bool EnableRateLimiting { get; init; }
@@ -79,6 +103,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Audience", "culinary-tests");
         builder.UseSetting("Jwt:ExpirationMinutes", "15");
         builder.UseSetting("Email:Smtp:EnableSsl", "true");
+        builder.UseSetting("PasswordReset:FrontendBaseUrl", "https://frontend.test");
         builder.UseSetting("RateLimiting:Enabled", EnableRateLimiting.ToString());
         builder.ConfigureServices(services =>
         {
@@ -90,6 +115,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<TimeProvider>(Clock);
             services.RemoveAll<IWelcomeEmailQueue>();
             services.AddSingleton<IWelcomeEmailQueue>(WelcomeEmails);
+            services.RemoveAll<IEmailService>();
+            services.AddSingleton<IEmailService>(Emails);
             services.RemoveAll<IGoogleCredentialVerifier>();
             services.AddSingleton<IGoogleCredentialVerifier>(GoogleVerifier);
             // This fixture intentionally omits Recipe entities; profile cache signals use a recording fake.
