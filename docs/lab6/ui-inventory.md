@@ -21,7 +21,7 @@
 | `/categories` | Category list | Public | `getCategories()` | Functional | Thuận category/public scope; đã merge | Có loading, retry/error và empty state. |
 | `/categories/[slug]` | Category detail and recipe list | Public; backend quyết định visibility | `getCategoryBySlug(slug, page, 12)` | Functional | Thuận category/public scope; đã merge | Có pagination; `notFound()` khi API trả 404. |
 | `/recipes` | Recipe list/search | Public; backend quyết định visibility | `RecipeListClient`, recipe/search services | Functional | Thái recipe UI scope; đã merge | Đọc `q` và `page`; có search/pagination states. |
-| `/recipes/[slug]` | Recipe detail | Public; owner/admin controls khi session cho phép | `getRecipeBySlug(slug)`, lifecycle/ingredient controls | Functional | Thái recipe UI scope; đã merge | Có loading, missing, error/retry và detail ingredients/steps/images. |
+| `/recipes/[slug]` | Recipe detail | Public; owner/admin controls khi session cho phép | `getRecipeBySlug(slug)`, owner/admin `IngredientEditor` | Functional | Thái recipe UI scope; đã merge | Có loading, missing, error/retry và detail ingredients/steps/images. |
 | `/recipes/create` | Create recipe | Author or Admin | `CreateRecipeForm` | Functional | Thái recipe form scope; đã merge | `RequireAuth` bảo vệ client-side; backend vẫn là authority. |
 | `/recipes/[slug]/edit` | Edit recipe | Author or Admin | `EditRecipeForm` | Functional | Thái recipe form/child editor scope; đã merge | Form quản lý RowVersion và editor child theo implementation hiện tại. |
 | `/recipes/dashboard` | Author recipe dashboard | Author or Admin | `AuthorRecipeDashboard` / recipe services | Functional | Thiện dashboard scope; đã merge | Load recipe detail, lifecycle actions, delete, 422 reload. |
@@ -56,7 +56,7 @@
 | `CreateRecipeForm` / `EditRecipeForm` | Recipe create/update form and mutation state | Recipe create/edit routes | Functional | Thái recipe-form scope; merged current main. |
 | `IngredientEditor` | Ingredient CRUD/order interface | Recipe detail/edit integration | Functional | Uyên ingredient scope; merged current main. |
 | `RecipeStepManager` | Step CRUD/order interface | Recipe edit integration | Functional | Thái step scope; merged current main. |
-| `RecipeListClient` / `RecipeCard` / `RecipePagination` | Recipe list, filters/search UI and pagination | `/recipes`, homepage-related lists | Functional | Recipe/list scope; merged current main. |
+| `RecipeListClient` / `RecipeCard` / `RecipePagination` | Recipe list, filters/search UI and pagination | `/recipes` | Functional | Recipe/list scope; merged current main. |
 | `CategoryList` / `CategoryCard` / `CategoryPagination` / `CategoryRecipeCard` | Category cards, category recipe list and pagination | Category routes | Functional | Thuận category/public scope; merged current main. |
 | `SearchBar` / `SearchPagination` | Query input and pagination controls | Header/recipe list | Functional | Thuận search scope; merged current main. |
 | `CategoryManager` / `CategoryForm` | Admin category mutation UI | `/admin/categories` | Functional | Category/admin scope; merged current main. |
