@@ -81,14 +81,18 @@ public sealed class ChangePasswordApiTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Change_password_locks_after_five_incorrect_current_passwords()
+    public async Task Change_password_failures_do_not_lock_the_login_account()
     {
         await AuthenticateAsync();
-        for (var attempt = 1; attempt <= 5; attempt++)
+        for (var attempt = 0; attempt < 5; attempt++)
         {
             var response = await ChangeAsync("wrong-password", NewPassword, NewPassword);
-            Assert.Equal(attempt == 5 ? HttpStatusCode.Locked : HttpStatusCode.BadRequest, response.StatusCode);
+            await AssertProblem(response, HttpStatusCode.BadRequest, "INVALID_CURRENT_PASSWORD");
         }
+
+        _client.DefaultRequestHeaders.Authorization = null;
+        Assert.Equal(HttpStatusCode.OK,
+            (await _client.PostAsJsonAsync("/api/v1/auth/login", new { email = Email, password = OldPassword })).StatusCode);
     }
 
     [Fact]
