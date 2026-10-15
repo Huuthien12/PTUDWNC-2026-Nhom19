@@ -37,10 +37,30 @@ using System.Threading.RateLimiting;
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 using Microsoft.AspNetCore.Authorization;
+using Serilog;
+using Serilog.Events;
+using Serilog.Formatting.Json;
 
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console(new JsonFormatter())
+    .CreateBootstrapLogger();
+
+try
+{
 var builder = WebApplication.CreateBuilder(args);
-if (builder.Environment.IsEnvironment("Testing"))
-    builder.Logging.ClearProviders(); // Isolated test hosts must not write Windows Event Log.
+builder.Logging.ClearProviders();
+builder.Host.UseSerilog((context, services, configuration) =>
+{
+    configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext();
+
+    if (context.HostingEnvironment.IsEnvironment("Testing"))
+        configuration.MinimumLevel.Warning();
+    else if (context.HostingEnvironment.IsDevelopment())
+        configuration.MinimumLevel.Override("CulinaryBlog", LogEventLevel.Debug);
+});
 
 var connectionString =
     builder.Configuration.GetConnectionString("DefaultConnection")
@@ -115,6 +135,9 @@ builder.Services.AddMediatR(config =>
 builder.Services.AddValidatorsFromAssembly(
     typeof(GetCategoriesQuery).Assembly);
 
+builder.Services.AddTransient(
+    typeof(IPipelineBehavior<,>),
+    typeof(LoggingBehavior<,>));
 builder.Services.AddTransient(
     typeof(IPipelineBehavior<,>),
     typeof(ValidationBehavior<,>));
@@ -434,6 +457,8 @@ if (!app.Environment.IsEnvironment("Testing"))
 // =========================
 // Middleware
 // =========================
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseCors("Frontend");
 if (!app.Environment.IsEnvironment("Testing") || app.Configuration.GetValue<bool>("RateLimiting:Enabled"))
@@ -864,6 +889,18 @@ app.MapRecipeEndpoints();
 app.MapRecipeImageEndpoints();
 
 app.Run();
+}
+catch (Exception exception)
+{
+    Log.Fatal(
+        "CulinaryBlog API terminated unexpectedly during startup ({ExceptionType}).",
+        exception.GetType().Name);
+    throw;
+}
+finally
+{
+    Log.CloseAndFlush();
+}
 
 
 // =========================

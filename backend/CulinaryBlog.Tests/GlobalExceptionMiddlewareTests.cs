@@ -5,7 +5,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace CulinaryBlog.Tests;
@@ -20,6 +20,7 @@ public sealed class GlobalExceptionMiddlewareTests
     [InlineData(403, "RECIPE_FORBIDDEN")]
     [InlineData(422, "RECIPE_CONCURRENCY_CONFLICT")]
     [InlineData(401, "AUTH_TOKEN_INVALID")]
+    [InlineData(503, "CACHE_UNAVAILABLE")]
     public async Task Maps_expected_exceptions_to_problem_details(
         int expectedStatus,
         string expectedCode)
@@ -32,10 +33,11 @@ public sealed class GlobalExceptionMiddlewareTests
             "RECIPE_PUBLISH_INCOMPLETE" => new BusinessRuleException(expectedCode, "Recipe is incomplete."),
             "RECIPE_FORBIDDEN" => new ForbiddenException(expectedCode, "Action is not allowed."),
             "RECIPE_CONCURRENCY_CONFLICT" => new DbUpdateConcurrencyException(),
+            "CACHE_UNAVAILABLE" => new ServiceUnavailableException(expectedCode, "Cache unavailable."),
             _ => new UnauthorizedAccessException("Do not expose this.")
         };
 
-        var (context, body) = await InvokeAsync(exception);
+        var (context, body, logger) = await InvokeAsync(exception);
 
         Assert.Equal(expectedStatus, context.Response.StatusCode);
         Assert.StartsWith("application/problem+json", context.Response.ContentType);
@@ -47,12 +49,14 @@ public sealed class GlobalExceptionMiddlewareTests
         {
             Assert.True(document.RootElement.TryGetProperty("errors", out _));
         }
+
+        Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Error);
     }
 
     [Fact]
     public async Task Maps_unexpected_exceptions_to_safe_problem_details()
     {
-        var (context, body) = await InvokeAsync(
+        var (context, body, logger) = await InvokeAsync(
             new InvalidOperationException("Database password: secret-value"));
 
         Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
@@ -63,23 +67,25 @@ public sealed class GlobalExceptionMiddlewareTests
         using var document = JsonDocument.Parse(body);
         Assert.Equal("INTERNAL_SERVER_ERROR", document.RootElement.GetProperty("type").GetString());
         Assert.Equal("test-trace-id", document.RootElement.GetProperty("traceId").GetString());
+        Assert.Contains(logger.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.DoesNotContain("secret-value", logger.AllText);
     }
 
-    private static async Task<(DefaultHttpContext Context, string Body)> InvokeAsync(Exception exception)
+    private static async Task<(DefaultHttpContext Context, string Body, RecordingLogger<GlobalExceptionMiddleware> Logger)>
+        InvokeAsync(Exception exception)
     {
         var context = new DefaultHttpContext();
         context.Request.Path = "/api/v1/test";
         context.TraceIdentifier = "test-trace-id";
         context.Response.Body = new MemoryStream();
 
-        var middleware = new GlobalExceptionMiddleware(
-            _ => Task.FromException(exception),
-            NullLogger<GlobalExceptionMiddleware>.Instance);
+        var logger = new RecordingLogger<GlobalExceptionMiddleware>();
+        var middleware = new GlobalExceptionMiddleware(_ => Task.FromException(exception), logger);
 
         await middleware.InvokeAsync(context);
 
         context.Response.Body.Position = 0;
         using var reader = new StreamReader(context.Response.Body, leaveOpen: true);
-        return (context, await reader.ReadToEndAsync());
+        return (context, await reader.ReadToEndAsync(), logger);
     }
 }

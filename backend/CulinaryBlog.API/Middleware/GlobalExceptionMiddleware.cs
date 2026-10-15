@@ -11,6 +11,8 @@ public sealed class GlobalExceptionMiddleware(
     RequestDelegate next,
     ILogger<GlobalExceptionMiddleware> logger)
 {
+    public const string HandledExceptionItemKey = "GlobalExceptionHandled";
+
     public async Task InvokeAsync(HttpContext context)
     {
         try
@@ -19,9 +21,35 @@ public sealed class GlobalExceptionMiddleware(
         }
         catch (Exception exception) when (!context.Response.HasStarted)
         {
-            logger.LogError(exception, "Unhandled request error for {RequestPath}", context.Request.Path);
-
             var problem = CreateProblemDetails(context, exception);
+            context.Items[HandledExceptionItemKey] = true;
+            if (problem.Status >= StatusCodes.Status500InternalServerError &&
+                exception is not ServiceUnavailableException)
+            {
+                logger.LogError(
+                    "Unhandled request error ({ExceptionType}) for {RequestPath}",
+                    exception.GetType().Name,
+                    context.Request.Path);
+            }
+            else if (problem.Status >= StatusCodes.Status500InternalServerError)
+            {
+                logger.LogWarning(
+                    "Request failed with {StatusCode} {ErrorCode} ({ExceptionType}) for {RequestPath}",
+                    problem.Status,
+                    problem.Type,
+                    exception.GetType().Name,
+                    context.Request.Path);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Request failed with {StatusCode} {ErrorCode} ({ExceptionType}) for {RequestPath}",
+                    problem.Status,
+                    problem.Type,
+                    exception.GetType().Name,
+                    context.Request.Path);
+            }
+
             context.Response.Clear();
             context.Response.StatusCode = problem.Status!.Value;
             context.Response.ContentType = "application/problem+json";
