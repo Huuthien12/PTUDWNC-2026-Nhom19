@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, type UseFormRegisterReturn } from "react-hook-form";
+import { useForm, useWatch, type UseFormRegisterReturn } from "react-hook-form";
 import { ApiError } from "@/services/api-client";
 import { changePassword } from "@/services/auth-service";
 import { changePasswordSchema, type ChangePasswordFields } from "@/services/change-password-schema";
@@ -18,17 +18,15 @@ function errorMessage(error: unknown) {
 }
 
 export default function ChangePasswordForm() {
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<ChangePasswordFields>({
+  const { register, handleSubmit, reset, control, formState: { errors, isSubmitting } } = useForm<ChangePasswordFields>({
     resolver: zodResolver(changePasswordSchema),
     defaultValues: { currentPassword: "", newPassword: "", confirmNewPassword: "" },
   });
-  const submitting = useRef(false);
+  const values = useWatch({ control });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
   const submit = handleSubmit(async (fields) => {
-    if (submitting.current) return;
-    submitting.current = true;
     setError("");
     setSuccess("");
     try {
@@ -37,8 +35,6 @@ export default function ChangePasswordForm() {
       setSuccess("Đã đổi mật khẩu thành công.");
     } catch (submitError) {
       setError(errorMessage(submitError));
-    } finally {
-      submitting.current = false;
     }
   });
 
@@ -50,11 +46,11 @@ export default function ChangePasswordForm() {
     <form noValidate aria-busy={isSubmitting} onSubmit={submit} className="mt-6 space-y-5 rounded-xl border bg-white p-6">
       <fieldset disabled={isSubmitting} className="space-y-5 disabled:opacity-60">
         <PasswordField id="currentPassword" label="Mật khẩu hiện tại" autoComplete="current-password" error={errors.currentPassword?.message}
-          registration={register("currentPassword")} />
+          value={values.currentPassword ?? ""} registration={register("currentPassword")} />
         <PasswordField id="newPassword" label="Mật khẩu mới" autoComplete="new-password" error={errors.newPassword?.message}
-          registration={register("newPassword")} />
+          value={values.newPassword ?? ""} registration={register("newPassword")} />
         <PasswordField id="confirmNewPassword" label="Xác nhận mật khẩu mới" autoComplete="new-password" error={errors.confirmNewPassword?.message}
-          registration={register("confirmNewPassword")} />
+          value={values.confirmNewPassword ?? ""} registration={register("confirmNewPassword")} />
         <button type="submit" className="rounded-lg bg-[#254b3b] px-4 py-2 font-semibold text-white disabled:opacity-50">
           {isSubmitting ? "Đang đổi mật khẩu..." : "Đổi mật khẩu"}
         </button>
@@ -63,16 +59,17 @@ export default function ChangePasswordForm() {
   </main>;
 }
 
-function PasswordField({ id, label, autoComplete, error, registration }: {
+function PasswordField({ id, label, autoComplete, value, error, registration }: {
   id: string;
   label: string;
   autoComplete: string;
+  value: string;
   error?: string;
   registration: UseFormRegisterReturn;
 }) {
   return <div>
     <label htmlFor={id} className="mb-1 block font-medium">{label}</label>
-    <input id={id} type="password" autoComplete={autoComplete} {...registration}
+    <input id={id} type="password" autoComplete={autoComplete} value={value} {...registration}
       className="w-full rounded-lg border border-gray-300 p-3" />
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
   </div>;

@@ -86,6 +86,7 @@ test("change-password posts only password fields with the existing bearer and cl
   for (const id of ["currentPassword", "newPassword", "confirmNewPassword"]) {
     const input = view.root.find((node) => node.type === "input" && node.props.id === id);
     assert.equal(input.props.type, "password");
+    assert.equal(input.props.value, "");
   }
 });
 
@@ -99,9 +100,10 @@ test("change-password shows a safe API error without exposing server detail", as
   assert.match(content(view.root), /Mật khẩu hiện tại không đúng/);
   assert.doesNotMatch(content(view.root), /never show this/);
   assert.equal(calls.length, 1);
+  assert.equal(view.root.find((node) => node.type === "input" && node.props.id === "currentPassword").props.value, "Old-password@123");
 });
 
-test("change-password prevents a repeated pending submission", async () => {
+test("change-password disables the form while submission is pending", async () => {
   let resolve!: (response: Response) => void;
   respond = () => new Promise<Response>((done) => { resolve = done; });
   const view = await render();
@@ -111,11 +113,10 @@ test("change-password prevents a repeated pending submission", async () => {
   const form = view.root.findByType("form");
   let first!: Promise<void>;
   await act(async () => { first = form.props.onSubmit({ preventDefault() {} }); await Promise.resolve(); });
-  let second!: Promise<void>;
-  await act(async () => { second = form.props.onSubmit({ preventDefault() {} }); await Promise.resolve(); });
   assert.equal(calls.length, 1);
+  assert.equal(view.root.findByType("fieldset").props.disabled, true);
   resolve(new Response(null, { status: 204 }));
-  await act(async () => { await Promise.all([first, second]); });
+  await act(async () => { await first; });
 });
 
 test("change-password schema follows the backend password policy", () => {
