@@ -134,6 +134,10 @@ builder.Services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
 builder.Services.AddSingleton<IRefreshTokenGenerator, RefreshTokenGenerator>();
 builder.Services.AddSingleton<IWelcomeEmailQueue, HangfireWelcomeEmailQueue>();
 builder.Services.AddSingleton<IImageCleanupQueue, HangfireImageCleanupQueue>();
+builder.Services.AddSingleton<PasswordResetEmailQueue>();
+builder.Services.AddSingleton<IPasswordResetEmailQueue>(services =>
+    services.GetRequiredService<PasswordResetEmailQueue>());
+builder.Services.AddHostedService<PasswordResetEmailWorker>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddSingleton<ImageFileValidator>();
 builder.Services.AddSingleton<IFileStorageService, MinioFileStorageService>();

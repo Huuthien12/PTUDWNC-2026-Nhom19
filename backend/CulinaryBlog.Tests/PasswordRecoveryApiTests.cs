@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using CulinaryBlog.Application.Authentication.DTOs;
 using CulinaryBlog.Domain.Entities;
+using CulinaryBlog.Infrastructure.BackgroundJobs;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -62,9 +63,10 @@ public sealed class PasswordRecoveryApiTests : IAsyncLifetime
         Assert.Equal(known.StatusCode, inactive.StatusCode);
         Assert.Equal(await known.Content.ReadAsStringAsync(), await unknown.Content.ReadAsStringAsync());
         Assert.Equal(await known.Content.ReadAsStringAsync(), await inactive.Content.ReadAsStringAsync());
+        var delivered = await _factory.Emails.WaitForDeliveryAsync();
         Assert.Single(_factory.Emails.PasswordResets);
-        Assert.Equal(Email, _factory.Emails.PasswordResets[0].Email);
-        Assert.DoesNotContain(_factory.Emails.PasswordResets[0].Token,
+        Assert.Equal(Email, delivered.Email);
+        Assert.DoesNotContain(delivered.Token,
             await known.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
@@ -82,7 +84,65 @@ public sealed class PasswordRecoveryApiTests : IAsyncLifetime
         _factory.Emails.FailPasswordResetDelivery = true;
         using var response = await ForgotAsync(Email);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        await _factory.Emails.WaitForDeliveryAttemptAsync();
         Assert.Empty(_factory.Emails.PasswordResets);
+    }
+
+    [Fact]
+    public async Task Forgot_password_returns_before_smtp_delivery_completes()
+    {
+        _factory.Emails.BlockPasswordResetDelivery = true;
+        var responseTask = ForgotAsync(Email);
+        await _factory.Emails.WaitForDeliveryAttemptAsync();
+
+        try
+        {
+            using var response = await responseTask.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+            Assert.Empty(_factory.Emails.PasswordResets);
+        }
+        finally
+        {
+            _factory.Emails.ReleaseDelivery();
+        }
+
+        Assert.Equal(Email, (await _factory.Emails.WaitForDeliveryAsync()).Email);
+    }
+
+    [Fact]
+    public async Task Forgot_password_hides_a_full_email_queue()
+    {
+        await using var factory = new AuthApiFactory { RejectPasswordResetEmails = true };
+        using var client = factory.CreateClient();
+        await using (var db = factory.NewContext())
+            await db.Database.EnsureCreatedAsync();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            Assert.True((await users.CreateAsync(new ApplicationUser
+            {
+                UserName = Email,
+                Email = Email,
+                FullName = "Recovery User"
+            }, OldPassword)).Succeeded);
+        }
+
+        using var known = await client.PostAsJsonAsync("/api/v1/auth/forgot-password", new { email = Email });
+        using var unknown = await client.PostAsJsonAsync("/api/v1/auth/forgot-password",
+            new { email = "unknown@test.local" });
+
+        Assert.Equal(HttpStatusCode.Accepted, known.StatusCode);
+        Assert.Equal(known.StatusCode, unknown.StatusCode);
+        Assert.Equal(await known.Content.ReadAsStringAsync(), await unknown.Content.ReadAsStringAsync());
+        Assert.Equal(1, factory.RejectedEmails.Attempts);
+    }
+
+    [Fact]
+    public void Password_reset_email_queue_is_bounded_and_non_blocking()
+    {
+        var queue = new PasswordResetEmailQueue(capacity: 1);
+        Assert.True(queue.TryEnqueue(new(Email, "Recovery User", "first-token")));
+        Assert.False(queue.TryEnqueue(new(Email, "Recovery User", "second-token")));
     }
 
     [Fact]
@@ -100,6 +160,25 @@ public sealed class PasswordRecoveryApiTests : IAsyncLifetime
         using var refresh = await _client.PostAsJsonAsync("/api/v1/auth/refresh",
             new { refreshToken = session.RefreshToken });
         Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
+    }
+
+    [Fact]
+    public async Task Reset_password_rolls_back_when_refresh_revocation_fails()
+    {
+        using var login = await LoginAsync(OldPassword);
+        var session = (await login.Content.ReadFromJsonAsync<AuthResponseDto>())!;
+        var token = await RequestTokenAsync();
+
+        _factory.FailRefreshRevocation = true;
+        using var reset = await ResetAsync(Email, token, NewPassword, NewPassword);
+        Assert.Equal(HttpStatusCode.InternalServerError, reset.StatusCode);
+        _factory.FailRefreshRevocation = false;
+
+        Assert.Equal(HttpStatusCode.OK, (await LoginAsync(OldPassword)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await LoginAsync(NewPassword)).StatusCode);
+        using var refresh = await _client.PostAsJsonAsync("/api/v1/auth/refresh",
+            new { refreshToken = session.RefreshToken });
+        Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
     }
 
     [Fact]
@@ -164,7 +243,7 @@ public sealed class PasswordRecoveryApiTests : IAsyncLifetime
     {
         using var response = await ForgotAsync(Email);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
-        return Assert.Single(_factory.Emails.PasswordResets).Token;
+        return (await _factory.Emails.WaitForDeliveryAsync()).Token;
     }
 
     private static Task AssertResetInvalid(HttpResponseMessage response) =>

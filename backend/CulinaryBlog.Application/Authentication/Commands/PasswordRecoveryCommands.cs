@@ -16,7 +16,7 @@ public sealed class ForgotPasswordCommandValidator : AbstractValidator<ForgotPas
 
 public sealed class ForgotPasswordCommandHandler(
     IIdentityService identity,
-    IEmailService email,
+    IPasswordResetEmailQueue emails,
     ILogger<ForgotPasswordCommandHandler> logger) : IRequestHandler<ForgotPasswordCommand>
 {
     public async Task Handle(ForgotPasswordCommand command, CancellationToken cancellationToken)
@@ -24,16 +24,8 @@ public sealed class ForgotPasswordCommandHandler(
         var reset = await identity.GeneratePasswordResetTokenAsync(command.Email.Trim(), cancellationToken);
         if (reset is null) return;
 
-        try
-        {
-            await email.SendPasswordResetEmailAsync(
-                reset.Email, reset.FullName, reset.Token, cancellationToken);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            logger.LogWarning("Password reset email delivery failed with {ExceptionType}.",
-                exception.GetType().Name);
-        }
+        if (!emails.TryEnqueue(new(reset.Email, reset.FullName, reset.Token)))
+            logger.LogWarning("Password reset email queue is full; the message was dropped.");
     }
 }
 
@@ -62,18 +54,24 @@ public sealed class ResetPasswordCommandValidator : AbstractValidator<ResetPassw
 public sealed class ResetPasswordCommandHandler(
     IIdentityService identity,
     IRefreshTokenStore refreshTokens,
+    IUnitOfWork unitOfWork,
     TimeProvider clock) : IRequestHandler<ResetPasswordCommand, ResetPasswordResult>
 {
     public async Task<ResetPasswordResult> Handle(
         ResetPasswordCommand command,
         CancellationToken cancellationToken)
     {
-        var result = await identity.ResetPasswordAsync(
-            command.Email.Trim(), command.Token, command.NewPassword, cancellationToken);
-        if (!result.Succeeded) return new(false, result.ErrorCode);
+        IdentityPasswordResetResult? result = null;
+        await unitOfWork.ExecuteInTransactionAsync(async transactionCancellationToken =>
+        {
+            result = await identity.ResetPasswordAsync(
+                command.Email.Trim(), command.Token, command.NewPassword, transactionCancellationToken);
+            if (!result.Succeeded) return;
 
-        await refreshTokens.RevokeAllAsync(
-            result.UserId!, clock.GetUtcNow().UtcDateTime, cancellationToken);
-        return new(true, null);
+            await refreshTokens.RevokeAllAsync(
+                result.UserId!, clock.GetUtcNow().UtcDateTime, transactionCancellationToken);
+        }, cancellationToken);
+
+        return new(result!.Succeeded, result.ErrorCode);
     }
 }
