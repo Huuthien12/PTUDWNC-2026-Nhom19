@@ -134,6 +134,10 @@ builder.Services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
 builder.Services.AddSingleton<IRefreshTokenGenerator, RefreshTokenGenerator>();
 builder.Services.AddSingleton<IWelcomeEmailQueue, HangfireWelcomeEmailQueue>();
 builder.Services.AddSingleton<IImageCleanupQueue, HangfireImageCleanupQueue>();
+builder.Services.AddSingleton<PasswordResetEmailQueue>();
+builder.Services.AddSingleton<IPasswordResetEmailQueue>(services =>
+    services.GetRequiredService<PasswordResetEmailQueue>());
+builder.Services.AddHostedService<PasswordResetEmailWorker>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddSingleton<ImageFileValidator>();
 builder.Services.AddSingleton<IFileStorageService, MinioFileStorageService>();
@@ -145,6 +149,14 @@ builder.Services.AddOptions<SmtpOptions>()
     .Bind(builder.Configuration.GetSection("Email:Smtp"))
     .Validate(options => builder.Environment.IsDevelopment() || options.EnableSsl,
         "SMTP TLS is required outside Development.")
+    .ValidateOnStart();
+builder.Services.AddOptions<PasswordResetOptions>()
+    .Bind(builder.Configuration.GetSection(PasswordResetOptions.SectionName))
+    .Validate(options => Uri.TryCreate(options.FrontendBaseUrl, UriKind.Absolute, out _),
+        "PasswordReset:FrontendBaseUrl must be an absolute URL.")
+    .Validate(options => builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing") ||
+        Uri.TryCreate(options.FrontendBaseUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps,
+        "Password reset links must use HTTPS outside Development.")
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddCulinaryHealthChecks();

@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError } from "@/services/api-client";
 import { login, loginWithGoogle } from "@/services/auth-service";
@@ -147,6 +148,9 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
               disabled={loading}
               className="w-full rounded-lg border px-3 py-2 outline-none focus:ring-2"
             />
+            <Link href="/forgot-password" className="mt-2 inline-block text-sm font-medium underline">
+              Quên mật khẩu?
+            </Link>
           </div>
 
           <button

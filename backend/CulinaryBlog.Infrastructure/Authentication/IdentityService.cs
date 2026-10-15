@@ -1,6 +1,7 @@
 using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.IdentityModel.Tokens;
 
 namespace CulinaryBlog.Infrastructure.Authentication;
 
@@ -236,6 +237,46 @@ public sealed class IdentityService : IIdentityService
 
         var changed = await _userManager.ChangePasswordAsync(user, currentPassword, newPassword);
         return changed.Succeeded ? new(true, null) : new(false, "VALIDATION_ERROR");
+    }
+
+    public async Task<PasswordResetTokenResult?> GeneratePasswordResetTokenAsync(
+        string email,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var user = await _userManager.FindByEmailAsync(email);
+        if (user is null || !user.IsActive || string.IsNullOrWhiteSpace(user.Email)) return null;
+
+        var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+        return new(user.Email, user.FullName, Base64UrlEncoder.Encode(token));
+    }
+
+    public async Task<IdentityPasswordResetResult> ResetPasswordAsync(
+        string email,
+        string token,
+        string newPassword,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var user = await _userManager.FindByEmailAsync(email);
+        if (user is null || !user.IsActive)
+            return new(false, null, "RESET_PASSWORD_INVALID_OR_EXPIRED");
+
+        string identityToken;
+        try
+        {
+            identityToken = Base64UrlEncoder.Decode(token);
+        }
+        catch (Exception exception) when (exception is FormatException or ArgumentException)
+        {
+            return new(false, null, "RESET_PASSWORD_INVALID_OR_EXPIRED");
+        }
+
+        var reset = await _userManager.ResetPasswordAsync(user, identityToken, newPassword);
+        if (reset.Succeeded) return new(true, user.Id, null);
+
+        var invalidToken = reset.Errors.Any(error => error.Code == "InvalidToken");
+        return new(false, null, invalidToken ? "RESET_PASSWORD_INVALID_OR_EXPIRED" : "VALIDATION_ERROR");
     }
 
     private async Task<UserProfileResult> ToProfileAsync(ApplicationUser user) => new(

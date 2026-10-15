@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const password = z.string()
+export const passwordSchema = z.string()
   .min(8, "Mật khẩu cần ít nhất 8 ký tự.")
   .regex(/[A-Z]/, "Mật khẩu cần có chữ hoa.")
   .regex(/[a-z]/, "Mật khẩu cần có chữ thường.")
@@ -9,7 +9,7 @@ const password = z.string()
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Vui lòng nhập mật khẩu hiện tại."),
-  newPassword: password,
+  newPassword: passwordSchema,
   confirmNewPassword: z.string().min(1, "Vui lòng xác nhận mật khẩu mới."),
 }).refine((value) => value.newPassword === value.confirmNewPassword, {
   message: "Xác nhận mật khẩu mới không khớp.",
