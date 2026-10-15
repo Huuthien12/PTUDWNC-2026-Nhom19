@@ -217,6 +217,27 @@ public sealed class IdentityService : IIdentityService
         return await ToProfileAsync(user);
     }
 
+    public async Task<IdentityPasswordChangeResult> ChangePasswordAsync(
+        string userId,
+        string currentPassword,
+        string newPassword,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null || !user.IsActive)
+            return new(false, "AUTH_ACCOUNT_DISABLED");
+
+        if (await _userManager.IsLockedOutAsync(user))
+            return new(false, "AUTH_ACCOUNT_LOCKED", await _userManager.GetLockoutEndDateAsync(user));
+
+        if (!await _userManager.CheckPasswordAsync(user, currentPassword))
+            return new(false, "INVALID_CURRENT_PASSWORD");
+
+        var changed = await _userManager.ChangePasswordAsync(user, currentPassword, newPassword);
+        return changed.Succeeded ? new(true, null) : new(false, "VALIDATION_ERROR");
+    }
+
     private async Task<UserProfileResult> ToProfileAsync(ApplicationUser user) => new(
         user.Id, user.FullName, user.Email!, user.UserName!, user.AvatarUrl,
         (await _userManager.GetRolesAsync(user)).ToArray(), user.EmailConfirmed, user.CreatedAt);

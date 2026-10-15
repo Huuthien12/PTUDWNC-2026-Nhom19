@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -64,6 +65,7 @@ export default function ProfileForm() {
   return <main className="cb-container cb-section max-w-2xl">
     <h1 className="cb-section-title">Hồ sơ cá nhân</h1>
     <p className="mt-2 text-sm text-gray-600">Cập nhật thông tin hiển thị của bạn.</p>
+    <Link href="/profile/change-password" className="mt-3 inline-block text-sm font-medium text-[#254b3b] underline">Đổi mật khẩu</Link>
     {error && <p role="alert" className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-red-700">{error}</p>}
     {success && <p role="status" className="mt-4 rounded border border-green-200 bg-green-50 p-3 text-green-800">{success}</p>}
 
