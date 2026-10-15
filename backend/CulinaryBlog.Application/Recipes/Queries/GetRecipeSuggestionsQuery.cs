@@ -47,7 +47,7 @@ public sealed class GetRecipeSuggestionsQueryHandler
         }
         catch (Exception exception) when (exception.GetType().Namespace == "StackExchange.Redis")
         {
-            _logger.LogWarning(exception, "Suggestions cache read failed.");
+            CacheFailure.Log(_logger, "suggestions read", exception);
         }
 
         var items = await _unitOfWork.Recipes.GetSuggestionsAsync(
@@ -66,7 +66,7 @@ public sealed class GetRecipeSuggestionsQueryHandler
         }
         catch (Exception exception) when (exception.GetType().Namespace == "StackExchange.Redis")
         {
-            _logger.LogWarning(exception, "Suggestions cache write failed.");
+            CacheFailure.Log(_logger, "suggestions write", exception);
         }
 
         return result;
