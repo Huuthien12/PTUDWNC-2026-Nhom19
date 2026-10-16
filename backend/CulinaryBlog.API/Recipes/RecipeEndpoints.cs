@@ -13,6 +13,28 @@ public static class RecipeEndpoints
 {
     public static void MapRecipeEndpoints(this WebApplication app)
     {
+        app.MapGet(
+            "/api/v1/recipes/mine",
+            async (
+                int? page,
+                int? pageSize,
+                ClaimsPrincipal user,
+                ISender sender,
+                CancellationToken cancellationToken) =>
+            {
+                var authorId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrWhiteSpace(authorId))
+                    throw new UnauthorizedAccessException();
+
+                return Results.Ok(await sender.Send(
+                    new GetMyRecipesQuery(authorId, page ?? 1, pageSize ?? 12),
+                    cancellationToken));
+            })
+            .RequireAuthorization(policy => policy
+                .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)
+                .RequireAuthenticatedUser()
+                .RequireRole("Author", "Admin"));
+
         app.MapDelete(
             "/api/v1/recipes/{id:guid}",
             async (

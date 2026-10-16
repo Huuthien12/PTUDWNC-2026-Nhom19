@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildRecipePayload, initialRecipeValues, mapRecipeError, recipeCreatedDestination, recipeRoles } from "../src/services/recipe-form";
 import { ApiError, httpClient } from "../src/services/http-client";
-import { changeRecipeLifecycle, createRecipe, deleteRecipe } from "../src/services/recipe-service";
+import { changeRecipeLifecycle, createRecipe, deleteRecipe, getMyRecipes } from "../src/services/recipe-service";
 import { dashboardActions, lifecycleErrorMessage } from "../src/services/recipe-dashboard";
 import { canAccess, loginDestination } from "../src/services/auth-navigation";
 import { SESSION_KEY } from "../src/services/auth-session";
@@ -89,8 +89,35 @@ test("UI access and login return path allow Author/Admin only, destination needs
   for (const role of ["Author", "Admin"]) assert.ok(canAccess([role], recipeRoles));
   for (const roles of [[], ["Reader"], ["author"]]) assert.equal(canAccess(roles, recipeRoles), false);
   assert.equal(loginDestination("/recipes/create"), "/recipes/create");
+  assert.equal(loginDestination("/recipes/dashboard"), "/recipes/dashboard");
   assert.equal(loginDestination("/recipes/create?next=https://evil.test"), "/");
   assert.equal(recipeCreatedDestination, "/categories?created=recipe");
+});
+
+test("dashboard service uses the authenticated mine endpoint without detail fan-out", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const session = { sessionId: "dashboard", accessToken: "access", refreshToken: "refresh", tokenType: "Bearer",
+    expiresAt: new Date(Date.now() + 600000).toISOString(), user: { id: "author", fullName: "Author",
+      userName: "author", email: "a@example.test", avatarUrl: null, roles: ["Author"] } };
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    localStorage: { getItem: (key: string) => key === SESSION_KEY ? JSON.stringify(session) : null },
+  } });
+  let calls = 0;
+  globalThis.fetch = async (url, options = {}) => {
+    calls++;
+    assert.ok(String(url).endsWith("/api/v1/recipes/mine?page=2&pageSize=12"));
+    assert.equal(new Headers(options.headers).get("Authorization"), "Bearer access");
+    return Response.json({ items: [], totalCount: 0, page: 2, pageSize: 12, totalPages: 0 });
+  };
+  try {
+    await getMyRecipes(2, 12);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+    else Reflect.deleteProperty(globalThis, "window");
+  }
 });
 
 test("transport keeps only validation field paths and tolerates malformed/empty errors", async () => {
