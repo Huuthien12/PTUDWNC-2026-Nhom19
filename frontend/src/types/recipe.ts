@@ -109,3 +109,18 @@ export interface RecipeSummary {
 }
 
 export interface RecipePage extends PaginatedResult<RecipeSummary> {}
+
+export interface RecipeDashboardItem {
+  id: string;
+  title: string;
+  slug: string;
+  status: RecipeStatus;
+  rowVersion: string;
+  categoryName: string;
+  thumbnailUrl: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RecipeDashboardPage extends PaginatedResult<RecipeDashboardItem> {}

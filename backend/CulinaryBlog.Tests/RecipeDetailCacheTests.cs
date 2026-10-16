@@ -289,6 +289,8 @@ public sealed class RecipeDetailCacheTests
         }
 
         // Fail immediately if the handler uses an unrelated repository operation.
+        public Task<int> CountMineAsync(string authorId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<RecipeDashboardItemDto>> GetMineAsync(string authorId, int page, int pageSize, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<int> CountVisibleAsync(string? userId, bool isAdmin, Guid? categoryId, RecipeDifficulty? difficulty, int? maxCookTime, int? minServings, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<Recipe>> GetVisibleAsync(int page, int pageSize, string? userId, bool isAdmin, Guid? categoryId, RecipeDifficulty? difficulty, int? maxCookTime, int? minServings, string sortBy, string sortOrder, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<Recipe?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
