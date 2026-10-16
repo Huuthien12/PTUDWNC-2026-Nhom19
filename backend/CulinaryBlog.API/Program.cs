@@ -261,8 +261,9 @@ if (!builder.Environment.IsEnvironment("Testing") || builder.Configuration.GetVa
 
 if (!builder.Environment.IsEnvironment("Testing"))
 {
-    builder.Services.AddHangfire(configuration =>
-        configuration.UsePostgreSqlStorage(storage => storage.UseNpgsqlConnection(connectionString)));
+    builder.Services.AddHangfire(configuration => configuration
+        .UseFilter(new HangfireJobMetricsFilter())
+        .UsePostgreSqlStorage(storage => storage.UseNpgsqlConnection(connectionString)));
     builder.Services.AddHangfireServer();
 }
 

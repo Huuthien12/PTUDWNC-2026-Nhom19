@@ -127,7 +127,9 @@ public sealed class OpenTelemetryTests
         new[] { activity.DisplayName, activity.StatusDescription }
             .Concat(activity.TagObjects.Select(tag => $"{tag.Key}={tag.Value}"))
             .Concat(activity.Events.SelectMany(item => new[] { item.Name }
-                .Concat(item.Tags.Select(tag => $"{tag.Key}={tag.Value}"))))));
+                .Concat(item.Tags.Select(tag => $"{tag.Key}={tag.Value}"))))
+            .Concat(activity.Links.SelectMany(link =>
+                link.Tags?.Select(tag => $"{tag.Key}={tag.Value}") ?? []))));
 
     private sealed class ResourceCaptureProcessor : BaseProcessor<Activity>
     {

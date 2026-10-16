@@ -40,7 +40,8 @@ public static class OpenTelemetryExtensions
                 metrics
                     .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
-                    .AddRuntimeInstrumentation();
+                    .AddRuntimeInstrumentation()
+                    .AddMeter(HangfireJobMetricsFilter.MeterName);
                 if (otlpEndpoint is not null)
                     metrics.AddOtlpExporter(options => options.Endpoint = otlpEndpoint);
             });
