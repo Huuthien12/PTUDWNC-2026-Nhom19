@@ -162,7 +162,7 @@ test("dashboard ignores a stale failed page response", async () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
   });
   assert.match(text(view!.root), /Recipe three/);
-  assert.doesNotMatch(text(view!.root), /Kh�ng th? t?i danh s�ch c�ng th?c/);
+  assert.doesNotMatch(text(view!.root), /Không thể tải danh sách công thức\./);
   assert.match(text(view!.root), /Trang 3 \/ 3/);
 });
 
