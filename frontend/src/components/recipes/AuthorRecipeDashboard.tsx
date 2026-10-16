@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import RecipeImage from "@/components/shared/RecipeImage";
 import { useSession } from "@/components/auth/useSession";
 import { ApiError } from "@/services/api-client";
@@ -20,16 +20,20 @@ export default function AuthorRecipeDashboard() {
   const [message, setMessage] = useState<string | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const latestRequestRef = useRef(0);
 
   const load = useCallback(async (targetPage: number, clearMessage = true) => {
     if (!session) return null;
+    const requestId = ++latestRequestRef.current;
     if (clearMessage) setMessage(null);
     setLoadFailed(false);
     try {
       const next = await getMyRecipes(targetPage, pageSize);
+      if (requestId !== latestRequestRef.current) return null;
       setResult(next);
       return next;
     } catch {
+      if (requestId !== latestRequestRef.current) return null;
       setResult(null);
       setLoadFailed(true);
       setMessage("Không thể tải danh sách công thức.");
@@ -39,7 +43,10 @@ export default function AuthorRecipeDashboard() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void load(1); });
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      latestRequestRef.current++;
+    };
   }, [load]);
 
   async function goToPage(targetPage: number) {

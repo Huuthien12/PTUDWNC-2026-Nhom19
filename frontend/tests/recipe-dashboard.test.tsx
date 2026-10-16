@@ -77,6 +77,15 @@ function text(node: ReactTestInstance): string {
 function button(label: string) {
   return view!.root.findAllByType("button").find((node) => text(node) === label)!;
 }
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
 test("dashboard paginates through mine results and disables first/last controls", async () => {
   responder = async (path) => path.includes("page=2")
@@ -95,6 +104,66 @@ test("dashboard paginates through mine results and disables first/last controls"
     "/api/recipe-cache/api/v1/recipes/mine?page=2&pageSize=12",
     "/api/recipe-cache/api/v1/recipes/mine?page=1&pageSize=12",
   ]);
+});
+
+test("dashboard ignores a stale successful page response", async () => {
+  const secondPage = deferred<Response>();
+  const thirdPage = deferred<Response>();
+  responder = async (path) => {
+    if (path.includes("page=2")) return secondPage.promise;
+    if (path.includes("page=3")) return thirdPage.promise;
+    return Response.json(page(1, [item("one")], 3));
+  };
+  await mount();
+  await act(async () => {
+    button("Trang sau").props.onClick();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+  await act(async () => {
+    button("Trang sau").props.onClick();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+  await act(async () => {
+    thirdPage.resolve(Response.json(page(3, [item("three")], 3)));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+  await act(async () => {
+    secondPage.resolve(Response.json(page(2, [item("two")], 3)));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+  assert.match(text(view!.root), /Recipe three/);
+  assert.doesNotMatch(text(view!.root), /Recipe two/);
+  assert.match(text(view!.root), /Trang 3 \/ 3/);
+});
+
+test("dashboard ignores a stale failed page response", async () => {
+  const secondPage = deferred<Response>();
+  const thirdPage = deferred<Response>();
+  responder = async (path) => {
+    if (path.includes("page=2")) return secondPage.promise;
+    if (path.includes("page=3")) return thirdPage.promise;
+    return Response.json(page(1, [item("one")], 3));
+  };
+  await mount();
+  await act(async () => {
+    button("Trang sau").props.onClick();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+  await act(async () => {
+    button("Trang sau").props.onClick();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+  await act(async () => {
+    thirdPage.resolve(Response.json(page(3, [item("three")], 3)));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+  await act(async () => {
+    secondPage.reject(new TypeError("offline"));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+  assert.match(text(view!.root), /Recipe three/);
+  assert.doesNotMatch(text(view!.root), /Kh�ng th? t?i danh s�ch c�ng th?c/);
+  assert.match(text(view!.root), /Trang 3 \/ 3/);
 });
 
 test("dashboard renders a real empty state and recovers from a load error", async () => {
