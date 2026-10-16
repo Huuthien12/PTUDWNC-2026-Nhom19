@@ -31,6 +31,20 @@ public sealed class RecipeSuggestionTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Suggestions_cache_uses_one_minute_absolute_expiration()
+    {
+        using var client = _factory.Client(role: null);
+
+        var response = await client.GetAsync("/api/v1/recipes/suggestions?q=ph");
+
+        response.EnsureSuccessStatusCode();
+        var write = Assert.Single(_factory.Cache.SetOperations,
+            item => item.Key.StartsWith("search:suggest:v", StringComparison.Ordinal));
+        Assert.Equal(TimeSpan.FromMinutes(1), write.Expiration);
+        Assert.True(write.UseAbsoluteExpiration);
+    }
+
+    [Fact]
     public async Task Suggestions_ReturnsPublishedRecipeTitle()
     {
         await using var db = _factory.Database.NewContext();

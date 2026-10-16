@@ -66,7 +66,8 @@ public sealed class GetRecipeSuggestionsQueryHandler
                 cacheKey,
                 result,
                 TimeSpan.FromMinutes(1),
-                cancellationToken);
+                cancellationToken,
+                useAbsoluteExpiration: true);
         }
         catch (Exception exception) when (exception.GetType().Namespace == "StackExchange.Redis")
         {

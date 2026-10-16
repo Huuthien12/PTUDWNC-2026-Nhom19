@@ -139,6 +139,7 @@ public sealed class RecordingRecipeCache : ICacheService
 {
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, object> _values = new();
     public List<string> RemovedKeys { get; } = [];
+    public List<(string Key, TimeSpan Expiration, bool UseAbsoluteExpiration)> SetOperations { get; } = [];
     public Func<string, Task>? OnRemoveAsync { get; set; }
     public Func<string, Task>? OnSetAsync { get; set; }
     public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default) =>
@@ -146,6 +147,7 @@ public sealed class RecordingRecipeCache : ICacheService
     public async Task SetAsync<T>(string key, T value, TimeSpan expiration, CancellationToken cancellationToken = default, bool useAbsoluteExpiration = false)
     {
         if (OnSetAsync is not null) await OnSetAsync(key);
+        SetOperations.Add((key, expiration, useAbsoluteExpiration));
         if (value is not null) _values[key] = value;
     }
     public Task RemoveAsync(string key, CancellationToken cancellationToken = default)
