@@ -14,15 +14,18 @@ public sealed class GetRecipeSuggestionsQueryHandler
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICacheService _cache;
+    private readonly IRecipeCacheInvalidator _invalidator;
     private readonly ILogger<GetRecipeSuggestionsQueryHandler> _logger;
 
     public GetRecipeSuggestionsQueryHandler(
         IUnitOfWork unitOfWork,
         ICacheService cache,
+        IRecipeCacheInvalidator invalidator,
         ILogger<GetRecipeSuggestionsQueryHandler> logger)
     {
         _unitOfWork = unitOfWork;
         _cache = cache;
+        _invalidator = invalidator;
         _logger = logger;
     }
 
@@ -32,9 +35,10 @@ public sealed class GetRecipeSuggestionsQueryHandler
     {
         var normalizedQuery = request.Query.Trim().ToLowerInvariant();
 
-        var cacheKey = $"search:suggest:{normalizedQuery}";
+        var version = await _invalidator.GetSuggestionVersionAsync(cancellationToken);
+        var cacheKey = version is null ? null : $"search:suggest:v{version}:{normalizedQuery}";
 
-        try
+        if (cacheKey is not null) try
         {
             var cached = await _cache.GetAsync<RecipeSuggestionsDto>(
                 cacheKey,
@@ -56,7 +60,7 @@ public sealed class GetRecipeSuggestionsQueryHandler
 
         var result = new RecipeSuggestionsDto(items);
 
-        try
+        if (cacheKey is not null) try
         {
             await _cache.SetAsync(
                 cacheKey,

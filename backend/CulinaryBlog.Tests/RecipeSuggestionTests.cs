@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json.Nodes;
+using CulinaryBlog.Application.Recipes.DTOs;
 using CulinaryBlog.Domain.Entities;
 using CulinaryBlog.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -308,6 +310,42 @@ public sealed class RecipeSuggestionTests : IAsyncLifetime
         Assert.NotEqual(
             HttpStatusCode.Forbidden,
             response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Published_title_update_bypasses_warm_suggestion_namespace()
+    {
+        await using var db = _factory.Database.NewContext();
+        var recipe = await db.Recipes.SingleAsync();
+        recipe.Title = "Old Unique Soup";
+        recipe.Status = RecipeStatus.Published;
+        recipe.PrepTime = 10;
+        recipe.CookTime = 20;
+        recipe.Servings = 2;
+        recipe.Difficulty = RecipeDifficulty.Easy;
+        await db.SaveChangesAsync();
+        using var publicClient = _factory.Client(role: null);
+        using var owner = _factory.Client();
+        var warmed = await publicClient.GetFromJsonAsync<RecipeSuggestionsResponse>(
+            "/api/v1/recipes/suggestions?q=old");
+        Assert.Contains(warmed!.Items, item => item.Text == "Old Unique Soup");
+        var body = new JsonObject
+        {
+            ["title"] = "New Unique Soup", ["description"] = recipe.Description,
+            ["categoryId"] = recipe.CategoryId.ToString(), ["prepTime"] = recipe.PrepTime,
+            ["cookTime"] = recipe.CookTime, ["servings"] = recipe.Servings,
+            ["difficulty"] = (int)recipe.Difficulty, ["instructions"] = recipe.Instructions,
+            ["rowVersion"] = Convert.ToBase64String(recipe.RowVersion)
+        };
+
+        var response = await owner.PutAsJsonAsync($"/api/v1/recipes/{recipe.Id}", body);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.DoesNotContain((await publicClient.GetFromJsonAsync<RecipeSuggestionsResponse>(
+            "/api/v1/recipes/suggestions?q=old"))!.Items, item => item.Text == "Old Unique Soup");
+        Assert.Contains((await publicClient.GetFromJsonAsync<RecipeSuggestionsResponse>(
+            "/api/v1/recipes/suggestions?q=new"))!.Items, item => item.Text == "New Unique Soup");
+        Assert.Equal(recipe.Slug, (await response.Content.ReadFromJsonAsync<RecipeDto>())!.Slug);
     }
 
     private sealed record RecipeSuggestionsResponse(
