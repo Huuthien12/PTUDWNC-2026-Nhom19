@@ -37,5 +37,7 @@ public sealed class DeleteRecipeCommandHandler(IUnitOfWork unitOfWork, ICacheSer
         if (invalidator is not null) await invalidator.ListChangedAsync(cancellationToken);
         if (wasPublished)
             await cache.RemoveSafelyAsync("categories:all", cancellationToken);
+        if (wasPublished && invalidator is not null)
+            await invalidator.InvalidateSuggestionsAsync(cancellationToken);
     }
 }

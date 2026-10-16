@@ -12,16 +12,21 @@ namespace CulinaryBlog.Tests;
 
 public sealed class RecipeLifecycleApiTests
 {
-    private static async Task<Recipe> SeedAsync(RecipeApiFactory factory, RecipeStatus status = RecipeStatus.Draft)
+    private static async Task<Recipe> SeedAsync(RecipeApiFactory factory, RecipeStatus status = RecipeStatus.Draft,
+        bool complete = true, string? title = null)
     {
         await factory.InitializeAsync();
         await using var db = factory.Database.NewContext();
         var recipe = await db.Recipes.SingleAsync();
+        if (title is not null) recipe.Title = title;
         recipe.Status = status;
         recipe.PublishedAt = status == RecipeStatus.Published ? DateTime.UtcNow.AddDays(-2) : null;
         recipe.UpdatedAt = DateTime.UtcNow.AddDays(-1);
-        recipe.Ingredients.Add(new RecipeIngredient { Name = "Salt", Quantity = 1, Unit = "g", OrderIndex = 1 });
-        recipe.Steps.Add(new RecipeStep { StepNumber = 1, Description = "Mix" });
+        if (complete)
+        {
+            recipe.Ingredients.Add(new RecipeIngredient { Name = "Salt", Quantity = 1, Unit = "g", OrderIndex = 1 });
+            recipe.Steps.Add(new RecipeStep { StepNumber = 1, Description = "Mix" });
+        }
         recipe.Images.Add(new RecipeImage { OriginalUrl = "https://example.test/image.jpg", OrderIndex = 1, IsPrimary = true });
         db.RecipeIngredients.AddRange(recipe.Ingredients);
         db.RecipeSteps.AddRange(recipe.Steps);
@@ -29,6 +34,10 @@ public sealed class RecipeLifecycleApiTests
         await db.SaveChangesAsync();
         return recipe;
     }
+
+    private static async Task<IReadOnlyList<string>> Suggestions(HttpClient client, string query) =>
+        (await (await client.GetAsync($"/api/v1/recipes/suggestions?q={query}"))
+            .Content.ReadFromJsonAsync<RecipeSuggestionsDto>())!.Items.Select(item => item.Text).ToList();
 
     private static object Body(Recipe recipe) => new { rowVersion = Convert.ToBase64String(recipe.RowVersion) };
 
@@ -153,6 +162,83 @@ public sealed class RecipeLifecycleApiTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(RecipeStatus.Published, (await response.Content.ReadFromJsonAsync<RecipeDto>())!.Status);
         Assert.Equal(new[] { $"recipe:{recipe.Slug}", "categories:all" }, factory.Cache.RemovedKeys);
+    }
+
+    [Fact]
+    public async Task Warm_suggestions_show_recipe_immediately_after_publish()
+    {
+        await using var factory = new RecipeApiFactory();
+        var recipe = await SeedAsync(factory, title: "Lifecycle Pho");
+        using var publicClient = factory.Client(role: null);
+        using var owner = factory.Client();
+        Assert.DoesNotContain(recipe.Title, await Suggestions(publicClient, "lifecycle"));
+
+        var response = await owner.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/publish", Body(recipe));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(recipe.Title, await Suggestions(publicClient, "lifecycle"));
+    }
+
+    [Theory]
+    [InlineData("unpublish")]
+    [InlineData("archive")]
+    public async Task Warm_suggestions_hide_recipe_immediately_after_public_lifecycle_exit(string action)
+    {
+        await using var factory = new RecipeApiFactory();
+        var recipe = await SeedAsync(factory, RecipeStatus.Published, title: "Lifecycle Pho");
+        using var publicClient = factory.Client(role: null);
+        using var owner = factory.Client();
+        Assert.Contains(recipe.Title, await Suggestions(publicClient, "lifecycle"));
+
+        var response = await owner.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/{action}", Body(recipe));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.DoesNotContain(recipe.Title, await Suggestions(publicClient, "lifecycle"));
+    }
+
+    [Fact]
+    public async Task Warm_suggestions_hide_recipe_immediately_after_soft_delete()
+    {
+        await using var factory = new RecipeApiFactory();
+        var recipe = await SeedAsync(factory, RecipeStatus.Published, title: "Lifecycle Pho");
+        using var publicClient = factory.Client(role: null);
+        using var owner = factory.Client();
+        Assert.Contains(recipe.Title, await Suggestions(publicClient, "lifecycle"));
+
+        var response = await owner.SendAsync(new HttpRequestMessage(HttpMethod.Delete,
+            $"/api/v1/recipes/{recipe.Id}") { Content = JsonContent.Create(Body(recipe)) });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.DoesNotContain(recipe.Title, await Suggestions(publicClient, "lifecycle"));
+        await using var db = factory.Database.NewContext();
+        Assert.True((await db.Recipes.IgnoreQueryFilters().SingleAsync(item => item.Id == recipe.Id)).IsDeleted);
+    }
+
+    [Fact]
+    public async Task Incomplete_publish_is_rfc7807_400()
+    {
+        await using var factory = new RecipeApiFactory();
+        var recipe = await SeedAsync(factory, complete: false);
+        using var owner = factory.Client();
+
+        await AssertProblem(await owner.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/publish", Body(recipe)),
+            400, "RECIPE_PUBLISH_INCOMPLETE");
+    }
+
+    [Fact]
+    public async Task Suggestion_invalidation_failure_after_publish_does_not_undo_commit()
+    {
+        await using var factory = new RecipeApiFactory();
+        var recipe = await SeedAsync(factory);
+        factory.Cache.OnSetAsync = key => key == "search:suggest:version"
+            ? throw new IOException("Redis unavailable") : Task.CompletedTask;
+        using var owner = factory.Client();
+
+        var response = await owner.PatchAsJsonAsync($"/api/v1/recipes/{recipe.Id}/publish", Body(recipe));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await using var db = factory.Database.NewContext();
+        Assert.Equal(RecipeStatus.Published, (await db.Recipes.SingleAsync(item => item.Id == recipe.Id)).Status);
     }
 
     [Fact]

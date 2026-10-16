@@ -22,6 +22,7 @@ public sealed class ChangeRecipeLifecycleCommandHandler(IUnitOfWork unitOfWork, 
         var wasPublished = recipe.Status == RecipeStatus.Published;
         switch (command.Action) { case RecipeLifecycleAction.Publish: recipe.Publish(); break; case RecipeLifecycleAction.Unpublish: recipe.Unpublish(); break; default: recipe.Archive(); break; }
         var invalidateCategoryCounts = wasPublished != (recipe.Status == RecipeStatus.Published);
+        var invalidateSuggestions = invalidateCategoryCounts;
         unitOfWork.Recipes.Update(recipe, Convert.FromBase64String(command.RowVersion));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         // No outer transaction: SaveChanges has committed before eviction.
@@ -30,6 +31,8 @@ public sealed class ChangeRecipeLifecycleCommandHandler(IUnitOfWork unitOfWork, 
         if (invalidator is not null) await invalidator.ListChangedAsync(cancellationToken);
         if (invalidateCategoryCounts)
             await cache.RemoveSafelyAsync("categories:all", cancellationToken);
+        if (invalidateSuggestions && invalidator is not null)
+            await invalidator.InvalidateSuggestionsAsync(cancellationToken);
         return new RecipeDto(recipe.Id, recipe.Title, recipe.Slug, recipe.Description, recipe.Instructions, recipe.CategoryId, recipe.AuthorId, recipe.PrepTime, recipe.CookTime, recipe.Servings, recipe.Difficulty, recipe.Status, new(recipe.Nutrition.Calories, recipe.Nutrition.Protein, recipe.Nutrition.Carbs, recipe.Nutrition.Fat), Convert.ToBase64String(recipe.RowVersion), recipe.CreatedAt, recipe.UpdatedAt, recipe.PublishedAt);
     }
 }
