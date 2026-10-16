@@ -25,6 +25,7 @@ using CulinaryBlog.Infrastructure.BackgroundJobs;
 using CulinaryBlog.Infrastructure.Email;
 using CulinaryBlog.Infrastructure.Storage;
 using CulinaryBlog.API.Health;
+using CulinaryBlog.API.Observability;
 using CulinaryBlog.Application.Authentication.Commands;
 using Hangfire;
 using Hangfire.PostgreSql;
@@ -183,6 +184,7 @@ builder.Services.AddOptions<PasswordResetOptions>()
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddCulinaryHealthChecks();
+builder.Services.AddCulinaryBlogOpenTelemetry(builder.Configuration, builder.Environment);
 builder.Services.AddOpenApi("v1", options =>
 {
     options.AddDocumentTransformer((document, _, _) =>
@@ -259,8 +261,9 @@ if (!builder.Environment.IsEnvironment("Testing") || builder.Configuration.GetVa
 
 if (!builder.Environment.IsEnvironment("Testing"))
 {
-    builder.Services.AddHangfire(configuration =>
-        configuration.UsePostgreSqlStorage(storage => storage.UseNpgsqlConnection(connectionString)));
+    builder.Services.AddHangfire(configuration => configuration
+        .UseFilter(new HangfireJobMetricsFilter())
+        .UsePostgreSqlStorage(storage => storage.UseNpgsqlConnection(connectionString)));
     builder.Services.AddHangfireServer();
 }
 
