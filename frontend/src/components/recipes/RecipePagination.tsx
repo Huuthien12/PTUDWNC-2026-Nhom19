@@ -14,6 +14,7 @@ export default function RecipePagination({ currentPage, totalPages, filters = {}
     if (filters.categoryId) params.set("categoryId", filters.categoryId);
     if (filters.difficulty !== undefined) params.set("difficulty", String(filters.difficulty));
     if (filters.maxCookTime !== undefined) params.set("maxCookTime", String(filters.maxCookTime));
+    if (filters.minServings !== undefined) params.set("minServings", String(filters.minServings));
     if (filters.sortBy) params.set("sortBy", filters.sortBy);
     if (filters.sortOrder) params.set("sortOrder", filters.sortOrder);
     return `/recipes?${params.toString()}`;

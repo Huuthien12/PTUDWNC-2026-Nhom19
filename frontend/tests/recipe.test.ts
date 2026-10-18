@@ -30,6 +30,7 @@ test("recipe list sends category, difficulty, cook-time and sort filters", async
       categoryId,
       difficulty: 2,
       maxCookTime: 30,
+      minServings: 2,
       sortBy: "title",
       sortOrder: "asc",
     });
@@ -40,6 +41,7 @@ test("recipe list sends category, difficulty, cook-time and sort filters", async
     assert.equal(url.searchParams.get("categoryId"), categoryId);
     assert.equal(url.searchParams.get("difficulty"), "2");
     assert.equal(url.searchParams.get("maxCookTime"), "30");
+    assert.equal(url.searchParams.get("minServings"), "2");
     assert.equal(url.searchParams.get("sortBy"), "title");
     assert.equal(url.searchParams.get("sortOrder"), "asc");
   } finally {
