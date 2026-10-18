@@ -22,7 +22,8 @@ public sealed class UploadRecipeImageCommandValidator : AbstractValidator<Upload
 }
 
 public sealed class UploadRecipeImageCommandHandler(IUnitOfWork unitOfWork, IFileStorageService storage,
-    IImageCleanupQueue cleanup, TimeProvider clock, IRecipeCacheInvalidator? invalidator = null) : IRequestHandler<UploadRecipeImageCommand, RecipeImageDto>
+    IImageCleanupQueue cleanup, IImageProcessingQueue processingQueue, TimeProvider clock,
+    IRecipeCacheInvalidator? invalidator = null) : IRequestHandler<UploadRecipeImageCommand, RecipeImageDto>
 {
     public async Task<RecipeImageDto> Handle(UploadRecipeImageCommand command, CancellationToken cancellationToken)
     {
@@ -51,6 +52,7 @@ public sealed class UploadRecipeImageCommandHandler(IUnitOfWork unitOfWork, IFil
             RecipeImageAccess.TryEnqueueDelete(cleanup, stored.ObjectKey);
             throw;
         }
+        processingQueue.EnqueueProcess(recipe.Id, result.ImageId, stored.ObjectKey);
         if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
         return result;
     }

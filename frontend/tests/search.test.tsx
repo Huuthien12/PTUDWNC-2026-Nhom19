@@ -9,6 +9,7 @@ import RecipesPage from "../src/app/recipes/page";
 import RecipeListClient from "../src/components/recipes/RecipeListClient";
 import SearchPagination from "../src/components/search/SearchPagination";
 import RecipePagination from "../src/components/recipes/RecipePagination";
+import RecipeImage from "../src/components/shared/RecipeImage";
 import { searchRecipes } from "../src/services/search-service";
 import type { RecipeSearchPage } from "../src/types/search";
 
@@ -121,6 +122,21 @@ test("recipe pagination retains active filters when changing pages", async () =>
       url.searchParams.get("sortBy") === "title" &&
       url.searchParams.get("sortOrder") === "asc";
   }));
+});
+
+test("recipe image uses responsive thumbnail and medium sources with next/image fallback", async () => {
+  await render(<RecipeImage
+    src="https://storage.test/original.jpg"
+    mediumSrc="https://storage.test/medium.jpg"
+    thumbnailSrc="https://storage.test/thumbnail.jpg"
+    title="Canh chua"
+  />);
+  const sources = view!.root.findAllByType("source");
+  assert.deepEqual(sources.map((source) => [source.props.media, source.props.srcSet]), [
+    ["(max-width: 400px)", "https://storage.test/thumbnail.jpg"],
+    ["(max-width: 1000px)", "https://storage.test/medium.jpg"],
+  ]);
+  assert.equal(view!.root.findByType("img").props.src, "https://storage.test/original.jpg");
 });
 
 test("recipe search shows loading then an empty state", async () => {

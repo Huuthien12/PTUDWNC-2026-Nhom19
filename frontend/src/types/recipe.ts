@@ -113,7 +113,7 @@ export interface RecipeDetail {
 
 export interface RecipeSummary {
   id: string; title: string; slug: string; description: string; prepTime: number; cookTime: number;
-  servings: number; difficulty: RecipeDifficulty; thumbnailUrl: string | null; publishedAt: string | null;
+  servings: number; difficulty: RecipeDifficulty; thumbnailUrl: string | null; mediumUrl?: string | null; publishedAt: string | null;
 }
 
 export interface RecipePage extends PaginatedResult<RecipeSummary> {}
@@ -126,6 +126,7 @@ export interface RecipeDashboardItem {
   rowVersion: string;
   categoryName: string;
   thumbnailUrl: string | null;
+  mediumUrl?: string | null;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;

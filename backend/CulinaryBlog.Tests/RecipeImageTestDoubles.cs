@@ -30,6 +30,18 @@ public sealed class FakeFileStorageService : IFileStorageService
         return new StoredFile(key, $"https://storage.test/culinary-blog/{key}", image.ContentType, image.Length);
     }
 
+    public Task<StoredImageVariants> CreateVariantsAsync(Guid recipeId, string originalObjectKey,
+        CancellationToken cancellationToken = default)
+    {
+        var stem = Path.Combine(Path.GetDirectoryName(originalObjectKey)!, Path.GetFileNameWithoutExtension(originalObjectKey))
+            .Replace('\\', '/');
+        var mediumKey = $"{stem}-medium.jpg";
+        var thumbnailKey = $"{stem}-thumbnail.jpg";
+        return Task.FromResult(new StoredImageVariants(
+            new StoredImageVariant(mediumKey, $"https://storage.test/culinary-blog/{mediumKey}"),
+            new StoredImageVariant(thumbnailKey, $"https://storage.test/culinary-blog/{thumbnailKey}")));
+    }
+
     public Task DeleteAsync(string objectKey, CancellationToken cancellationToken = default)
     {
         DeletedKeys.Add(objectKey);
@@ -43,4 +55,12 @@ public sealed class RecordingImageCleanupQueue : IImageCleanupQueue
 {
     public List<string> Keys { get; } = [];
     public void EnqueueDelete(string objectKey) => Keys.Add(objectKey);
+}
+
+public sealed class RecordingImageProcessingQueue : IImageProcessingQueue
+{
+    public List<(Guid RecipeId, Guid ImageId, string OriginalObjectKey)> Jobs { get; } = [];
+
+    public void EnqueueProcess(Guid recipeId, Guid imageId, string originalObjectKey)
+        => Jobs.Add((recipeId, imageId, originalObjectKey));
 }

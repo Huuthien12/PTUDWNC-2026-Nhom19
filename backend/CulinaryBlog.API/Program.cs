@@ -158,12 +158,14 @@ builder.Services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
 builder.Services.AddSingleton<IRefreshTokenGenerator, RefreshTokenGenerator>();
 builder.Services.AddSingleton<IWelcomeEmailQueue, HangfireWelcomeEmailQueue>();
 builder.Services.AddSingleton<IImageCleanupQueue, HangfireImageCleanupQueue>();
+builder.Services.AddSingleton<IImageProcessingQueue, HangfireImageProcessingQueue>();
 builder.Services.AddSingleton<PasswordResetEmailQueue>();
 builder.Services.AddSingleton<IPasswordResetEmailQueue>(services =>
     services.GetRequiredService<PasswordResetEmailQueue>());
 builder.Services.AddHostedService<PasswordResetEmailWorker>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddSingleton<ImageFileValidator>();
+builder.Services.AddSingleton<RecipeImageResizer>();
 builder.Services.AddSingleton<IFileStorageService, MinioFileStorageService>();
 builder.Services.AddHttpClient("google-oauth", client => client.BaseAddress = new Uri("https://oauth2.googleapis.com/"));
 builder.Services.AddScoped<IGoogleCredentialVerifier, GoogleCredentialVerifier>();
