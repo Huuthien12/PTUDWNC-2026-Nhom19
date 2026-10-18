@@ -3,6 +3,15 @@ import type { PaginatedResult } from "./api";
 export type RecipeDifficulty = 1 | 2 | 3;
 export type RecipeStatus = 1 | 2 | 3;
 
+export interface RecipeListFilters {
+  categoryId?: string;
+  difficulty?: RecipeDifficulty;
+  maxCookTime?: number;
+  minServings?: number;
+  sortBy?: "createdAt" | "title";
+  sortOrder?: "asc" | "desc";
+}
+
 export interface RecipeCategory {
   id: string;
   name: string;

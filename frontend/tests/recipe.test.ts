@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildRecipePayload, initialRecipeValues, mapRecipeError, recipeCreatedDestination, recipeRoles } from "../src/services/recipe-form";
 import { ApiError, httpClient } from "../src/services/http-client";
-import { changeRecipeLifecycle, createRecipe, deleteRecipe, getMyRecipes } from "../src/services/recipe-service";
+import { changeRecipeLifecycle, createRecipe, deleteRecipe, getMyRecipes, getRecipes } from "../src/services/recipe-service";
 import { dashboardActions, lifecycleErrorMessage } from "../src/services/recipe-dashboard";
 import { canAccess, loginDestination } from "../src/services/auth-navigation";
 import { SESSION_KEY } from "../src/services/auth-session";
@@ -17,6 +17,37 @@ test("image upload validation blocks invalid files before transport", () => {
 
 const categoryId = "11111111-1111-1111-1111-111111111111";
 const valid = { ...initialRecipeValues, title: "Canh chua", categoryId, prepTime: "10", cookTime: "20", servings: "2" };
+
+test("recipe list sends category, difficulty, cook-time and sort filters", async () => {
+  const originalFetch = globalThis.fetch;
+  let requested = "";
+  globalThis.fetch = async (url) => {
+    requested = String(url);
+    return Response.json({ items: [], totalCount: 0, page: 2, pageSize: 6, totalPages: 0 });
+  };
+  try {
+    await getRecipes(2, 6, {
+      categoryId,
+      difficulty: 2,
+      maxCookTime: 30,
+      minServings: 2,
+      sortBy: "title",
+      sortOrder: "asc",
+    });
+    const url = new URL(requested);
+    assert.equal(url.pathname, "/api/v1/recipes");
+    assert.equal(url.searchParams.get("page"), "2");
+    assert.equal(url.searchParams.get("pageSize"), "6");
+    assert.equal(url.searchParams.get("categoryId"), categoryId);
+    assert.equal(url.searchParams.get("difficulty"), "2");
+    assert.equal(url.searchParams.get("maxCookTime"), "30");
+    assert.equal(url.searchParams.get("minServings"), "2");
+    assert.equal(url.searchParams.get("sortBy"), "title");
+    assert.equal(url.searchParams.get("sortOrder"), "asc");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test("create payload uses contract names and excludes server-owned fields and empty optional values", () => {
   const result = buildRecipePayload({ ...valid, title: "  Canh chua  " }, [categoryId]);
