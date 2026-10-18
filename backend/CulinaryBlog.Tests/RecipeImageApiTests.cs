@@ -186,6 +186,117 @@ public sealed class RecipeImageApiTests
         Assert.EndsWith("-medium.jpg", new Uri(saved.MediumUrl!).AbsolutePath);
         Assert.EndsWith("-thumbnail.jpg", new Uri(saved.ThumbnailUrl!).AbsolutePath);
         Assert.Equal(dto.ImageId, saved.Id);
+        Assert.NotEqual(dto.RowVersion, await CurrentRowVersionAsync(factory, recipe.Id));
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var job = ActivatorUtilities.CreateInstance<RecipeImageProcessingJob>(scope.ServiceProvider);
+            await job.ProcessAsync(queued.RecipeId, queued.ImageId, queued.OriginalObjectKey);
+        }
+        Assert.Single(factory.Storage.VariantSources);
+        Assert.Empty(factory.Storage.DeletedKeys);
+    }
+
+    [Fact]
+    public async Task Processing_deleted_image_does_not_read_original_or_generate_variants()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, _) = await SeedAsync(factory);
+        using var scope = factory.Services.CreateScope();
+        var job = ActivatorUtilities.CreateInstance<RecipeImageProcessingJob>(scope.ServiceProvider);
+        await job.ProcessAsync(recipe.Id, Guid.NewGuid(), $"recipes/{recipe.Id:D}/deleted.png");
+        Assert.Empty(factory.Storage.VariantSources);
+    }
+
+    [Fact]
+    public async Task Processing_conflict_cleans_only_its_own_variants_and_preserves_newer_recipe()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, images) = await SeedAsync(factory, imageCount: 1);
+        var image = images[0];
+        factory.Storage.AfterVariants = async () =>
+        {
+            await using var db = factory.Database.NewContext();
+            var current = await db.Recipes.SingleAsync();
+            current.Title = "Concurrent edit";
+            await db.SaveChangesAsync();
+        };
+        using var scope = factory.Services.CreateScope();
+        var job = ActivatorUtilities.CreateInstance<RecipeImageProcessingJob>(scope.ServiceProvider);
+        var key = $"recipes/{recipe.Id:D}/{0:D32}.png";
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => job.ProcessAsync(recipe.Id, image.Id, key));
+        Assert.Equal(2, factory.Storage.DeletedKeys.Count);
+        Assert.DoesNotContain(key, factory.Storage.DeletedKeys);
+        Assert.Null(Assert.Single(await LoadImagesAsync(factory)).MediumUrl);
+        await using var verify = factory.Database.NewContext();
+        Assert.Equal("Concurrent edit", (await verify.Recipes.SingleAsync()).Title);
+    }
+
+    [Fact]
+    public async Task Competing_processing_attempt_cannot_delete_committed_variants()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, images) = await SeedAsync(factory, imageCount: 1);
+        var key = $"recipes/{recipe.Id:D}/{0:D32}.png";
+        factory.Storage.AfterVariants = async () =>
+        {
+            factory.Storage.AfterVariants = null;
+            using var competing = factory.Services.CreateScope();
+            var winner = ActivatorUtilities.CreateInstance<RecipeImageProcessingJob>(competing.ServiceProvider);
+            await winner.ProcessAsync(recipe.Id, images[0].Id, key);
+        };
+        using var scope = factory.Services.CreateScope();
+        var job = ActivatorUtilities.CreateInstance<RecipeImageProcessingJob>(scope.ServiceProvider);
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => job.ProcessAsync(recipe.Id, images[0].Id, key));
+        var saved = Assert.Single(await LoadImagesAsync(factory));
+        Assert.NotNull(saved.MediumUrl);
+        Assert.NotNull(saved.ThumbnailUrl);
+        Assert.Equal(2, factory.Storage.DeletedKeys.Count);
+        Assert.All(factory.Storage.DeletedKeys, deleted =>
+        {
+            Assert.DoesNotContain(deleted, saved.MediumUrl);
+            Assert.DoesNotContain(deleted, saved.ThumbnailUrl);
+        });
+    }
+
+    [Fact]
+    public async Task Queue_failure_after_upload_commit_keeps_201_and_invalidates_cache()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, _) = await SeedAsync(factory);
+        factory.ImageProcessing.Unavailable = true;
+        using var client = factory.Client();
+        var response = await client.SendAsync(UploadRequest(recipe.Id, Png, "image/png", Rv(recipe)));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Single(await LoadImagesAsync(factory));
+        Assert.NotEmpty(factory.Cache.RemovedKeys);
+        Assert.Empty(factory.ImageCleanup.Keys);
+    }
+
+    [Fact]
+    public async Task Orphan_sweep_keeps_referenced_recent_and_other_prefix_objects_and_recovers_pending_images()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, images) = await SeedAsync(factory, imageCount: 1);
+        var referenced = $"recipes/{recipe.Id:D}/{0:D32}.png";
+        var old = DateTime.UtcNow.AddDays(-2);
+        await using (var db = factory.Database.NewContext())
+        {
+            var image = await db.RecipeImages.SingleAsync();
+            image.CreatedAt = old;
+            await db.SaveChangesAsync();
+        }
+        factory.Storage.Objects.AddRange([
+            new(referenced, old), new($"recipes/{recipe.Id:D}/failed-delete.jpg", old),
+            new($"recipes/{recipe.Id:D}/orphan.jpg", old),
+            new($"recipes/{recipe.Id:D}/recent.jpg", DateTime.UtcNow), new("elsewhere/old.jpg", old)
+        ]);
+        factory.Storage.DeleteFailures.Add($"recipes/{recipe.Id:D}/failed-delete.jpg");
+        using var scope = factory.Services.CreateScope();
+        var job = ActivatorUtilities.CreateInstance<OrphanImageCleanupJob>(scope.ServiceProvider);
+        await job.RunAsync();
+        Assert.Equal($"recipes/{recipe.Id:D}/orphan.jpg", Assert.Single(factory.Storage.DeletedKeys));
+        Assert.Equal(images[0].Id, Assert.Single(factory.ImageProcessing.Jobs).ImageId);
     }
 
     [Fact]

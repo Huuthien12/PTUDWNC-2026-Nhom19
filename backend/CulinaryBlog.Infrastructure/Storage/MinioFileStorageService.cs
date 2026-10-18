@@ -4,6 +4,7 @@ using Minio.DataModel.Args;
 using Microsoft.Extensions.Options;
 using CulinaryBlog.Domain.Exceptions;
 using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
 
 namespace CulinaryBlog.Infrastructure.Storage;
 
@@ -62,9 +63,21 @@ public sealed class MinioFileStorageService(
                 .WithCallbackStream(stream => stream.CopyTo(original)), cancellationToken);
 
             original.Position = 0;
+            // Recheck size and signature before decoding a storage object.
+            var contentType = Path.GetExtension(originalObjectKey).ToLowerInvariant() switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".webp" => "image/webp",
+                ".avif" => "image/avif",
+                _ => null
+            };
+            validator.Validate(original, contentType);
             var resized = resizer.Resize(original);
-            var mediumKey = CreateVariantKey(originalObjectKey, "-medium.jpg");
-            var thumbnailKey = CreateVariantKey(originalObjectKey, "-thumbnail.jpg");
+            // Each attempt owns its files; a failed competing job cannot delete committed variants.
+            var attempt = Guid.NewGuid().ToString("N");
+            var mediumKey = CreateVariantKey(originalObjectKey, $"-{attempt}-medium.jpg");
+            var thumbnailKey = CreateVariantKey(originalObjectKey, $"-{attempt}-thumbnail.jpg");
             var uploadedKeys = new List<string>(2);
             try
             {
@@ -125,6 +138,19 @@ public sealed class MinioFileStorageService(
         var config = options.Value;
         try { await CreateClient(config).RemoveObjectAsync(new RemoveObjectArgs().WithBucket(config.Bucket).WithObject(objectKey), cancellationToken); }
         catch (Exception) { throw new ServiceUnavailableException("MINIO_UNAVAILABLE", "Image storage is unavailable."); }
+    }
+
+    public async IAsyncEnumerable<StoredImageObject> ListRecipeObjectsAsync(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var config = options.Value;
+        var client = CreateClient(config);
+        await foreach (var item in client.ListObjectsEnumAsync(new ListObjectsArgs()
+            .WithBucket(config.Bucket).WithPrefix("recipes/").WithRecursive(true), cancellationToken))
+        {
+            if (!item.IsDir && item.LastModifiedDateTime is { } modified)
+                yield return new StoredImageObject(item.Key, modified.ToUniversalTime());
+        }
     }
 
     public async Task<bool> IsAvailableAsync(CancellationToken cancellationToken = default)

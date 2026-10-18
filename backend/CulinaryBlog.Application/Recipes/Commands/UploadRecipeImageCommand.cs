@@ -3,6 +3,7 @@ using CulinaryBlog.Application.Recipes.DTOs;
 using CulinaryBlog.Application.Recipes.Images;
 using FluentValidation;
 using MediatR;
+using Microsoft.Extensions.Logging;
 
 namespace CulinaryBlog.Application.Recipes.Commands;
 
@@ -23,6 +24,7 @@ public sealed class UploadRecipeImageCommandValidator : AbstractValidator<Upload
 
 public sealed class UploadRecipeImageCommandHandler(IUnitOfWork unitOfWork, IFileStorageService storage,
     IImageCleanupQueue cleanup, IImageProcessingQueue processingQueue, TimeProvider clock,
+    ILogger<UploadRecipeImageCommandHandler> logger,
     IRecipeCacheInvalidator? invalidator = null) : IRequestHandler<UploadRecipeImageCommand, RecipeImageDto>
 {
     public async Task<RecipeImageDto> Handle(UploadRecipeImageCommand command, CancellationToken cancellationToken)
@@ -52,7 +54,13 @@ public sealed class UploadRecipeImageCommandHandler(IUnitOfWork unitOfWork, IFil
             RecipeImageAccess.TryEnqueueDelete(cleanup, stored.ObjectKey);
             throw;
         }
-        processingQueue.EnqueueProcess(recipe.Id, result.ImageId, stored.ObjectKey);
+        try { processingQueue.EnqueueProcess(recipe.Id, result.ImageId, stored.ObjectKey); }
+        catch (Exception exception)
+        {
+            // The upload is committed; the daily sweep retries missing variants after its grace period.
+            logger.LogError(exception, "Could not enqueue image processing for recipe {RecipeId}, image {ImageId}.",
+                recipe.Id, result.ImageId);
+        }
         if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
         return result;
     }

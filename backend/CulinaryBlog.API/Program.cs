@@ -457,6 +457,10 @@ if (!app.Environment.IsEnvironment("Testing"))
     await DataSeeder.SeedAsync(
         dbContext,
         userManager);
+
+    services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<OrphanImageCleanupJob>(
+        "orphan-image-cleanup", job => job.RunAsync(), "30 3 * * *",
+        new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 }
 
 // =========================

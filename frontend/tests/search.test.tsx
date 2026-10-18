@@ -168,6 +168,22 @@ test("recipe image uses responsive thumbnail and medium sources with next/image 
   assert.equal(view!.root.findByType("img").props.src, "https://storage.test/original.jpg");
 });
 
+test("a broken image variant falls back to the original before showing a placeholder", async () => {
+  const src = "https://storage.test/original.jpg";
+  const mediumSrc = "https://storage.test/medium.jpg";
+  await render(<RecipeImage src={src} mediumSrc={mediumSrc} title="Pho" />);
+  await act(async () => {
+    view!.root.findByType("img").props.onError({ currentTarget: { src, currentSrc: mediumSrc } });
+  });
+  assert.equal(view!.root.findAllByType("source").length, 0);
+  assert.equal(view!.root.findByType("img").props.src, src);
+  await act(async () => {
+    view!.root.findByType("img").props.onError({ currentTarget: { src, currentSrc: src } });
+  });
+  assert.equal(view!.root.findAllByType("img").length, 0);
+  assert.match(text(view!.root), /Góc bếp/);
+});
+
 test("recipe search shows loading then an empty state", async () => {
   let resolveFetch!: (response: Response) => void;
   globalThis.fetch = () => new Promise<Response>((resolve) => { resolveFetch = resolve; });

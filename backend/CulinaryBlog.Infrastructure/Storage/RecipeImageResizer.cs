@@ -12,6 +12,12 @@ public sealed class RecipeImageResizer
     public ResizedRecipeImage Resize(Stream source)
     {
         ArgumentNullException.ThrowIfNull(source);
+        using var info = new MagickImage();
+        info.Ping(source);
+        // Bound decoded pixels before allocation, including compressed images below the 5 MB limit.
+        if (info.Width == 0 || info.Height == 0 || (ulong)info.Width * info.Height > 16_000_000)
+            throw new InvalidDataException("Image dimensions exceed the processing limit.");
+        source.Position = 0;
         using var image = new MagickImage(source);
         image.AutoOrient();
 
@@ -23,8 +29,10 @@ public sealed class RecipeImageResizer
     private static byte[] ResizeToJpeg(MagickImage source, uint width, uint height)
     {
         using var image = (MagickImage)source.Clone();
-        image.Resize(new MagickGeometry(width, height) { FillArea = true });
-        image.Crop(width, height, Gravity.Center);
+        var scale = Math.Min(1d, Math.Max((double)width / image.Width, (double)height / image.Height));
+        image.Resize((uint)Math.Max(1, Math.Round(image.Width * scale)),
+            (uint)Math.Max(1, Math.Round(image.Height * scale)));
+        image.Crop(Math.Min(width, image.Width), Math.Min(height, image.Height), Gravity.Center);
         image.ResetPage();
         image.BackgroundColor = MagickColors.White;
         image.Alpha(AlphaAction.Remove);
