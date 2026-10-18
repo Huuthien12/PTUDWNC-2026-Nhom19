@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ContentState from "@/components/shared/ContentState";
 import RecipeCard from "./RecipeCard";
 import RecipePagination from "./RecipePagination";
@@ -13,11 +13,14 @@ import type { Category } from "@/types/category";
 import type { RecipeListFilters, RecipePage } from "@/types/recipe";
 import type { RecipeSearchPage } from "@/types/search";
 
-export default function RecipeListClient({ page, query = "", filters = {} }: {
+export default function RecipeListClient({ page, query = "", filters: inputFilters = {} }: {
   page: number;
   query?: string;
   filters?: RecipeListFilters;
 }) {
+  const { categoryId, difficulty, maxCookTime, minServings, sortBy, sortOrder } = inputFilters;
+  const filters = useMemo(() => ({ categoryId, difficulty, maxCookTime, minServings, sortBy, sortOrder }),
+    [categoryId, difficulty, maxCookTime, minServings, sortBy, sortOrder]);
   const [recipes, setRecipes] = useState<RecipePage | RecipeSearchPage | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoriesFailed, setCategoriesFailed] = useState(false);
@@ -32,7 +35,7 @@ export default function RecipeListClient({ page, query = "", filters = {} }: {
     if (normalizedQuery.length >= 2) return;
     let active = true;
     void getCategories().then((value) => {
-      if (active) setCategories(value);
+      if (active) { setCategories(value); setCategoriesFailed(false); }
     }).catch(() => {
       if (active) setCategoriesFailed(true);
     });
@@ -53,7 +56,7 @@ export default function RecipeListClient({ page, query = "", filters = {} }: {
     return () => { active = false; };
   }, [normalizedQuery, page, requestKey, filters, attempt]);
   const filterPanel = normalizedQuery.length >= 2 ? null : (
-    <RecipeFilters categories={categories} categoriesFailed={categoriesFailed} filters={filters} />
+    <RecipeFilters key={`${filtersKey}:${categories.length}`} categories={categories} categoriesFailed={categoriesFailed} filters={filters} />
   );
   if (failedKey === requestKey) return <>{filterPanel}<ContentState title="Chưa thể tải công thức" description="Vui lòng thử lại sau." />
     <button className="cb-button cb-button-secondary" onClick={() => { setFailedKey(""); setAttempt(value => value + 1); }}>Thử tải lại</button></>;

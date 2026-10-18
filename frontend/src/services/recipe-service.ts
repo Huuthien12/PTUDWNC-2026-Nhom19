@@ -11,6 +11,7 @@ export function getRecipes(page = 1, pageSize = 12, filters: RecipeListFilters =
   if (filters.categoryId) query.set("categoryId", filters.categoryId);
   if (filters.difficulty !== undefined) query.set("difficulty", String(filters.difficulty));
   if (filters.maxCookTime !== undefined) query.set("maxCookTime", String(filters.maxCookTime));
+  if (filters.minServings !== undefined) query.set("minServings", String(filters.minServings));
   if (filters.sortBy) query.set("sortBy", filters.sortBy);
   if (filters.sortOrder) query.set("sortOrder", filters.sortOrder);
   const endpoint = `/api/v1/recipes?${query}`;

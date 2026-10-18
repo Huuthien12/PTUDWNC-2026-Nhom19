@@ -78,6 +78,7 @@ test("recipes page parses supported filters and ignores empty cook time", async 
     categoryId: "11111111-1111-1111-1111-111111111111",
     difficulty: "2",
     maxCookTime: "30",
+    minServings: "2",
     sort: "title-asc",
   }) });
   const list = page.props.children[1];
@@ -86,12 +87,38 @@ test("recipes page parses supported filters and ignores empty cook time", async 
     categoryId: "11111111-1111-1111-1111-111111111111",
     difficulty: 2,
     maxCookTime: 30,
+    minServings: 2,
     sortBy: "title",
     sortOrder: "asc",
   });
 
   const emptyFilterPage = await RecipesPage({ searchParams: Promise.resolve({ maxCookTime: "" }) });
   assert.equal(emptyFilterPage.props.children[1].props.filters.maxCookTime, undefined);
+});
+
+test("recipes page ignores repeated URL parameters and prototype property difficulty names", async () => {
+  const page = await RecipesPage({ searchParams: Promise.resolve({
+    q: ["pho", "bo"], maxCookTime: ["10", "20"], difficulty: "constructor",
+  }) });
+  const list = page.props.children[1];
+  assert.equal(list.props.query, "");
+  assert.equal(list.props.filters.maxCookTime, undefined);
+  assert.equal(list.props.filters.difficulty, undefined);
+});
+
+test("recipe list does not refetch when only the filters object identity changes", async () => {
+  let requests = 0;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/categories")) return Response.json([]);
+    requests++;
+    return Response.json(emptyPage);
+  };
+  await render(<RecipeListClient page={1} filters={{ difficulty: 2 }} />);
+  await act(async () => {
+    view!.update(withRouter(<RecipeListClient page={1} filters={{ difficulty: 2 }} />));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+  assert.equal(requests, 1);
 });
 
 test("search pagination retains the query and exposes previous, page and next links", async () => {
@@ -108,6 +135,7 @@ test("recipe pagination retains active filters when changing pages", async () =>
     categoryId: "11111111-1111-1111-1111-111111111111",
     difficulty: 2,
     maxCookTime: 30,
+    minServings: 2,
     sortBy: "title",
     sortOrder: "asc",
   }} />);
@@ -119,6 +147,7 @@ test("recipe pagination retains active filters when changing pages", async () =>
       url.searchParams.get("categoryId") === "11111111-1111-1111-1111-111111111111" &&
       url.searchParams.get("difficulty") === "2" &&
       url.searchParams.get("maxCookTime") === "30" &&
+      url.searchParams.get("minServings") === "2" &&
       url.searchParams.get("sortBy") === "title" &&
       url.searchParams.get("sortOrder") === "asc";
   }));

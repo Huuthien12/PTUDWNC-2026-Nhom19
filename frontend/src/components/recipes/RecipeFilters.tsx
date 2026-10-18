@@ -49,6 +49,10 @@ export default function RecipeFilters({
             <option value="title-desc">Tên Z–A</option>
           </select>
         </label>
+        <label className="grid gap-2 text-sm font-semibold text-[#254b3b]" htmlFor="recipe-servings">
+          Khẩu phần tối thiểu
+          <input id="recipe-servings" name="minServings" type="number" min="1" step="1" defaultValue={filters.minServings ?? ""} className="rounded-xl border border-[#d8d9cb] bg-white px-3 py-2 font-normal text-[#262b25]" />
+        </label>
       </div>
 
       {categoriesFailed && <p className="mt-3 text-sm text-red-700" role="alert">Chưa thể tải danh mục. Các bộ lọc khác vẫn có thể sử dụng.</p>}
