@@ -8,6 +8,7 @@ import Loading from "../src/app/loading";
 import RecipesPage from "../src/app/recipes/page";
 import RecipeListClient from "../src/components/recipes/RecipeListClient";
 import SearchPagination from "../src/components/search/SearchPagination";
+import RecipePagination from "../src/components/recipes/RecipePagination";
 import { searchRecipes } from "../src/services/search-service";
 import type { RecipeSearchPage } from "../src/types/search";
 
@@ -70,6 +71,28 @@ test("recipes page ignores unsupported one-character queries and invalid pages",
   assert.equal(list.props.page, 1);
 });
 
+test("recipes page parses supported filters and ignores empty cook time", async () => {
+  const page = await RecipesPage({ searchParams: Promise.resolve({
+    page: "3",
+    categoryId: "11111111-1111-1111-1111-111111111111",
+    difficulty: "2",
+    maxCookTime: "30",
+    sort: "title-asc",
+  }) });
+  const list = page.props.children[1];
+  assert.equal(list.props.page, 3);
+  assert.deepEqual(list.props.filters, {
+    categoryId: "11111111-1111-1111-1111-111111111111",
+    difficulty: 2,
+    maxCookTime: 30,
+    sortBy: "title",
+    sortOrder: "asc",
+  });
+
+  const emptyFilterPage = await RecipesPage({ searchParams: Promise.resolve({ maxCookTime: "" }) });
+  assert.equal(emptyFilterPage.props.children[1].props.filters.maxCookTime, undefined);
+});
+
 test("search pagination retains the query and exposes previous, page and next links", async () => {
   await render(<SearchPagination query="phở & bò" currentPage={3} totalPages={5} />);
   const hrefs = view!.root.findAll((node) => typeof node.props.href === "string")
@@ -77,6 +100,27 @@ test("search pagination retains the query and exposes previous, page and next li
   assert.ok(hrefs.includes("/recipes?q=ph%E1%BB%9F%20%26%20b%C3%B2&page=2"));
   assert.ok(hrefs.includes("/recipes?q=ph%E1%BB%9F%20%26%20b%C3%B2&page=3"));
   assert.ok(hrefs.includes("/recipes?q=ph%E1%BB%9F%20%26%20b%C3%B2&page=4"));
+});
+
+test("recipe pagination retains active filters when changing pages", async () => {
+  await render(<RecipePagination currentPage={2} totalPages={4} filters={{
+    categoryId: "11111111-1111-1111-1111-111111111111",
+    difficulty: 2,
+    maxCookTime: 30,
+    sortBy: "title",
+    sortOrder: "asc",
+  }} />);
+  const hrefs = view!.root.findAll((node) => typeof node.props.href === "string")
+    .map((node) => node.props.href as string);
+  assert.ok(hrefs.some((href) => {
+    const url = new URL(href, "http://localhost");
+    return url.searchParams.get("page") === "1" &&
+      url.searchParams.get("categoryId") === "11111111-1111-1111-1111-111111111111" &&
+      url.searchParams.get("difficulty") === "2" &&
+      url.searchParams.get("maxCookTime") === "30" &&
+      url.searchParams.get("sortBy") === "title" &&
+      url.searchParams.get("sortOrder") === "asc";
+  }));
 });
 
 test("recipe search shows loading then an empty state", async () => {
