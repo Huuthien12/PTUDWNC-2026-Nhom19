@@ -26,7 +26,7 @@ export default function RecipeImage({ src, mediumSrc, thumbnailSrc, title, class
       {safeSource && failedSource !== safeSource ? (
         <picture>
           {failedVariants !== sourceKey && safeThumbnailSource && <source media="(max-width: 400px)" srcSet={safeThumbnailSource} />}
-          {failedVariants !== sourceKey && safeMediumSource && <source media="(max-width: 1000px)" srcSet={safeMediumSource} />}
+          {failedVariants !== sourceKey && safeMediumSource && <source media="(min-width: 401px)" srcSet={safeMediumSource} />}
           <Image src={safeSource} alt={title} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             unoptimized onError={(event) => {
               if (failedVariants !== sourceKey && event.currentTarget.currentSrc &&

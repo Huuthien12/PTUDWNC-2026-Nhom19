@@ -163,7 +163,7 @@ test("recipe image uses responsive thumbnail and medium sources with next/image 
   const sources = view!.root.findAllByType("source");
   assert.deepEqual(sources.map((source) => [source.props.media, source.props.srcSet]), [
     ["(max-width: 400px)", "https://storage.test/thumbnail.jpg"],
-    ["(max-width: 1000px)", "https://storage.test/medium.jpg"],
+    ["(min-width: 401px)", "https://storage.test/medium.jpg"],
   ]);
   assert.equal(view!.root.findByType("img").props.src, "https://storage.test/original.jpg");
 });

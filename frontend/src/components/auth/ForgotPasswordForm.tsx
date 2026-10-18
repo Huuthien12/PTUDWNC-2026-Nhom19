@@ -26,6 +26,8 @@ export default function ForgotPasswordForm() {
     defaultValues: { email: "" },
   });
 
+  // The callback runs only on submit; the ref prevents same-tick duplicate requests.
+  // eslint-disable-next-line react-hooks/refs
   const submit = handleSubmit(async (fields) => {
     if (pending.current) return;
     pending.current = true;

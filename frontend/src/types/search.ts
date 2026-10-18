@@ -5,4 +5,4 @@ export interface RecipeSearchResult extends RecipeSummary {
   relevanceScore: number;
 }
 
-export interface RecipeSearchPage extends PaginatedResult<RecipeSearchResult> {}
+export type RecipeSearchPage = PaginatedResult<RecipeSearchResult>;

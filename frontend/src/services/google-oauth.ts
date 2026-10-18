@@ -33,6 +33,8 @@ export async function beginGoogleLogin() {
     client_id: clientId, redirect_uri: redirectUri, response_type: "code", scope: "openid email profile",
     state, code_challenge: await codeChallenge(codeVerifier), code_challenge_method: "S256",
   });
+  // OAuth must leave the application for Google's authorization endpoint.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   window.location.assign(`${GOOGLE_AUTHORIZE_URL}?${query}`);
 }
 
