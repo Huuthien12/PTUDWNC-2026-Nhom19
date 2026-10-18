@@ -12,6 +12,10 @@ public sealed class FakeFileStorageService : IFileStorageService
     private readonly ImageFileValidator _validator = new();
     public List<StoreCall> StoreCalls { get; } = [];
     public List<string> DeletedKeys { get; } = [];
+    public List<string> VariantSources { get; } = [];
+    public List<StoredImageObject> Objects { get; } = [];
+    public HashSet<string> DeleteFailures { get; } = [];
+    public Func<Task>? AfterVariants { get; set; }
     public bool Unavailable { get; set; }
     // Runs after the "upload" succeeded and before the handler writes to the database.
     public Func<Task>? AfterStore { get; set; }
@@ -30,17 +34,52 @@ public sealed class FakeFileStorageService : IFileStorageService
         return new StoredFile(key, $"https://storage.test/culinary-blog/{key}", image.ContentType, image.Length);
     }
 
+    public async Task<StoredImageVariants> CreateVariantsAsync(Guid recipeId, string originalObjectKey,
+        CancellationToken cancellationToken = default)
+    {
+        VariantSources.Add(originalObjectKey);
+        if (AfterVariants is not null) await AfterVariants();
+        var stem = Path.Combine(Path.GetDirectoryName(originalObjectKey)!, Path.GetFileNameWithoutExtension(originalObjectKey))
+            .Replace('\\', '/');
+        stem += $"-{Guid.NewGuid():N}";
+        var mediumKey = $"{stem}-medium.jpg";
+        var thumbnailKey = $"{stem}-thumbnail.jpg";
+        return new StoredImageVariants(
+            new StoredImageVariant(mediumKey, $"https://storage.test/culinary-blog/{mediumKey}"),
+            new StoredImageVariant(thumbnailKey, $"https://storage.test/culinary-blog/{thumbnailKey}"));
+    }
+
     public Task DeleteAsync(string objectKey, CancellationToken cancellationToken = default)
     {
+        if (DeleteFailures.Contains(objectKey)) throw new IOException("Storage deletion failed");
         DeletedKeys.Add(objectKey);
         return Task.CompletedTask;
     }
 
     public Task<bool> IsAvailableAsync(CancellationToken cancellationToken = default) => Task.FromResult(!Unavailable);
+
+    public async IAsyncEnumerable<StoredImageObject> ListRecipeObjectsAsync(
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await Task.CompletedTask;
+        foreach (var item in Objects) yield return item;
+    }
 }
 
 public sealed class RecordingImageCleanupQueue : IImageCleanupQueue
 {
     public List<string> Keys { get; } = [];
     public void EnqueueDelete(string objectKey) => Keys.Add(objectKey);
+}
+
+public sealed class RecordingImageProcessingQueue : IImageProcessingQueue
+{
+    public bool Unavailable { get; set; }
+    public List<(Guid RecipeId, Guid ImageId, string OriginalObjectKey)> Jobs { get; } = [];
+
+    public void EnqueueProcess(Guid recipeId, Guid imageId, string originalObjectKey)
+    {
+        if (Unavailable) throw new IOException("Processing queue unavailable");
+        Jobs.Add((recipeId, imageId, originalObjectKey));
+    }
 }

@@ -52,6 +52,11 @@ public sealed class RecipeRepository : IRecipeRepository
                     .OrderBy(image => image.OrderIndex)
                     .Select(image => image.ThumbnailUrl ?? image.OriginalUrl)
                     .FirstOrDefault(),
+                MediumUrl = recipe.Images
+                    .Where(image => !image.IsDeleted && image.IsPrimary)
+                    .OrderBy(image => image.OrderIndex)
+                    .Select(image => image.MediumUrl ?? image.OriginalUrl)
+                    .FirstOrDefault(),
                 recipe.PublishedAt,
                 recipe.CreatedAt,
                 recipe.UpdatedAt
@@ -66,6 +71,7 @@ public sealed class RecipeRepository : IRecipeRepository
             Convert.ToBase64String(recipe.RowVersion),
             recipe.CategoryName,
             recipe.ThumbnailUrl,
+            recipe.MediumUrl,
             recipe.PublishedAt,
             recipe.CreatedAt,
             recipe.UpdatedAt)).ToList();

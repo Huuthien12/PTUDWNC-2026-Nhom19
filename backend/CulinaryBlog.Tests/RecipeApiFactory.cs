@@ -28,6 +28,7 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
     public RecordingRecipeCache Cache { get; } = new();
     public FakeFileStorageService Storage { get; } = new();
     public RecordingImageCleanupQueue ImageCleanup { get; } = new();
+    public RecordingImageProcessingQueue ImageProcessing { get; } = new();
     public TestOutputCacheStore? OutputCache { get; set; }
 
     public async Task InitializeAsync()
@@ -69,6 +70,8 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<IFileStorageService>(Storage);
             services.RemoveAll<IImageCleanupQueue>();
             services.AddSingleton<IImageCleanupQueue>(ImageCleanup);
+            services.RemoveAll<IImageProcessingQueue>();
+            services.AddSingleton<IImageProcessingQueue>(ImageProcessing);
             if (OutputCache is not null)
             {
                 services.RemoveAll<IOutputCacheStore>();

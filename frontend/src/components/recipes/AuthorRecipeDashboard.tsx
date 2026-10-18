@@ -108,7 +108,7 @@ export default function AuthorRecipeDashboard() {
         const actions = dashboardActions(recipe.status);
         const pending = pendingId === recipe.id;
         return <article key={recipe.id} className="overflow-hidden rounded-[28px] border border-[#dfe1d1] bg-white shadow-[0_12px_30px_rgba(37,75,59,0.05)]">
-          <RecipeImage src={recipe.thumbnailUrl} title={recipe.title} />
+          <RecipeImage src={recipe.mediumUrl ?? recipe.thumbnailUrl} mediumSrc={recipe.mediumUrl} thumbnailSrc={recipe.thumbnailUrl} title={recipe.title} />
           <div className="p-5 sm:p-6"><div className="flex items-start justify-between gap-3"><h2 className="font-serif text-2xl text-[#1d2b22]">{recipe.title}</h2><span className="rounded-full bg-[#f8f6f0] px-3 py-1 text-xs font-semibold text-[#254b3b]">{statusLabel[recipe.status]}</span></div>
             <p className="mt-2 text-sm text-[#5d655a]">{recipe.categoryName}{recipe.publishedAt ? ` · Xuất bản ${new Date(recipe.publishedAt).toLocaleDateString("vi-VN")}` : ""}</p>
             <div className="mt-5 flex flex-wrap gap-3"><Link className="rounded-lg border border-[#254b3b] px-3 py-2 text-sm font-semibold text-[#254b3b] focus:outline-none focus:ring-2 focus:ring-[#d7b354]" href={`/recipes/${recipe.slug}/edit`}>Chỉnh sửa</Link>
