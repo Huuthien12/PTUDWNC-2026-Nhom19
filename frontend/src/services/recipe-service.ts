@@ -1,16 +1,30 @@
 import { apiClient } from "./api-client";
 import { getSession } from "./auth-session";
 import { publicRecipeRequest } from "./recipe-requests";
-import type { CreateRecipeRequest, RecipeDetail, RecipeDto, UpdateRecipeRequest } from "../types/recipe";
+import type { CreateRecipeRequest, RecipeDashboardPage, RecipeDetail, RecipeDto, RecipeListFilters, UpdateRecipeRequest } from "../types/recipe";
 import type { RecipePage } from "../types/recipe";
 
 export type RecipeLifecycleAction = "publish" | "unpublish" | "archive";
 
-export function getRecipes(page = 1, pageSize = 12): Promise<RecipePage> {
+export function getRecipes(page = 1, pageSize = 12, filters: RecipeListFilters = {}): Promise<RecipePage> {
   const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (filters.categoryId) query.set("categoryId", filters.categoryId);
+  if (filters.difficulty !== undefined) query.set("difficulty", String(filters.difficulty));
+  if (filters.maxCookTime !== undefined) query.set("maxCookTime", String(filters.maxCookTime));
+  if (filters.minServings !== undefined) query.set("minServings", String(filters.minServings));
+  if (filters.sortBy) query.set("sortBy", filters.sortBy);
+  if (filters.sortOrder) query.set("sortOrder", filters.sortOrder);
   const endpoint = `/api/v1/recipes?${query}`;
   if (getSession()) return apiClient<RecipePage>(endpoint, { auth: true, cache: "no-store" });
   return publicRecipeRequest(endpoint, () => apiClient<RecipePage>(endpoint, { cache: "no-store" }));
+}
+
+export function getMyRecipes(page = 1, pageSize = 12): Promise<RecipeDashboardPage> {
+  const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  return apiClient<RecipeDashboardPage>(`/api/v1/recipes/mine?${query}`, {
+    auth: true,
+    cache: "no-store",
+  });
 }
 
 export function createRecipe(input: CreateRecipeRequest): Promise<RecipeDto> {

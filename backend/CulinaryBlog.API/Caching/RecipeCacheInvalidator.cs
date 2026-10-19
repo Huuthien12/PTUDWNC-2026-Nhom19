@@ -8,6 +8,8 @@ namespace CulinaryBlog.API.Caching;
 public sealed class RecipeCacheInvalidator(AppDbContext db, ICacheService cache,
     IOutputCacheStore output, ILogger<RecipeCacheInvalidator> logger) : IRecipeCacheInvalidator
 {
+    private const string SuggestionVersionKey = "search:suggest:version";
+
     public async Task RecipeChangedAsync(string slug, CancellationToken cancellationToken)
     {
         await cache.RemoveSafelyAsync($"recipe:{slug}", cancellationToken, logger);
@@ -41,5 +43,23 @@ public sealed class RecipeCacheInvalidator(AppDbContext db, ICacheService cache,
         try { await output.EvictByTagAsync("recipes", cancellationToken); }
         catch (Exception error) when (CacheFailure.IsInfrastructure(error))
         { CacheFailure.Log(logger, "recipe-list tag eviction", error); }
+    }
+
+    public async Task<string?> GetSuggestionVersionAsync(CancellationToken cancellationToken)
+    {
+        try { return await cache.GetAsync<string>(SuggestionVersionKey, cancellationToken) ?? "0"; }
+        catch (Exception error) when (CacheFailure.IsInfrastructure(error))
+        { CacheFailure.Log(logger, "recipe-suggestion version read", error); return null; }
+    }
+
+    public async Task InvalidateSuggestionsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await cache.SetAsync(SuggestionVersionKey, Guid.NewGuid().ToString("N"),
+                TimeSpan.FromDays(1), cancellationToken, useAbsoluteExpiration: true);
+        }
+        catch (Exception error) when (CacheFailure.IsInfrastructure(error))
+        { CacheFailure.Log(logger, "recipe-suggestion invalidation", error); }
     }
 }

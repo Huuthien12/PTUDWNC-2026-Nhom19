@@ -16,7 +16,15 @@ public sealed class SmtpOptions
     public bool EnableSsl { get; init; }
 }
 
-public sealed class SmtpEmailService(IOptions<SmtpOptions> options) : IEmailService
+public sealed class PasswordResetOptions
+{
+    public const string SectionName = "PasswordReset";
+    public string FrontendBaseUrl { get; init; } = string.Empty;
+}
+
+public sealed class SmtpEmailService(
+    IOptions<SmtpOptions> options,
+    IOptions<PasswordResetOptions> passwordResetOptions) : IEmailService
 {
     public async Task SendWelcomeEmailAsync(string email, string fullName, CancellationToken cancellationToken = default)
     {
@@ -34,6 +42,34 @@ public sealed class SmtpEmailService(IOptions<SmtpOptions> options) : IEmailServ
         {
             Subject = "Chào mừng bạn đến Culinary Blog",
             Body = $"<p>Chào {safeName},</p><p>Cảm ơn bạn đã tham gia Culinary Blog.</p>",
+            IsBodyHtml = true
+        };
+        await client.SendMailAsync(message, cancellationToken);
+    }
+
+    public async Task SendPasswordResetEmailAsync(
+        string email,
+        string fullName,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        var settings = options.Value;
+        using var client = new SmtpClient(settings.Host, settings.Port)
+        {
+            EnableSsl = settings.EnableSsl,
+            UseDefaultCredentials = false
+        };
+        if (!string.IsNullOrWhiteSpace(settings.UserName))
+            client.Credentials = new NetworkCredential(settings.UserName, settings.Password);
+
+        var resetPage = new Uri(new Uri(passwordResetOptions.Value.FrontendBaseUrl), "/reset-password");
+        var resetUrl = $"{resetPage}?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}";
+        var safeName = HtmlEncoder.Default.Encode(fullName);
+        var safeUrl = HtmlEncoder.Default.Encode(resetUrl);
+        using var message = new MailMessage(settings.From, email)
+        {
+            Subject = "Đặt lại mật khẩu Culinary Blog",
+            Body = $"<p>Chào {safeName},</p><p><a href=\"{safeUrl}\">Đặt lại mật khẩu</a></p>",
             IsBodyHtml = true
         };
         await client.SendMailAsync(message, cancellationToken);

@@ -6,4 +6,6 @@ public interface IRecipeCacheInvalidator
     Task CategoryChangedAsync(Guid categoryId, CancellationToken cancellationToken);
     Task AuthorChangedAsync(string authorId, CancellationToken cancellationToken);
     Task ListChangedAsync(CancellationToken cancellationToken);
+    Task<string?> GetSuggestionVersionAsync(CancellationToken cancellationToken);
+    Task InvalidateSuggestionsAsync(CancellationToken cancellationToken);
 }

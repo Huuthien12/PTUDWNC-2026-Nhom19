@@ -47,7 +47,9 @@ public sealed class SearchRecipesQueryHandler(IUnitOfWork unitOfWork)
                 result.Recipe.Id, result.Recipe.Title, result.Recipe.Slug,
                 result.Recipe.Description, result.Recipe.PrepTime, result.Recipe.CookTime,
                 result.Recipe.Servings, result.Recipe.Difficulty,
-                image?.ThumbnailUrl ?? image?.OriginalUrl, result.Recipe.PublishedAt,
+                image?.ThumbnailUrl ?? image?.OriginalUrl,
+                image?.MediumUrl ?? image?.OriginalUrl,
+                result.Recipe.PublishedAt,
                 result.RelevanceScore);
         }).ToList();
         var totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)request.PageSize);

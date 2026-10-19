@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildRecipePayload, initialRecipeValues, mapRecipeError, recipeCreatedDestination, recipeRoles } from "../src/services/recipe-form";
 import { ApiError, httpClient } from "../src/services/http-client";
-import { changeRecipeLifecycle, createRecipe, deleteRecipe } from "../src/services/recipe-service";
+import { changeRecipeLifecycle, createRecipe, deleteRecipe, getMyRecipes, getRecipes } from "../src/services/recipe-service";
 import { dashboardActions, lifecycleErrorMessage } from "../src/services/recipe-dashboard";
 import { canAccess, loginDestination } from "../src/services/auth-navigation";
 import { SESSION_KEY } from "../src/services/auth-session";
@@ -17,6 +17,37 @@ test("image upload validation blocks invalid files before transport", () => {
 
 const categoryId = "11111111-1111-1111-1111-111111111111";
 const valid = { ...initialRecipeValues, title: "Canh chua", categoryId, prepTime: "10", cookTime: "20", servings: "2" };
+
+test("recipe list sends category, difficulty, cook-time and sort filters", async () => {
+  const originalFetch = globalThis.fetch;
+  let requested = "";
+  globalThis.fetch = async (url) => {
+    requested = String(url);
+    return Response.json({ items: [], totalCount: 0, page: 2, pageSize: 6, totalPages: 0 });
+  };
+  try {
+    await getRecipes(2, 6, {
+      categoryId,
+      difficulty: 2,
+      maxCookTime: 30,
+      minServings: 2,
+      sortBy: "title",
+      sortOrder: "asc",
+    });
+    const url = new URL(requested);
+    assert.equal(url.pathname, "/api/v1/recipes");
+    assert.equal(url.searchParams.get("page"), "2");
+    assert.equal(url.searchParams.get("pageSize"), "6");
+    assert.equal(url.searchParams.get("categoryId"), categoryId);
+    assert.equal(url.searchParams.get("difficulty"), "2");
+    assert.equal(url.searchParams.get("maxCookTime"), "30");
+    assert.equal(url.searchParams.get("minServings"), "2");
+    assert.equal(url.searchParams.get("sortBy"), "title");
+    assert.equal(url.searchParams.get("sortOrder"), "asc");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test("create payload uses contract names and excludes server-owned fields and empty optional values", () => {
   const result = buildRecipePayload({ ...valid, title: "  Canh chua  " }, [categoryId]);
@@ -89,8 +120,35 @@ test("UI access and login return path allow Author/Admin only, destination needs
   for (const role of ["Author", "Admin"]) assert.ok(canAccess([role], recipeRoles));
   for (const roles of [[], ["Reader"], ["author"]]) assert.equal(canAccess(roles, recipeRoles), false);
   assert.equal(loginDestination("/recipes/create"), "/recipes/create");
+  assert.equal(loginDestination("/recipes/dashboard"), "/recipes/dashboard");
   assert.equal(loginDestination("/recipes/create?next=https://evil.test"), "/");
   assert.equal(recipeCreatedDestination, "/categories?created=recipe");
+});
+
+test("dashboard service uses the authenticated mine endpoint without detail fan-out", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const session = { sessionId: "dashboard", accessToken: "access", refreshToken: "refresh", tokenType: "Bearer",
+    expiresAt: new Date(Date.now() + 600000).toISOString(), user: { id: "author", fullName: "Author",
+      userName: "author", email: "a@example.test", avatarUrl: null, roles: ["Author"] } };
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    localStorage: { getItem: (key: string) => key === SESSION_KEY ? JSON.stringify(session) : null },
+  } });
+  let calls = 0;
+  globalThis.fetch = async (url, options = {}) => {
+    calls++;
+    assert.ok(String(url).endsWith("/api/v1/recipes/mine?page=2&pageSize=12"));
+    assert.equal(new Headers(options.headers).get("Authorization"), "Bearer access");
+    return Response.json({ items: [], totalCount: 0, page: 2, pageSize: 12, totalPages: 0 });
+  };
+  try {
+    await getMyRecipes(2, 12);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+    else Reflect.deleteProperty(globalThis, "window");
+  }
 });
 
 test("transport keeps only validation field paths and tolerates malformed/empty errors", async () => {

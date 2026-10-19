@@ -30,6 +30,22 @@ public interface IIdentityService
         string? fullName,
         string? avatarUrl,
         CancellationToken cancellationToken = default);
+
+    Task<IdentityPasswordChangeResult> ChangePasswordAsync(
+        string userId,
+        string currentPassword,
+        string newPassword,
+        CancellationToken cancellationToken = default);
+
+    Task<PasswordResetTokenResult?> GeneratePasswordResetTokenAsync(
+        string email,
+        CancellationToken cancellationToken = default);
+
+    Task<IdentityPasswordResetResult> ResetPasswordAsync(
+        string email,
+        string token,
+        string newPassword,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record IdentityLoginResult(
@@ -57,3 +73,18 @@ public sealed record UserProfileResult(
     IReadOnlyList<string> Roles,
     bool EmailConfirmed,
     DateTime CreatedAt);
+
+public sealed record IdentityPasswordChangeResult(
+    bool Succeeded,
+    string? ErrorCode,
+    DateTimeOffset? LockoutEnd = null);
+
+public sealed record PasswordResetTokenResult(
+    string Email,
+    string FullName,
+    string Token);
+
+public sealed record IdentityPasswordResetResult(
+    bool Succeeded,
+    string? UserId,
+    string? ErrorCode);

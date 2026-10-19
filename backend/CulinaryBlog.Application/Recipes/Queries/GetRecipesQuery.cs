@@ -95,6 +95,7 @@ public sealed class GetRecipesQueryHandler
                 recipe.Servings,
                 recipe.Difficulty,
                 image?.ThumbnailUrl ?? image?.OriginalUrl,
+                image?.MediumUrl ?? image?.OriginalUrl,
                 recipe.PublishedAt);
         }).ToList();
 

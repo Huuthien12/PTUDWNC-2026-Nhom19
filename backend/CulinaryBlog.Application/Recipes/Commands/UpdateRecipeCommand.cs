@@ -29,6 +29,7 @@ public sealed class UpdateRecipeCommandHandler(IUnitOfWork unitOfWork,
             throw new ValidationException([new("CategoryId", "Category không hợp lệ.")]);
 
         var invalidateCategoryCounts = recipe.Status == RecipeStatus.Published && recipe.CategoryId != request.CategoryId;
+        var invalidateSuggestions = recipe.Status == RecipeStatus.Published && recipe.Title != request.Title;
         recipe.Title = request.Title;
         recipe.Description = request.Description;
         recipe.Instructions = request.Instructions;
@@ -56,6 +57,8 @@ public sealed class UpdateRecipeCommandHandler(IUnitOfWork unitOfWork,
         // This update has no outer transaction: SaveChanges above must succeed before eviction.
         await cache.RemoveSafelyAsync($"recipe:{recipe.Slug}", cancellationToken);
         if (invalidator is not null) await invalidator.ListChangedAsync(cancellationToken);
+        if (invalidateSuggestions && invalidator is not null)
+            await invalidator.InvalidateSuggestionsAsync(cancellationToken);
 
         return new RecipeDto(recipe.Id, recipe.Title, recipe.Slug, recipe.Description,
             recipe.Instructions, recipe.CategoryId, recipe.AuthorId, recipe.PrepTime,

@@ -1,5 +1,16 @@
+import type { PaginatedResult } from "./api";
+
 export type RecipeDifficulty = 1 | 2 | 3;
 export type RecipeStatus = 1 | 2 | 3;
+
+export interface RecipeListFilters {
+  categoryId?: string;
+  difficulty?: RecipeDifficulty;
+  maxCookTime?: number;
+  minServings?: number;
+  sortBy?: "createdAt" | "title";
+  sortOrder?: "asc" | "desc";
+}
 
 export interface RecipeCategory {
   id: string;
@@ -103,9 +114,23 @@ export interface RecipeDetail {
 
 export interface RecipeSummary {
   id: string; title: string; slug: string; description: string; prepTime: number; cookTime: number;
-  servings: number; difficulty: RecipeDifficulty; thumbnailUrl: string | null; publishedAt: string | null;
+  servings: number; difficulty: RecipeDifficulty; thumbnailUrl: string | null; mediumUrl?: string | null; publishedAt: string | null;
 }
 
-export interface RecipePage {
-  items: RecipeSummary[]; totalCount: number; page: number; pageSize: number; totalPages: number;
+export interface RecipePage extends PaginatedResult<RecipeSummary> {}
+
+export interface RecipeDashboardItem {
+  id: string;
+  title: string;
+  slug: string;
+  status: RecipeStatus;
+  rowVersion: string;
+  categoryName: string;
+  thumbnailUrl: string | null;
+  mediumUrl?: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
+
+export interface RecipeDashboardPage extends PaginatedResult<RecipeDashboardItem> {}
