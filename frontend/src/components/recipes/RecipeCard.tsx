@@ -18,7 +18,7 @@ export default function RecipeCard({ recipe }: { recipe: RecipeSummary }) {
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-[28px] border border-[#dfe1d1] bg-white shadow-[0_12px_30px_rgba(37,75,59,0.05)] transition-transform duration-200 hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(37,75,59,0.08)]">
       <div className="overflow-hidden">
-        <RecipeImage src={recipe.thumbnailUrl} title={recipe.title} />
+        <RecipeImage src={recipe.mediumUrl ?? recipe.thumbnailUrl} mediumSrc={recipe.mediumUrl} thumbnailSrc={recipe.thumbnailUrl} title={recipe.title} />
       </div>
 
       <div className="flex flex-1 flex-col p-5 sm:p-6">

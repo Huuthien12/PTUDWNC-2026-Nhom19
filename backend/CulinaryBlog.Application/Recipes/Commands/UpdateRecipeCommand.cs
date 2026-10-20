@@ -12,7 +12,7 @@ public sealed record UpdateRecipeCommand(Guid Id, UpdateRecipeRequest Request, s
     : IRequest<RecipeDto>;
 
 public sealed class UpdateRecipeCommandHandler(IUnitOfWork unitOfWork,
-    IValidator<UpdateRecipeRequest> validator, ICacheService cache, TimeProvider clock)
+    IValidator<UpdateRecipeRequest> validator, ICacheService cache, TimeProvider clock, IRecipeCacheInvalidator? invalidator = null)
     : IRequestHandler<UpdateRecipeCommand, RecipeDto>
 {
     public async Task<RecipeDto> Handle(UpdateRecipeCommand command, CancellationToken cancellationToken)
@@ -29,6 +29,7 @@ public sealed class UpdateRecipeCommandHandler(IUnitOfWork unitOfWork,
             throw new ValidationException([new("CategoryId", "Category không hợp lệ.")]);
 
         var invalidateCategoryCounts = recipe.Status == RecipeStatus.Published && recipe.CategoryId != request.CategoryId;
+        var invalidateSuggestions = recipe.Status == RecipeStatus.Published && recipe.Title != request.Title;
         recipe.Title = request.Title;
         recipe.Description = request.Description;
         recipe.Instructions = request.Instructions;
@@ -50,9 +51,14 @@ public sealed class UpdateRecipeCommandHandler(IUnitOfWork unitOfWork,
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         // This is the existing cache affected by moving a Published recipe between categories.
-        // Recipe output-cache tags do not exist yet; do not invent unused cache keys.
         if (invalidateCategoryCounts)
-            await cache.RemoveAsync("categories:all", cancellationToken);
+            await cache.RemoveSafelyAsync("categories:all", cancellationToken);
+
+        // This update has no outer transaction: SaveChanges above must succeed before eviction.
+        await cache.RemoveSafelyAsync($"recipe:{recipe.Slug}", cancellationToken);
+        if (invalidator is not null) await invalidator.ListChangedAsync(cancellationToken);
+        if (invalidateSuggestions && invalidator is not null)
+            await invalidator.InvalidateSuggestionsAsync(cancellationToken);
 
         return new RecipeDto(recipe.Id, recipe.Title, recipe.Slug, recipe.Description,
             recipe.Instructions, recipe.CategoryId, recipe.AuthorId, recipe.PrepTime,

@@ -1,4 +1,5 @@
 import { endSession, establishGoogleSession, establishRegisteredSession, establishSession } from "./auth-session";
+import { apiClient } from "./api-client";
 import type { AuthResponse } from "../types/auth";
 
 export interface LoginRequest {
@@ -11,6 +12,23 @@ export interface RegisterRequest {
   email: string;
   userName: string;
   password: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+  confirmNewPassword: string;
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  email: string;
+  token: string;
+  newPassword: string;
+  confirmNewPassword: string;
 }
 
 export type LoginResponse = AuthResponse;
@@ -34,3 +52,27 @@ export const loginWithGoogle = (request: GoogleLoginRequest): Promise<AuthRespon
 
 export const register = (request: RegisterRequest): Promise<AuthResponse> =>
   establishRegisteredSession(request);
+
+export function changePassword(request: ChangePasswordRequest): Promise<void> {
+  return apiClient<void>("/api/v1/auth/change-password", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(request),
+  });
+}
+
+export function forgotPassword(request: ForgotPasswordRequest): Promise<void> {
+  return apiClient<void>("/api/v1/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify(request),
+    cache: "no-store",
+  });
+}
+
+export function resetPassword(request: ResetPasswordRequest): Promise<void> {
+  return apiClient<void>("/api/v1/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify(request),
+    cache: "no-store",
+  });
+}

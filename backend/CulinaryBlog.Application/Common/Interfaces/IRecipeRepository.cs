@@ -7,6 +7,16 @@ namespace CulinaryBlog.Application.Common.Interfaces;
 
 public interface IRecipeRepository
 {
+    Task<int> CountMineAsync(
+        string authorId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<RecipeDashboardItemDto>> GetMineAsync(
+        string authorId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
     Task<int> CountVisibleAsync(
         string? userId,
         bool isAdmin,
@@ -87,6 +97,12 @@ public interface IRecipeRepository
         CancellationToken cancellationToken = default);
 
     Task<Recipe?> GetBySlugAsync(
+        string slug,
+        string? userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default);
+
+    Task<RecipeDetailAccessResult?> GetDetailAccessBySlugAsync(
         string slug,
         string? userId,
         bool isAdmin,

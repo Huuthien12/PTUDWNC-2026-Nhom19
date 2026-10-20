@@ -3,6 +3,7 @@ using CulinaryBlog.Application.Recipes.DTOs;
 using CulinaryBlog.Application.Recipes.Images;
 using FluentValidation;
 using MediatR;
+using Microsoft.Extensions.Logging;
 
 namespace CulinaryBlog.Application.Recipes.Commands;
 
@@ -22,7 +23,9 @@ public sealed class UploadRecipeImageCommandValidator : AbstractValidator<Upload
 }
 
 public sealed class UploadRecipeImageCommandHandler(IUnitOfWork unitOfWork, IFileStorageService storage,
-    IImageCleanupQueue cleanup, TimeProvider clock) : IRequestHandler<UploadRecipeImageCommand, RecipeImageDto>
+    IImageCleanupQueue cleanup, IImageProcessingQueue processingQueue, TimeProvider clock,
+    ILogger<UploadRecipeImageCommandHandler> logger,
+    IRecipeCacheInvalidator? invalidator = null) : IRequestHandler<UploadRecipeImageCommand, RecipeImageDto>
 {
     public async Task<RecipeImageDto> Handle(UploadRecipeImageCommand command, CancellationToken cancellationToken)
     {
@@ -35,6 +38,7 @@ public sealed class UploadRecipeImageCommandHandler(IUnitOfWork unitOfWork, IFil
 
         // 400 for invalid MIME/size/signature, 503 when MinIO is down; nothing is written to the DB then.
         var stored = await storage.StoreAsync(recipe.Id, command.Content, command.ContentType, cancellationToken);
+        RecipeImageDto result;
         try
         {
             var image = recipe.CreateImage(stored.Url, command.AltText);
@@ -42,7 +46,7 @@ public sealed class UploadRecipeImageCommandHandler(IUnitOfWork unitOfWork, IFil
             recipe.UpdatedAt = clock.GetUtcNow().UtcDateTime;
             unitOfWork.Recipes.Update(recipe, expected);
             await unitOfWork.SaveChangesAsync(cancellationToken);
-            return RecipeImageDto.From(image, recipe.RowVersion);
+            result = RecipeImageDto.From(image, recipe.RowVersion);
         }
         catch
         {
@@ -50,5 +54,14 @@ public sealed class UploadRecipeImageCommandHandler(IUnitOfWork unitOfWork, IFil
             RecipeImageAccess.TryEnqueueDelete(cleanup, stored.ObjectKey);
             throw;
         }
+        try { processingQueue.EnqueueProcess(recipe.Id, result.ImageId, stored.ObjectKey); }
+        catch (Exception exception)
+        {
+            // The upload is committed; the daily sweep retries missing variants after its grace period.
+            logger.LogError(exception, "Could not enqueue image processing for recipe {RecipeId}, image {ImageId}.",
+                recipe.Id, result.ImageId);
+        }
+        if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
+        return result;
     }
 }

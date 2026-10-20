@@ -18,6 +18,65 @@ public sealed class RecipeRepository : IRecipeRepository
         _context = context;
     }
 
+    public Task<int> CountMineAsync(
+        string authorId,
+        CancellationToken cancellationToken = default)
+        => _context.Recipes
+            .AsNoTracking()
+            .Where(recipe => recipe.AuthorId == authorId && !recipe.IsDeleted)
+            .CountAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<RecipeDashboardItemDto>> GetMineAsync(
+        string authorId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var rows = await _context.Recipes
+            .AsNoTracking()
+            .Where(recipe => recipe.AuthorId == authorId && !recipe.IsDeleted)
+            .OrderByDescending(recipe => recipe.CreatedAt)
+            .ThenBy(recipe => recipe.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(recipe => new
+            {
+                recipe.Id,
+                recipe.Title,
+                recipe.Slug,
+                recipe.Status,
+                recipe.RowVersion,
+                CategoryName = recipe.Category.Name,
+                ThumbnailUrl = recipe.Images
+                    .Where(image => !image.IsDeleted && image.IsPrimary)
+                    .OrderBy(image => image.OrderIndex)
+                    .Select(image => image.ThumbnailUrl ?? image.OriginalUrl)
+                    .FirstOrDefault(),
+                MediumUrl = recipe.Images
+                    .Where(image => !image.IsDeleted && image.IsPrimary)
+                    .OrderBy(image => image.OrderIndex)
+                    .Select(image => image.MediumUrl ?? image.OriginalUrl)
+                    .FirstOrDefault(),
+                recipe.PublishedAt,
+                recipe.CreatedAt,
+                recipe.UpdatedAt
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(recipe => new RecipeDashboardItemDto(
+            recipe.Id,
+            recipe.Title,
+            recipe.Slug,
+            recipe.Status,
+            Convert.ToBase64String(recipe.RowVersion),
+            recipe.CategoryName,
+            recipe.ThumbnailUrl,
+            recipe.MediumUrl,
+            recipe.PublishedAt,
+            recipe.CreatedAt,
+            recipe.UpdatedAt)).ToList();
+    }
+
     public Task<Recipe?> GetByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)
@@ -449,6 +508,39 @@ public sealed class RecipeRepository : IRecipeRepository
             .Include(recipe => recipe.Images
                 .Where(image => !image.IsDeleted)
                 .OrderBy(image => image.OrderIndex))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<RecipeDetailAccessResult?> GetDetailAccessBySlugAsync(
+        string slug,
+        string? userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Recipes
+            .AsNoTracking()
+            .Where(recipe => recipe.Slug == slug && !recipe.IsDeleted);
+
+        // Match GetBySlugAsync: invisible recipes return null, including for cache checks.
+        if (!isAdmin)
+        {
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                query = query.Where(recipe =>
+                    recipe.Status == RecipeStatus.Published ||
+                    ((recipe.Status == RecipeStatus.Draft ||
+                      recipe.Status == RecipeStatus.Archived) &&
+                     recipe.AuthorId == userId));
+            }
+            else
+            {
+                query = query.Where(recipe => recipe.Status == RecipeStatus.Published);
+            }
+        }
+
+        return query
+            .Select(recipe => new RecipeDetailAccessResult(
+                recipe.Id, recipe.Slug, recipe.Status, recipe.RowVersion))
             .FirstOrDefaultAsync(cancellationToken);
     }
 

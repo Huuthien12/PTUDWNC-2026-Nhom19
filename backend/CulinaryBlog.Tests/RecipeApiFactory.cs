@@ -12,6 +12,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
+using CulinaryBlog.API.Caching;
+using Microsoft.AspNetCore.OutputCaching;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CulinaryBlog.Tests;
 
@@ -25,6 +28,8 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
     public RecordingRecipeCache Cache { get; } = new();
     public FakeFileStorageService Storage { get; } = new();
     public RecordingImageCleanupQueue ImageCleanup { get; } = new();
+    public RecordingImageProcessingQueue ImageProcessing { get; } = new();
+    public TestOutputCacheStore? OutputCache { get; set; }
 
     public async Task InitializeAsync()
     {
@@ -65,6 +70,14 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<IFileStorageService>(Storage);
             services.RemoveAll<IImageCleanupQueue>();
             services.AddSingleton<IImageCleanupQueue>(ImageCleanup);
+            services.RemoveAll<IImageProcessingQueue>();
+            services.AddSingleton<IImageProcessingQueue>(ImageProcessing);
+            if (OutputCache is not null)
+            {
+                services.RemoveAll<IOutputCacheStore>();
+                services.AddSingleton<IOutputCacheStore>(new ResilientOutputCacheStore(OutputCache,
+                    NullLogger<ResilientOutputCacheStore>.Instance));
+            }
             if (FailWithSlugConstraint)
             {
                 services.RemoveAll<IUnitOfWork>();
@@ -127,12 +140,23 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
 
 public sealed class RecordingRecipeCache : ICacheService
 {
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, object> _values = new();
     public List<string> RemovedKeys { get; } = [];
-    public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default) => Task.FromResult(default(T));
-    public Task SetAsync<T>(string key, T value, TimeSpan expiration, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public List<(string Key, TimeSpan Expiration, bool UseAbsoluteExpiration)> SetOperations { get; } = [];
+    public Func<string, Task>? OnRemoveAsync { get; set; }
+    public Func<string, Task>? OnSetAsync { get; set; }
+    public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_values.TryGetValue(key, out var value) ? (T?)value : default);
+    public async Task SetAsync<T>(string key, T value, TimeSpan expiration, CancellationToken cancellationToken = default, bool useAbsoluteExpiration = false)
+    {
+        if (OnSetAsync is not null) await OnSetAsync(key);
+        SetOperations.Add((key, expiration, useAbsoluteExpiration));
+        if (value is not null) _values[key] = value;
+    }
     public Task RemoveAsync(string key, CancellationToken cancellationToken = default)
     {
+        _values.TryRemove(key, out _);
         RemovedKeys.Add(key);
-        return Task.CompletedTask;
+        return OnRemoveAsync?.Invoke(key) ?? Task.CompletedTask;
     }
 }

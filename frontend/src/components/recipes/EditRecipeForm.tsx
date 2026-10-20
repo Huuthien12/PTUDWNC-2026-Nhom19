@@ -8,7 +8,8 @@ import { buildUpdateRecipePayload, initialRecipeValues, mapRecipeError, nutritio
 import type { Category } from "@/types/category";
 import { ApiError } from "@/services/api-client";
 import IngredientEditor from "./IngredientEditor";
-import type { RecipeDetail, RecipeIngredient } from "@/types/recipe";
+import RecipeStepManager from "./RecipeStepManager";
+import type { RecipeDetail, RecipeIngredient, RecipeStep } from "@/types/recipe";
 import { useSession } from "@/components/auth/useSession";
 import { canManageIngredients } from "@/services/ingredient-form";
 import { useRecipeMutation } from "./useRecipeMutation";
@@ -24,11 +25,14 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
   const [values, setValues] = useState<RecipeFormValues>(initialRecipeValues);
   const [categories, setCategories] = useState<Category[]>([]);
   const [recipeId, setRecipeId] = useState<string | null>(null);
+  const [recipeSteps, setRecipeSteps] = useState<RecipeStep[]>([]);
   const [rowVersion, setRowVersion] = useState("");
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [message, setMessage] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  const [loadedSlug, setLoadedSlug] = useState<string | null>(null);
   const session = useSession();
   const mutation = useRecipeMutation();
   const pending = mutation.pending;
@@ -48,20 +52,26 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
       setAuthorId(recipe.author.id);
       setIngredients(recipe.ingredients);
       setCategories(items);
+      setLoadedSlug(slug);
+      setRecipeSteps(recipe.steps);
       setState("ready");
     }).catch((error: unknown) => {
-      if (active) setState(error instanceof ApiError && error.status === 404 ? "missing" : "error");
+      if (active) {
+        setLoadedSlug(slug);
+        setState(error instanceof ApiError && error.status === 404 ? "missing" : "error");
+      }
     });
     return () => { active = false; };
-  }, [slug]);
+  }, [slug, attempt]);
 
-  async function reloadIngredients() {
+  async function reloadChildren() {
     const recipe = await getRecipeBySlug(slug);
     const incoming = recipeValuesFromDetail(recipe);
     const changed = baseline.current && recipeFields.some((field) => incoming[field] !== baseline.current![field]);
     snapshot.current = recipe;
     setRowVersion(recipe.rowVersion);
     setIngredients(recipe.ingredients);
+    setRecipeSteps(recipe.steps);
     setAuthorId(recipe.author.id);
     if (changed) {
       mutation.invalidate();
@@ -77,7 +87,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
     if (!window.confirm("Tải dữ liệu mới sẽ bỏ bản nháp các trường công thức. Bản nháp nguyên liệu vẫn được giữ. Tiếp tục?")) return;
     if (!mutation.begin(true)) return;
     try {
-      const recipe = await reloadIngredients();
+      const recipe = await reloadChildren();
       baseline.current = recipeValuesFromDetail(recipe);
       setValues(baseline.current);
       setErrors({});
@@ -89,7 +99,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!recipeId || !canManageIngredients(session, authorId) || !mutation.begin()) return;
+    if (!recipeId || !categories.length || !canManageIngredients(session, authorId) || !mutation.begin()) return;
     const result = buildUpdateRecipePayload(values, categories.map((category) => category.id), rowVersion);
     setErrors(result.errors ?? {});
     if (result.errors) { setMessage("Vui lòng kiểm tra các trường được đánh dấu."); mutation.end(); return; }
@@ -101,7 +111,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
       setValues(baseline.current);
       setRowVersion(updated.rowVersion);
       mutation.invalidate();
-      const reloaded = await reloadIngredients();
+      const reloaded = await reloadChildren();
       const current = recipeValuesFromDetail(reloaded);
       if (recipeFields.every((field) => current[field] === baseline.current![field])) setMessage("Đã lưu thay đổi.");
     } catch (error) {
@@ -109,7 +119,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
       setErrors(mapped.fields);
       setMessage(mapped.message);
       mutation.invalidate();
-      try { await reloadIngredients(); } catch { setMessage(`${mapped.message} Chưa tải lại được dữ liệu; hãy tải lại trước khi lưu tiếp.`); }
+      try { await reloadChildren(); } catch { setMessage(`${mapped.message} Chưa tải lại được dữ liệu; hãy tải lại trước khi lưu tiếp.`); }
     } finally {
       mutation.end();
     }
@@ -136,17 +146,18 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
     </div>;
   }
 
-  if (state === "loading") return <main className="p-8" role="status">Đang tải công thức...</main>;
+  if (loadedSlug !== slug || state === "loading") return <main className="p-8" role="status">Đang tải công thức...</main>;
   if (state === "missing") return <main className="p-8" role="alert">Không tìm thấy công thức.</main>;
-  if (state === "error") return <main className="p-8" role="alert">Không thể tải công thức để chỉnh sửa.</main>;
+  if (state === "error") return <main className="p-8" role="alert">Không thể tải công thức để chỉnh sửa. <button className="underline" onClick={() => { setState("loading"); setAttempt(value => value + 1); }}>Thử lại</button></main>;
 
   return <main className="mx-auto max-w-3xl px-6 py-10 text-gray-900">
     <h1 className="text-3xl font-bold">Chỉnh sửa công thức</h1>
+    {!categories.length && <p role="status" className="mt-4">Chưa có danh mục khả dụng. <button className="underline" onClick={() => { setState("loading"); setAttempt(value => value + 1); }}>Tải lại danh mục</button></p>}
     <form noValidate aria-busy={pending} onSubmit={submit} className="mt-6 space-y-6 rounded-xl border bg-white p-6">
       {message && <p role="alert" className="text-red-700">{message}</p>}
       {mutation.needsReload && <button type="button" disabled={pending} onClick={() => void reloadRecipeDraft()}
         className="rounded-lg border px-4 py-2">Tải dữ liệu mới (bỏ bản nháp công thức)</button>}
-      <fieldset disabled={pending} className="space-y-5 disabled:opacity-60">
+      <fieldset disabled={pending || !categories.length} className="space-y-5 disabled:opacity-60">
         {control("title")}{control("description", "textarea")}{control("categoryId", "select")}
         <div className="grid gap-4 sm:grid-cols-3">{control("prepTime", "number")}{control("cookTime", "number")}{control("servings", "number")}</div>
         {control("difficulty", "select")}{control("instructions", "textarea")}
@@ -155,12 +166,15 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
         </fieldset>
         {canManageIngredients(session, authorId) && <IngredientEditor key={recipeId} recipeId={recipeId ?? ""}
           initialIngredients={ingredients} rowVersion={rowVersion} mutation={mutation}
-          onRowVersionChange={setRowVersion} onReload={reloadIngredients} />}
+          onRowVersionChange={setRowVersion} onReload={reloadChildren} />}
         <button type="submit" disabled={pending || mutation.needsReload || !canManageIngredients(session, authorId)}
           className="rounded-lg bg-orange-600 px-5 py-3 font-semibold text-white disabled:opacity-50">
           {pending ? "Đang lưu..." : "Lưu thay đổi"}
         </button>
       </fieldset>
     </form>
+    {canManageIngredients(session, authorId) && <div className="mt-6"><RecipeStepManager
+      key={`${recipeId}-steps`} recipeId={recipeId ?? ""} initialSteps={recipeSteps} rowVersion={rowVersion}
+      mutation={mutation} onRowVersionChange={setRowVersion} onReload={reloadChildren} /></div>}
   </main>;
 }

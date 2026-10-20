@@ -29,7 +29,9 @@ export default function CategoryRecipeCard({
     >
       <article className="cb-recipe">
         <RecipeImage
-          src={recipe.thumbnailUrl}
+          src={recipe.mediumUrl ?? recipe.thumbnailUrl}
+          mediumSrc={recipe.mediumUrl}
+          thumbnailSrc={recipe.thumbnailUrl}
           title={recipe.title}
         />
 

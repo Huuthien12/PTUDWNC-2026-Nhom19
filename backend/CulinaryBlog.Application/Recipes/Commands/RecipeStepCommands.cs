@@ -11,14 +11,16 @@ public sealed record CreateRecipeStepRequest(
     string Description,
     int? DurationMinutes = null,
     string? ImageUrl = null,
-    string? RowVersion = null
+    string? RowVersion = null,
+    string? Title = null
 );
 
 public sealed record UpdateRecipeStepRequest(
     string Description,
     int? DurationMinutes = null,
     string? ImageUrl = null,
-    string? RowVersion = null
+    string? RowVersion = null,
+    string? Title = null
 );
 
 public sealed record DeleteRecipeStepRequest(
@@ -56,6 +58,9 @@ public sealed class CreateRecipeStepCommandValidator
         RuleFor(x => x.Request.Description)
             .NotEmpty()
             .MaximumLength(2000);
+
+        RuleFor(x => x.Request.Title)
+            .MaximumLength(200);
 
         RuleFor(x => x.Request.DurationMinutes)
             .GreaterThanOrEqualTo(0)
@@ -96,6 +101,9 @@ public sealed class UpdateRecipeStepCommandValidator
         RuleFor(x => x.Request.Description)
             .NotEmpty()
             .MaximumLength(2000);
+
+        RuleFor(x => x.Request.Title)
+            .MaximumLength(200);
 
         RuleFor(x => x.Request.DurationMinutes)
             .GreaterThanOrEqualTo(0)
@@ -163,7 +171,7 @@ public sealed class DeleteRecipeStepCommandValidator
 public sealed class CreateRecipeStepCommandHandler(
     IUnitOfWork unitOfWork,
     IValidator<CreateRecipeStepCommand> validator,
-    TimeProvider clock)
+    TimeProvider clock, IRecipeCacheInvalidator? invalidator = null)
     : IRequestHandler<CreateRecipeStepCommand, RecipeStepListDto>
 {
     public async Task<RecipeStepListDto> Handle(
@@ -205,6 +213,7 @@ public sealed class CreateRecipeStepCommandHandler(
         {
             RecipeId = recipe.Id,
             StepNumber = nextStepNumber,
+            Title = request.Title,
             Description = request.Description,
             TimerMinutes = request.DurationMinutes,
             ImageUrl = request.ImageUrl
@@ -227,6 +236,7 @@ public sealed class CreateRecipeStepCommandHandler(
         await unitOfWork.SaveChangesAsync(
             cancellationToken);
 
+        if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
         return RecipeStepCommandResult.CreateResult(recipe);
     }
 }
@@ -234,7 +244,7 @@ public sealed class CreateRecipeStepCommandHandler(
 public sealed class UpdateRecipeStepCommandHandler(
     IUnitOfWork unitOfWork,
     IValidator<UpdateRecipeStepCommand> validator,
-    TimeProvider clock)
+    TimeProvider clock, IRecipeCacheInvalidator? invalidator = null)
     : IRequestHandler<UpdateRecipeStepCommand, RecipeStepListDto>
 {
     public async Task<RecipeStepListDto> Handle(
@@ -276,6 +286,7 @@ public sealed class UpdateRecipeStepCommandHandler(
         var originalRowVersion =
             Convert.FromBase64String(request.RowVersion!);
 
+        step.Title = request.Title;
         step.Description = request.Description;
         step.TimerMinutes = request.DurationMinutes;
         step.ImageUrl = request.ImageUrl;
@@ -292,6 +303,7 @@ public sealed class UpdateRecipeStepCommandHandler(
         await unitOfWork.SaveChangesAsync(
             cancellationToken);
 
+        if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
         return RecipeStepCommandResult.CreateResult(recipe);
     }
 }
@@ -299,7 +311,7 @@ public sealed class UpdateRecipeStepCommandHandler(
 public sealed class DeleteRecipeStepCommandHandler(
     IUnitOfWork unitOfWork,
     IValidator<DeleteRecipeStepCommand> validator,
-    TimeProvider clock)
+    TimeProvider clock, IRecipeCacheInvalidator? invalidator = null)
     : IRequestHandler<DeleteRecipeStepCommand, string>
 {
     public async Task<string> Handle(
@@ -394,6 +406,7 @@ public sealed class DeleteRecipeStepCommandHandler(
         },
         cancellationToken);
 
+    if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
     return Convert.ToBase64String(recipe.RowVersion);
     }
 }
@@ -409,9 +422,11 @@ internal static class RecipeStepCommandResult
             .Select(step => new RecipeStepDto(
                 step.Id,
                 step.StepNumber,
+                step.Title,
                 step.Description,
                 step.TimerMinutes,
-                step.ImageUrl))
+                step.ImageUrl,
+                Convert.ToBase64String(step.RowVersion)))
             .ToList();
 
         return new RecipeStepListDto(

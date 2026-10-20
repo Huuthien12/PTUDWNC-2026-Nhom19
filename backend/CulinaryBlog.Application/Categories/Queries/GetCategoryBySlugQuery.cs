@@ -91,6 +91,7 @@ public sealed class GetCategoryBySlugQueryHandler
                     recipe.Servings,
                     recipe.Difficulty,
                     thumbnailUrl,
+                    primaryImage?.MediumUrl ?? primaryImage?.OriginalUrl,
                     recipe.PublishedAt);
             })
             .ToList();
