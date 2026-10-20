@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { ApiError } from "@/services/api-client";
 import { login, loginWithGoogle } from "@/services/auth-service";
 import { loginDestination } from "@/services/auth-navigation";
@@ -91,23 +92,23 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
     }
   }
 
+  const inputClass = "h-12 w-full rounded-md border border-[#cbd1c2] bg-white px-3 text-[15px] text-[#28351f] outline-none transition placeholder:text-[#92998b] focus:border-[#526645] focus:ring-2 focus:ring-[#526645]/20 disabled:opacity-60";
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-md items-center justify-center px-4">
-      <div className="w-full rounded-xl border bg-white p-6 shadow-sm">
-        <h1 className="mb-2 text-2xl font-bold">
-          {"\u0110\u0103ng nh\u1eadp"}
-        </h1>
+    <section className="relative flex min-h-[calc(100vh-8rem)] items-center overflow-hidden bg-[#f7f5ef] px-4 py-10 sm:px-8 lg:px-12">
+      <div className="absolute inset-y-0 right-0 hidden w-[42%] bg-[#dfe8d5] lg:block" />
+      <div className="relative z-10 mx-auto grid w-full max-w-6xl overflow-hidden border border-[#d8d8ca] bg-white shadow-[0_18px_60px_rgba(75,82,55,0.12)] lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="flex items-center px-6 py-10 sm:px-12 lg:px-16 lg:py-14">
+          <div className="mx-auto w-full max-w-md">
+        <p className="mb-4 text-xs font-semibold uppercase tracking-[0.24em] text-[#687858]">Culinary Blog</p>
+        <h1 className="font-serif text-4xl leading-tight text-[#28351f] sm:text-5xl">Đăng nhập</h1>
+        <p className="mb-7 mt-4 text-sm leading-6 text-[#687060]">Chào mừng bạn trở lại căn bếp của mình.</p>
 
-        <p className="mb-6 text-sm text-gray-500">
-          {"\u0110\u0103ng nh\u1eadp v\u00e0o t\u00e0i kho\u1ea3n Culinary Blog"}
-        </p>
-
-        {reason === "session-expired" && <p role="status" className="mb-4 text-sm">Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.</p>}
-        {reason === "logout-unconfirmed" && <p role="status" className="mb-4 text-sm">Đã xóa phiên trên thiết bị này, nhưng chưa xác nhận được việc thu hồi phiên trên máy chủ.</p>}
+        {reason === "session-expired" && <p role="status" className="mb-4 rounded-md border border-[#d9c68b] bg-[#fff9e8] px-4 py-3 text-sm text-[#695528]">Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.</p>}
+        {reason === "logout-unconfirmed" && <p role="status" className="mb-4 rounded-md border border-[#d9c68b] bg-[#fff9e8] px-4 py-3 text-sm text-[#695528]">Đã xóa phiên trên thiết bị này, nhưng chưa xác nhận được việc thu hồi phiên trên máy chủ.</p>}
         {error && (
           <AuthNotice
             kind="error"
-            className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            className="mb-4 rounded-md border border-[#e7b9a8] bg-[#fff4ef] px-4 py-3 text-sm text-[#9a4f3c]"
             onDismiss={() => setError("")}
           >
             {error}
@@ -116,14 +117,14 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
         {success && (
           <AuthNotice
             kind="success"
-            className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700"
+            className="mb-4 rounded-md border border-[#b9cfad] bg-[#f1f8ed] px-4 py-3 text-sm text-[#49613b]"
             onDismiss={() => setSuccess("")}
           >
             {success}
           </AuthNotice>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label
               htmlFor="email"
@@ -139,7 +140,9 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
               onChange={(event) => setEmail(event.target.value)}
               placeholder="Nh\u1eadp email"
               disabled={loading}
-              className="w-full rounded-lg border px-3 py-2 outline-none focus:ring-2"
+              autoComplete="email"
+              required
+              className={inputClass}
             />
           </div>
 
@@ -158,14 +161,16 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Nh\u1eadp m\u1eadt kh\u1ea9u"
               disabled={loading}
-              className="w-full rounded-lg border px-3 py-2 outline-none focus:ring-2"
+              autoComplete="current-password"
+              required
+              className={inputClass}
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-black px-4 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-12 w-full rounded-md bg-[#526645] px-4 font-semibold uppercase tracking-[0.1em] text-white hover:bg-[#3f5135] focus-visible:ring-2 focus-visible:ring-[#9cad8b] focus-visible:ring-offset-2"
           >
             {loading
               ? "\u0110ang \u0111\u0103ng nh\u1eadp..."
@@ -173,10 +178,16 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
           </button>
         </form>
         <button type="button" disabled={loading} onClick={() => void handleGoogleLogin()}
-          className="mt-3 w-full rounded-lg border px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-50">
+          className="mt-3 h-12 w-full rounded-md border border-[#cbd1c2] px-4 font-medium text-[#35412c] hover:bg-[#f7f5ef] focus-visible:ring-2 focus-visible:ring-[#9cad8b]">
           {loading ? "Đang xác thực..." : "Đăng nhập với Google"}
         </button>
+        <p className="mt-7 text-center text-sm text-[#687060]">Chưa có tài khoản? <Link href="/register" className="font-semibold text-[#526645] underline underline-offset-4 hover:text-[#28351f]">Đăng ký</Link></p>
+          </div>
+        </div>
+        <div className="relative hidden min-h-[580px] bg-cover bg-center lg:block" style={{ backgroundImage: "linear-gradient(180deg, rgba(40,53,27,0.04), rgba(40,53,27,0.55)), url('https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=1000&q=85')" }}>
+          <div className="absolute inset-x-8 bottom-9 text-white"><p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-[#e5efcf]">Bếp nhỏ, cảm hứng lớn</p><h2 className="max-w-sm font-serif text-4xl leading-tight">Món ngon bắt đầu<br />từ câu chuyện của bạn.</h2></div>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
