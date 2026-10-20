@@ -12,7 +12,7 @@ export default function RecipeImage({ src, mediumSrc, thumbnailSrc, title, class
   className?: string;
 }) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
-  const [failedVariants, setFailedVariants] = useState<string | null>(null);
+  const [failedVariants, setFailedVariants] = useState<{ sourceKey: string; urls: string[] }>({ sourceKey: "", urls: [] });
   const sourceKey = `${src}:${mediumSrc}:${thumbnailSrc}`;
   const safeSource = src && (/^https?:\/\//i.test(src) || /^\/(?!\/)/.test(src)) ? src : null;
   const safeThumbnailSource = thumbnailSrc && (/^https?:\/\//i.test(thumbnailSrc) || /^\/(?!\/)/.test(thumbnailSrc))
@@ -21,17 +21,31 @@ export default function RecipeImage({ src, mediumSrc, thumbnailSrc, title, class
   const safeMediumSource = mediumSrc && (/^https?:\/\//i.test(mediumSrc) || /^\/(?!\/)/.test(mediumSrc))
     ? mediumSrc
     : null;
+  const failedVariantUrls = failedVariants.sourceKey === sourceKey ? failedVariants.urls : [];
+  const isCurrentSource = (currentSrc: string, candidate: string) => {
+    try { return new URL(candidate, globalThis.location?.href ?? "http://localhost").href === currentSrc; }
+    catch { return candidate === currentSrc; }
+  };
   return (
     <div className={`cb-recipe-visual ${className}`.trim()}>
       {safeSource && failedSource !== safeSource ? (
         <picture>
-          {failedVariants !== sourceKey && safeThumbnailSource && <source media="(max-width: 400px)" srcSet={safeThumbnailSource} />}
-          {failedVariants !== sourceKey && safeMediumSource && <source media="(min-width: 401px)" srcSet={safeMediumSource} />}
+          {safeThumbnailSource && !failedVariantUrls.includes(safeThumbnailSource) &&
+            <source media="(max-width: 400px)" srcSet={safeThumbnailSource} />}
+          {safeMediumSource && !failedVariantUrls.includes(safeMediumSource) && <source srcSet={safeMediumSource} />}
           <Image src={safeSource} alt={title} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             unoptimized onError={(event) => {
-              if (failedVariants !== sourceKey && event.currentTarget.currentSrc &&
-                  event.currentTarget.currentSrc !== event.currentTarget.src) setFailedVariants(sourceKey);
-              else setFailedSource(safeSource);
+              const currentSrc = event.currentTarget.currentSrc;
+              const failedVariant = [safeThumbnailSource, safeMediumSource]
+                .find((candidate): candidate is string => Boolean(candidate && currentSrc && isCurrentSource(currentSrc, candidate)));
+              if (failedVariant) {
+                setFailedVariants((current) => ({
+                  sourceKey,
+                  urls: current.sourceKey === sourceKey
+                    ? [...new Set([...current.urls, failedVariant])]
+                    : [failedVariant],
+                }));
+              } else setFailedSource(safeSource);
             }} />
         </picture>
       ) : (

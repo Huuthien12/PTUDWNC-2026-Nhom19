@@ -14,6 +14,7 @@ public sealed class RecipeImageProcessingJob(
     TimeProvider clock)
 {
     [AutomaticRetry(Attempts = 3)]
+    [TrackImageProcessingJob]
     public async Task ProcessAsync(Guid recipeId, Guid imageId, string originalObjectKey)
     {
         var recipe = await unitOfWork.Recipes.GetForImagesAsync(recipeId);
