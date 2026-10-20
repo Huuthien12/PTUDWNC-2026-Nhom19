@@ -9,6 +9,7 @@ using CulinaryBlog.Domain.Entities;
 using CulinaryBlog.Domain.Exceptions;
 using CulinaryBlog.Infrastructure.BackgroundJobs;
 using CulinaryBlog.Infrastructure.Repositories;
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -274,10 +275,10 @@ public sealed class RecipeImageApiTests
     }
 
     [Fact]
-    public async Task Orphan_sweep_keeps_referenced_recent_and_other_prefix_objects_and_recovers_pending_images()
+    public async Task Orphan_sweep_keeps_references_and_retries_when_any_delete_fails()
     {
         await using var factory = new RecipeApiFactory();
-        var (recipe, images) = await SeedAsync(factory, imageCount: 1);
+        var (recipe, _) = await SeedAsync(factory, imageCount: 1);
         var referenced = $"recipes/{recipe.Id:D}/{0:D32}.png";
         var old = DateTime.UtcNow.AddDays(-2);
         await using (var db = factory.Database.NewContext())
@@ -294,9 +295,82 @@ public sealed class RecipeImageApiTests
         factory.Storage.DeleteFailures.Add($"recipes/{recipe.Id:D}/failed-delete.jpg");
         using var scope = factory.Services.CreateScope();
         var job = ActivatorUtilities.CreateInstance<OrphanImageCleanupJob>(scope.ServiceProvider);
-        await job.RunAsync();
+        await Assert.ThrowsAsync<AggregateException>(() => job.RunAsync());
         Assert.Equal($"recipes/{recipe.Id:D}/orphan.jpg", Assert.Single(factory.Storage.DeletedKeys));
+        Assert.Empty(factory.ImageProcessing.Jobs);
+    }
+
+    [Fact]
+    public async Task Pending_image_recovery_does_not_wait_for_the_orphan_grace_period()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (_, images) = await SeedAsync(factory, imageCount: 1);
+        using var scope = factory.Services.CreateScope();
+        var job = ActivatorUtilities.CreateInstance<OrphanImageCleanupJob>(scope.ServiceProvider);
+
+        await job.RecoverPendingAsync();
+
         Assert.Equal(images[0].Id, Assert.Single(factory.ImageProcessing.Jobs).ImageId);
+    }
+
+    [Fact]
+    public async Task Pending_image_recovery_throws_for_retry_and_remains_idempotent()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (_, images) = await SeedAsync(factory, imageCount: 1);
+        using var scope = factory.Services.CreateScope();
+        var job = ActivatorUtilities.CreateInstance<OrphanImageCleanupJob>(scope.ServiceProvider);
+        factory.ImageProcessing.Unavailable = true;
+
+        await Assert.ThrowsAsync<AggregateException>(() => job.RecoverPendingAsync());
+        factory.ImageProcessing.Unavailable = false;
+        await job.RecoverPendingAsync();
+
+        Assert.Equal(images[0].Id, Assert.Single(factory.ImageProcessing.Jobs).ImageId);
+    }
+
+    [Fact]
+    public async Task Orphan_sweep_pages_all_references_and_keeps_soft_deleted_rows()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, _) = await SeedAsync(factory);
+        var old = DateTime.UtcNow.AddDays(-2);
+        await using (var db = factory.Database.NewContext())
+        {
+            for (var index = 0; index < 205; index++)
+            {
+                var url = ObjectUrl(recipe.Id, index);
+                db.RecipeImages.Add(new RecipeImage
+                {
+                    RecipeId = recipe.Id,
+                    OriginalUrl = url,
+                    OrderIndex = index,
+                    IsDeleted = index == 204
+                });
+                factory.Storage.Objects.Add(new($"recipes/{recipe.Id:D}/{index:D32}.png", old));
+            }
+            await db.SaveChangesAsync();
+        }
+        using var scope = factory.Services.CreateScope();
+        var job = ActivatorUtilities.CreateInstance<OrphanImageCleanupJob>(scope.ServiceProvider);
+
+        await job.RunAsync();
+
+        Assert.Empty(factory.Storage.DeletedKeys);
+    }
+
+    [Fact]
+    public void Orphan_jobs_prevent_concurrent_execution()
+    {
+        var methods = new[]
+        {
+            nameof(OrphanImageCleanupJob.RunAsync),
+            nameof(OrphanImageCleanupJob.RecoverPendingAsync)
+        };
+        Assert.All(methods, method => Assert.NotNull(typeof(OrphanImageCleanupJob).GetMethod(method)!
+            .GetCustomAttributes(typeof(DisableConcurrentExecutionAttribute), inherit: true).SingleOrDefault()));
+        Assert.All(methods, method => Assert.NotNull(typeof(OrphanImageCleanupJob).GetMethod(method)!
+            .GetCustomAttributes(typeof(AutomaticRetryAttribute), inherit: true).SingleOrDefault()));
     }
 
     [Fact]

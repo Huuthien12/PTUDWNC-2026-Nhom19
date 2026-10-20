@@ -163,18 +163,53 @@ test("recipe image uses responsive thumbnail and medium sources with next/image 
   const sources = view!.root.findAllByType("source");
   assert.deepEqual(sources.map((source) => [source.props.media, source.props.srcSet]), [
     ["(max-width: 400px)", "https://storage.test/thumbnail.jpg"],
-    ["(max-width: 1000px)", "https://storage.test/medium.jpg"],
+    [undefined, "https://storage.test/medium.jpg"],
   ]);
   assert.equal(view!.root.findByType("img").props.src, "https://storage.test/original.jpg");
 });
 
-test("a broken image variant falls back to the original before showing a placeholder", async () => {
+test("recipe image removes only the failed variant and restores variants for a new image", async () => {
   const src = "https://storage.test/original.jpg";
   const mediumSrc = "https://storage.test/medium.jpg";
-  await render(<RecipeImage src={src} mediumSrc={mediumSrc} title="Pho" />);
+  const thumbnailSrc = "https://storage.test/thumbnail.jpg";
+  await render(<RecipeImage src={src} mediumSrc={mediumSrc} thumbnailSrc={thumbnailSrc} title="Pho" />);
+  await act(async () => {
+    view!.root.findByType("img").props.onError({ currentTarget: { src, currentSrc: thumbnailSrc } });
+  });
+  assert.deepEqual(view!.root.findAllByType("source").map((source) => source.props.srcSet), [mediumSrc]);
+
+  await act(async () => {
+    view!.update(<RecipeImage src="https://storage.test/new-original.jpg"
+      mediumSrc="https://storage.test/new-medium.jpg" thumbnailSrc="https://storage.test/new-thumbnail.jpg" title="Pho" />);
+  });
+  assert.equal(view!.root.findAllByType("source").length, 2);
+});
+
+test("medium failure keeps the thumbnail available after a viewport change", async () => {
+  const src = "https://storage.test/original.jpg";
+  const mediumSrc = "https://storage.test/medium.jpg";
+  const thumbnailSrc = "https://storage.test/thumbnail.jpg";
+  await render(<RecipeImage src={src} mediumSrc={mediumSrc} thumbnailSrc={thumbnailSrc} title="Pho" />);
   await act(async () => {
     view!.root.findByType("img").props.onError({ currentTarget: { src, currentSrc: mediumSrc } });
   });
+  const remaining = view!.root.findAllByType("source");
+  assert.equal(remaining.length, 1);
+  assert.equal(remaining[0].props.srcSet, thumbnailSrc);
+  assert.equal(remaining[0].props.media, "(max-width: 400px)");
+  assert.equal(view!.root.findByType("img").props.src, src);
+});
+
+test("failed variants use the original and show a placeholder only if the original fails", async () => {
+  const src = "https://storage.test/original.jpg";
+  const mediumSrc = "https://storage.test/medium.jpg";
+  const thumbnailSrc = "https://storage.test/thumbnail.jpg";
+  await render(<RecipeImage src={src} mediumSrc={mediumSrc} thumbnailSrc={thumbnailSrc} title="Pho" />);
+  for (const currentSrc of [thumbnailSrc, mediumSrc]) {
+    await act(async () => {
+      view!.root.findByType("img").props.onError({ currentTarget: { src, currentSrc } });
+    });
+  }
   assert.equal(view!.root.findAllByType("source").length, 0);
   assert.equal(view!.root.findByType("img").props.src, src);
   await act(async () => {

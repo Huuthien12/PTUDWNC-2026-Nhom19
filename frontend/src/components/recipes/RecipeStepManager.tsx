@@ -28,6 +28,8 @@ export default function RecipeStepManager({ recipeId, initialSteps, rowVersion, 
   const [message, setMessage] = useState("");
   const blocked = mutation.pending || mutation.needsReload;
 
+  // Prop changes are authoritative after aggregate reloads.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setSteps(sortSteps(initialSteps)), [initialSteps]);
 
   function resetForm() { setForm(emptyForm); setEditingId(null); }
