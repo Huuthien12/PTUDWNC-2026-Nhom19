@@ -43,10 +43,11 @@ export default function AuthorRecipeDashboard() {
   }, [session]);
 
   useEffect(() => {
+    const requestCounter = latestRequestRef;
     const timer = window.setTimeout(() => { void load(1); });
     return () => {
       window.clearTimeout(timer);
-      latestRequestRef.current++;
+      requestCounter.current++;
     };
   }, [load]);
 

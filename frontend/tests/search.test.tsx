@@ -10,6 +10,7 @@ import RecipeListClient from "../src/components/recipes/RecipeListClient";
 import SearchPagination from "../src/components/search/SearchPagination";
 import RecipePagination from "../src/components/recipes/RecipePagination";
 import RecipeImage from "../src/components/shared/RecipeImage";
+import ContentState from "../src/components/shared/ContentState";
 import { searchRecipes } from "../src/services/search-service";
 import { clearRecipeRequests } from "../src/services/recipe-requests";
 import type { RecipeSearchPage } from "../src/types/search";
@@ -155,6 +156,18 @@ test("recipe pagination retains active filters when changing pages", async () =>
   }));
 });
 
+test("ContentState asChild action renders one accessible link without a nested button", async () => {
+  await render(<ContentState headingAs="h2" title="Không có dữ liệu" description="Quay lại danh sách."
+    href="/recipes" action="Xem công thức" />);
+
+  const link = view!.root.findByType("a");
+  assert.equal(link.type, "a");
+  assert.equal(link.props.href, "/recipes");
+  assert.equal(view!.root.findByType("section").findAllByType("a").length, 1);
+  assert.equal(view!.root.findAllByType("button").length, 0);
+  assert.equal(view!.root.findByType("h2").children.join(""), "Không có dữ liệu");
+});
+
 test("recipe image uses responsive thumbnail and medium sources with next/image fallback", async () => {
   await render(<RecipeImage
     src="https://storage.test/original.jpg"
@@ -165,18 +178,53 @@ test("recipe image uses responsive thumbnail and medium sources with next/image 
   const sources = view!.root.findAllByType("source");
   assert.deepEqual(sources.map((source) => [source.props.media, source.props.srcSet]), [
     ["(max-width: 400px)", "https://storage.test/thumbnail.jpg"],
-    ["(max-width: 1000px)", "https://storage.test/medium.jpg"],
+    [undefined, "https://storage.test/medium.jpg"],
   ]);
   assert.equal(view!.root.findByType("img").props.src, "https://storage.test/original.jpg");
 });
 
-test("a broken image variant falls back to the original before showing a placeholder", async () => {
+test("recipe image removes only the failed variant and restores variants for a new image", async () => {
   const src = "https://storage.test/original.jpg";
   const mediumSrc = "https://storage.test/medium.jpg";
-  await render(<RecipeImage src={src} mediumSrc={mediumSrc} title="Pho" />);
+  const thumbnailSrc = "https://storage.test/thumbnail.jpg";
+  await render(<RecipeImage src={src} mediumSrc={mediumSrc} thumbnailSrc={thumbnailSrc} title="Pho" />);
+  await act(async () => {
+    view!.root.findByType("img").props.onError({ currentTarget: { src, currentSrc: thumbnailSrc } });
+  });
+  assert.deepEqual(view!.root.findAllByType("source").map((source) => source.props.srcSet), [mediumSrc]);
+
+  await act(async () => {
+    view!.update(<RecipeImage src="https://storage.test/new-original.jpg"
+      mediumSrc="https://storage.test/new-medium.jpg" thumbnailSrc="https://storage.test/new-thumbnail.jpg" title="Pho" />);
+  });
+  assert.equal(view!.root.findAllByType("source").length, 2);
+});
+
+test("medium failure keeps the thumbnail available after a viewport change", async () => {
+  const src = "https://storage.test/original.jpg";
+  const mediumSrc = "https://storage.test/medium.jpg";
+  const thumbnailSrc = "https://storage.test/thumbnail.jpg";
+  await render(<RecipeImage src={src} mediumSrc={mediumSrc} thumbnailSrc={thumbnailSrc} title="Pho" />);
   await act(async () => {
     view!.root.findByType("img").props.onError({ currentTarget: { src, currentSrc: mediumSrc } });
   });
+  const remaining = view!.root.findAllByType("source");
+  assert.equal(remaining.length, 1);
+  assert.equal(remaining[0].props.srcSet, thumbnailSrc);
+  assert.equal(remaining[0].props.media, "(max-width: 400px)");
+  assert.equal(view!.root.findByType("img").props.src, src);
+});
+
+test("failed variants use the original and show a placeholder only if the original fails", async () => {
+  const src = "https://storage.test/original.jpg";
+  const mediumSrc = "https://storage.test/medium.jpg";
+  const thumbnailSrc = "https://storage.test/thumbnail.jpg";
+  await render(<RecipeImage src={src} mediumSrc={mediumSrc} thumbnailSrc={thumbnailSrc} title="Pho" />);
+  for (const currentSrc of [thumbnailSrc, mediumSrc]) {
+    await act(async () => {
+      view!.root.findByType("img").props.onError({ currentTarget: { src, currentSrc } });
+    });
+  }
   assert.equal(view!.root.findAllByType("source").length, 0);
   assert.equal(view!.root.findByType("img").props.src, src);
   await act(async () => {
@@ -205,19 +253,51 @@ test("recipe search shows a safe error state when the API fails", async () => {
   assert.doesNotMatch(text(view!.root), /503/);
 });
 
+test("a successful revisit clears the stale failure for the same request key", async () => {
+  let pageOneRequests = 0;
+  globalThis.fetch = async (url) => {
+    const page = new URL(String(url)).searchParams.get("page");
+    if (page === "1" && ++pageOneRequests === 1) return new Response(null, { status: 503 });
+    return Response.json({
+      items: [{ id: `recipe-${page}`, title: `Recipe page ${page}`, slug: `recipe-${page}`,
+        description: "Loaded", prepTime: 10, cookTime: 20, servings: 2, difficulty: 1,
+        thumbnailUrl: null, publishedAt: null, relevanceScore: 1 }],
+      totalCount: 24, page: Number(page), pageSize: 12, totalPages: 2,
+    });
+  };
+
+  await render(<RecipeListClient page={1} query="phở" />);
+  assert.match(text(view!.root), /Chưa thể tải công thức/);
+  await act(async () => {
+    view!.update(withRouter(<RecipeListClient page={2} query="phở" />));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+  assert.match(text(view!.root), /Recipe page 2/);
+  await act(async () => {
+    view!.update(withRouter(<RecipeListClient page={1} query="phở" />));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+
+  assert.equal(pageOneRequests, 2);
+  assert.match(text(view!.root), /Recipe page 1/);
+  assert.doesNotMatch(text(view!.root), /Chưa thể tải công thức/);
+});
+
 for (const query of ["", "phở & bò"]) {
   test(`${query ? "search" : "recipe list"} retry requests the same page and renders recovered results`, async () => {
     const requested: string[] = [];
     let resolveRetry!: (response: Response) => void;
     clearRecipeRequests();
     globalThis.fetch = async (url) => {
+      if (String(url).includes("/categories")) return Response.json([]);
       requested.push(String(url));
       if (requested.length === 1) return new Response(null, { status: 503 });
       return new Promise<Response>((resolve) => { resolveRetry = resolve; });
     };
     await render(<RecipeListClient page={2} query={query} />);
     assert.match(text(view!.root), /Chưa thể tải công thức/);
-    const retry = view!.root.findByType("button");
+    const retry = view!.root.findAllByType("button").find((button) => button.props.className === "cb-button cb-button-secondary");
+    assert.ok(retry);
     assert.equal(retry.props.type, "button");
     assert.equal(retry.parent!.type, "section");
     await act(async () => { retry.props.onClick(); });

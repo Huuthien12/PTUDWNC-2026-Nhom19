@@ -117,7 +117,7 @@ export interface RecipeSummary {
   servings: number; difficulty: RecipeDifficulty; thumbnailUrl: string | null; mediumUrl?: string | null; publishedAt: string | null;
 }
 
-export interface RecipePage extends PaginatedResult<RecipeSummary> {}
+export type RecipePage = PaginatedResult<RecipeSummary>;
 
 export interface RecipeDashboardItem {
   id: string;
@@ -133,4 +133,4 @@ export interface RecipeDashboardItem {
   updatedAt: string;
 }
 
-export interface RecipeDashboardPage extends PaginatedResult<RecipeDashboardItem> {}
+export type RecipeDashboardPage = PaginatedResult<RecipeDashboardItem>;

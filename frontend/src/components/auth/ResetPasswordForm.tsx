@@ -35,6 +35,8 @@ export default function ResetPasswordForm({ email, token }: { email?: string; to
     <a href="/forgot-password" className="mt-4 inline-block text-sm font-medium text-[#254b3b] underline">Yêu cầu liên kết mới</a>
   </main>;
 
+  // The callback runs only on submit; the ref prevents same-tick duplicate requests.
+  // eslint-disable-next-line react-hooks/refs
   const submit = handleSubmit(async (fields) => {
     if (pending.current) return;
     pending.current = true;

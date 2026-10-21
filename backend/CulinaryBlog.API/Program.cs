@@ -461,6 +461,9 @@ if (!app.Environment.IsEnvironment("Testing"))
     services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<OrphanImageCleanupJob>(
         "orphan-image-cleanup", job => job.RunAsync(), "30 3 * * *",
         new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+    services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<OrphanImageCleanupJob>(
+        "pending-image-recovery", job => job.RecoverPendingAsync(), "*/5 * * * *",
+        new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 }
 
 // =========================
