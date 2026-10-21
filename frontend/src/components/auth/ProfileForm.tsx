@@ -9,6 +9,7 @@ import { ApiError } from "@/services/api-client";
 import { getSession } from "@/services/auth-session";
 import { getProfile, updateProfile } from "@/services/profile-service";
 import { profileSchema, type ProfileFields } from "@/services/profile-schema";
+import AuthNotice from "@/components/auth/AuthNotice";
 
 function errorMessage(error: unknown) {
   if (error instanceof ApiError && error.status === 401) return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
@@ -66,8 +67,8 @@ export default function ProfileForm() {
     <h1 className="cb-section-title">Hồ sơ cá nhân</h1>
     <p className="mt-2 text-sm text-gray-600">Cập nhật thông tin hiển thị của bạn.</p>
     <Link href="/profile/change-password" className="mt-3 inline-block text-sm font-medium text-[#254b3b] underline">Đổi mật khẩu</Link>
-    {error && <p role="alert" className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-red-700">{error}</p>}
-    {success && <p role="status" className="mt-4 rounded border border-green-200 bg-green-50 p-3 text-green-800">{success}</p>}
+    {error && <AuthNotice kind="error" className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-red-700" onDismiss={() => setError("")}>{error}</AuthNotice>}
+    {success && <AuthNotice kind="success" className="mt-4 rounded border border-green-200 bg-green-50 p-3 text-green-800" onDismiss={() => setSuccess("")}>{success}</AuthNotice>}
 
     <form noValidate aria-busy={save.isPending} onSubmit={submit} className="mt-6 space-y-5 rounded-xl border bg-white p-6">
       <fieldset disabled={save.isPending} className="space-y-5 disabled:opacity-60">

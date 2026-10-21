@@ -7,6 +7,7 @@ import { ApiError } from "@/services/api-client";
 import { login, loginWithGoogle } from "@/services/auth-service";
 import { loginDestination } from "@/services/auth-navigation";
 import { beginGoogleLogin, consumeGoogleCallback } from "@/services/google-oauth";
+import AuthNotice from "@/components/auth/AuthNotice";
 
 export default function LoginForm({ next, reason }: { next?: string; reason?: string }) {
   const router = useRouter();
@@ -105,11 +106,23 @@ export default function LoginForm({ next, reason }: { next?: string; reason?: st
         {reason === "session-expired" && <p role="status" className="mb-4 text-sm">Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.</p>}
         {reason === "logout-unconfirmed" && <p role="status" className="mb-4 text-sm">Đã xóa phiên trên thiết bị này, nhưng chưa xác nhận được việc thu hồi phiên trên máy chủ.</p>}
         {error && (
-          <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AuthNotice
+            kind="error"
+            className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            onDismiss={() => setError("")}
+          >
             {error}
-          </div>
+          </AuthNotice>
         )}
-        {success && <p role="status" className="mb-4 text-sm text-green-700">{success}</p>}
+        {success && (
+          <AuthNotice
+            kind="success"
+            className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700"
+            onDismiss={() => setSuccess("")}
+          >
+            {success}
+          </AuthNotice>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
