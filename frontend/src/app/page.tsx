@@ -1,24 +1,14 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import RecipeCard from "@/components/recipes/RecipeCard";
 import { getCategories } from "@/services/category-service";
+import { getRecipes } from "@/services/recipe-service";
 import type { Category } from "@/types/category";
+import type { RecipePage } from "@/types/recipe";
 
-export default async function Home() {
-  let healthStatus = "Chưa kết nối được Backend";
-  let isSuccess = false;
+async function CategorySection() {
   let categories: Category[] = [];
   let categoriesFailed = false;
-
-  try {
-    // Sửa cổng từ 5000 thành 5062 theo đúng cổng Backend đang phát
-    const res = await fetch("http://localhost:5062/health", { cache: "no-store" });
-    if (res.ok) {
-      const data = await res.json();
-      healthStatus = `Kết nối Backend thành công! Message: ${data.message}`;
-      isSuccess = true;
-    }
-  } catch {
-    healthStatus = "Lỗi: Backend chưa bật hoặc sai cổng.";
-  }
 
   try {
     categories = await getCategories();
@@ -26,6 +16,84 @@ export default async function Home() {
     categoriesFailed = true;
   }
 
+  return (
+    <section className="mx-auto w-[min(100%-3rem,1160px)] py-12 sm:py-16">
+      <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#254b3b]">Bắt đầu từ đây</p>
+          <h2 className="mt-2 font-serif text-3xl text-[#1d2b22] sm:text-4xl">Khám phá theo khẩu vị</h2>
+        </div>
+        <Link href="/categories" className="text-sm font-semibold text-[#254b3b] hover:text-[#18382b]">Xem tất cả →</Link>
+      </div>
+      {categoriesFailed ? (
+        <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-800" role="alert">
+          <p className="font-semibold">Chưa thể tải danh mục.</p>
+          <p className="mt-2 text-sm">Vui lòng tải lại trang hoặc thử lại sau.</p>
+        </div>
+      ) : categories.length === 0 ? (
+        <div className="rounded-3xl border border-[#d8d9cb] bg-white p-6 text-[#61695c]" role="status">
+          Chưa có danh mục để hiển thị.
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {categories.slice(0, 4).map((category, index) => (
+            <Link key={category.id} href={`/categories/${category.slug}`} className="group rounded-3xl border border-[#d8d9cb] bg-white p-6 hover:-translate-y-1 hover:border-[#254b3b] hover:shadow-[0_14px_32px_rgba(37,75,59,.08)]">
+              <span className="text-3xl" aria-hidden="true">{["🍲", "☀️", "🌿", "🍰"][index]}</span>
+              <h3 className="mt-5 font-serif text-2xl text-[#1d2b22] group-hover:text-[#254b3b]">{category.name}</h3>
+              <span className="mt-4 block text-sm font-semibold text-[#61695c]">Khám phá ngay →</span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+async function LatestRecipesSection() {
+  let recipes: RecipePage | null = null;
+  try {
+    recipes = await getRecipes(1, 6, { sortBy: "createdAt", sortOrder: "desc" });
+  } catch { /* Render the section-level error below. */ }
+
+  if (!recipes) {
+    return (
+      <section className="mx-auto w-[min(100%-3rem,1160px)] pb-12 sm:pb-16" aria-labelledby="latest-recipes-heading">
+        <h2 id="latest-recipes-heading" className="mb-7 font-serif text-3xl text-[#1d2b22] sm:text-4xl">Công thức mới nhất</h2>
+        <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-800" role="alert">
+          <p className="font-semibold">Chưa thể tải công thức mới.</p>
+          <p className="mt-2 text-sm">Vui lòng tải lại trang hoặc thử lại sau.</p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mx-auto w-[min(100%-3rem,1160px)] pb-12 sm:pb-16" aria-labelledby="latest-recipes-heading">
+      <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#254b3b]">Vừa ra lò</p>
+          <h2 id="latest-recipes-heading" className="mt-2 font-serif text-3xl text-[#1d2b22] sm:text-4xl">Công thức mới nhất</h2>
+        </div>
+        <Link href="/recipes?sort=createdAt-desc" className="text-sm font-semibold text-[#254b3b] hover:text-[#18382b]">Xem tất cả →</Link>
+      </div>
+      {recipes.items.length === 0 ? (
+        <div className="rounded-3xl border border-[#d8d9cb] bg-white p-6 text-[#61695c]" role="status">
+          Chưa có công thức để hiển thị.
+        </div>
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {recipes.items.map((recipe) => <RecipeCard key={recipe.id} recipe={recipe} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+const sectionLoading = (label: string) => (
+  <p className="mx-auto w-[min(100%-3rem,1160px)] py-12 text-[#61695c]" role="status">{label}</p>
+);
+
+export default function Home() {
   return (
     <main className="bg-[#faf8f2] text-[#262b25]">
       <section className="border-b border-[#d8d9cb] bg-[#f0ecdf]">
@@ -55,35 +123,8 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="mx-auto w-[min(100%-3rem,1160px)] py-12 sm:py-16">
-        <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#254b3b]">Bắt đầu từ đây</p>
-            <h2 className="mt-2 font-serif text-3xl text-[#1d2b22] sm:text-4xl">Khám phá theo khẩu vị</h2>
-          </div>
-          <Link href="/categories" className="text-sm font-semibold text-[#254b3b] hover:text-[#18382b]">Xem tất cả →</Link>
-        </div>
-        {categoriesFailed ? (
-          <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-800" role="alert">
-            <p className="font-semibold">Chưa thể tải danh mục.</p>
-            <p className="mt-2 text-sm">Vui lòng tải lại trang hoặc thử lại sau.</p>
-          </div>
-        ) : categories.length === 0 ? (
-          <div className="rounded-3xl border border-[#d8d9cb] bg-white p-6 text-[#61695c]" role="status">
-            Chưa có danh mục để hiển thị.
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {categories.slice(0, 4).map((category, index) => (
-            <Link key={category.id} href={`/categories/${category.slug}`} className="group rounded-3xl border border-[#d8d9cb] bg-white p-6 hover:-translate-y-1 hover:border-[#254b3b] hover:shadow-[0_14px_32px_rgba(37,75,59,.08)]">
-              <span className="text-3xl" aria-hidden="true">{["🍲", "☀️", "🌿", "🍰"][index]}</span>
-              <h3 className="mt-5 font-serif text-2xl text-[#1d2b22] group-hover:text-[#254b3b]">{category.name}</h3>
-              <span className="mt-4 block text-sm font-semibold text-[#61695c]">Khám phá ngay →</span>
-            </Link>
-          ))}
-          </div>
-        )}
-      </section>
+      <Suspense fallback={sectionLoading("Đang tải danh mục...")}><CategorySection /></Suspense>
+      <Suspense fallback={sectionLoading("Đang tải công thức mới...")}><LatestRecipesSection /></Suspense>
 
       <section className="mx-auto mb-12 w-[min(100%-3rem,1160px)] rounded-3xl bg-[#dce4d3] px-6 py-8 sm:px-10">
         <div className="flex flex-wrap items-center justify-between gap-5">
@@ -95,12 +136,6 @@ export default async function Home() {
         </div>
       </section>
 
-      <div className="mx-auto mb-8 w-[min(100%-3rem,1160px)] rounded-xl border border-[#d8d9cb] bg-white px-4 py-3 text-sm">
-        <span className="font-semibold text-[#61695c]">Trạng thái hệ thống: </span>
-        <span className={isSuccess ? "text-green-700" : "text-red-700"}>
-          {healthStatus}
-        </span>
-      </div>
     </main>
   );
 }

@@ -327,9 +327,7 @@ for (const query of ["", "phở & bò"]) {
 }
 
 test("homepage category failure never invents category names or slugs", async () => {
-  globalThis.fetch = async (url) => String(url).endsWith("/health")
-    ? Response.json({ message: "OK" })
-    : new Response(null, { status: 503 });
+  globalThis.fetch = async () => new Response(null, { status: 503 });
   await render(await Home());
   assert.match(text(view!.root), /Chưa thể tải danh mục/);
   for (const fake of ["Món Việt", "Bữa sáng", "Món chay", "Tráng miệng", "mon-viet", "bua-sang", "mon-chay", "trang-mieng"]) {
@@ -338,12 +336,60 @@ test("homepage category failure never invents category names or slugs", async ()
 });
 
 test("homepage renders an explicit empty category state", async () => {
-  globalThis.fetch = async (url) => String(url).endsWith("/health")
-    ? Response.json({ message: "OK" })
-    : Response.json([]);
+  globalThis.fetch = async (url) => String(url).includes("/categories")
+    ? Response.json([])
+    : Response.json(emptyPage);
   await render(await Home());
   assert.match(text(view!.root), /Chưa có danh mục để hiển thị/);
   assert.doesNotMatch(text(view!.root), /Món Việt/);
+});
+
+test("homepage requests and renders the six latest recipes in API order", async () => {
+  let recipeRequest = "";
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/categories")) return Response.json([]);
+    recipeRequest = String(url);
+    return Response.json({
+      items: ["Mới nhất", "Mới thứ hai"].map((title, index) => ({
+        id: `latest-${index}`, slug: `latest-${index}`, title, description: "Món mới",
+        prepTime: 10, cookTime: 20, servings: 2, difficulty: 1,
+        thumbnailUrl: null, mediumUrl: null, publishedAt: null,
+      })),
+      totalCount: 2, page: 1, pageSize: 6, totalPages: 1,
+    });
+  };
+
+  await render(<Home />);
+
+  const url = new URL(recipeRequest);
+  assert.equal(url.pathname, "/api/v1/recipes");
+  assert.equal(url.searchParams.get("page"), "1");
+  assert.equal(url.searchParams.get("pageSize"), "6");
+  assert.equal(url.searchParams.get("sortBy"), "createdAt");
+  assert.equal(url.searchParams.get("sortOrder"), "desc");
+  assert.ok(text(view!.root).indexOf("Mới nhất") < text(view!.root).indexOf("Mới thứ hai"));
+  assert.doesNotMatch(text(view!.root), /Trạng thái hệ thống/);
+});
+
+test("homepage keeps categories when latest recipes fail", async () => {
+  globalThis.fetch = async (url) => String(url).includes("/categories")
+    ? Response.json([{ id: "category", name: "Món Việt", slug: "mon-viet", description: null, recipeCount: 1 }])
+    : new Response(null, { status: 503 });
+
+  await render(<Home />);
+
+  assert.match(text(view!.root), /Món Việt/);
+  assert.match(text(view!.root), /Chưa thể tải công thức mới/);
+});
+
+test("homepage renders an explicit empty latest-recipes state", async () => {
+  globalThis.fetch = async (url) => String(url).includes("/categories")
+    ? Response.json([])
+    : Response.json(emptyPage);
+
+  await render(<Home />);
+
+  assert.match(text(view!.root), /Chưa có công thức để hiển thị/);
 });
 
 test("homepage has a route loading state", async () => {
