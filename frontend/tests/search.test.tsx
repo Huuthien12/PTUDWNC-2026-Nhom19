@@ -10,7 +10,9 @@ import RecipeListClient from "../src/components/recipes/RecipeListClient";
 import SearchPagination from "../src/components/search/SearchPagination";
 import RecipePagination from "../src/components/recipes/RecipePagination";
 import RecipeImage from "../src/components/shared/RecipeImage";
+import ContentState from "../src/components/shared/ContentState";
 import { searchRecipes } from "../src/services/search-service";
+import { clearRecipeRequests } from "../src/services/recipe-requests";
 import type { RecipeSearchPage } from "../src/types/search";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -34,6 +36,7 @@ afterEach(async () => {
   if (view) await act(async () => { view!.unmount(); });
   view = undefined;
   globalThis.fetch = originalFetch;
+  clearRecipeRequests();
 });
 
 function text(node: ReactTestInstance): string {
@@ -153,6 +156,18 @@ test("recipe pagination retains active filters when changing pages", async () =>
   }));
 });
 
+test("ContentState asChild action renders one accessible link without a nested button", async () => {
+  await render(<ContentState headingAs="h2" title="Không có dữ liệu" description="Quay lại danh sách."
+    href="/recipes" action="Xem công thức" />);
+
+  const link = view!.root.findByType("a");
+  assert.equal(link.type, "a");
+  assert.equal(link.props.href, "/recipes");
+  assert.equal(view!.root.findByType("section").findAllByType("a").length, 1);
+  assert.equal(view!.root.findAllByType("button").length, 0);
+  assert.equal(view!.root.findByType("h2").children.join(""), "Không có dữ liệu");
+});
+
 test("recipe image uses responsive thumbnail and medium sources with next/image fallback", async () => {
   await render(<RecipeImage
     src="https://storage.test/original.jpg"
@@ -237,6 +252,79 @@ test("recipe search shows a safe error state when the API fails", async () => {
   assert.match(text(view!.root), /Chưa thể tải công thức/);
   assert.doesNotMatch(text(view!.root), /503/);
 });
+
+test("a successful revisit clears the stale failure for the same request key", async () => {
+  let pageOneRequests = 0;
+  globalThis.fetch = async (url) => {
+    const page = new URL(String(url)).searchParams.get("page");
+    if (page === "1" && ++pageOneRequests === 1) return new Response(null, { status: 503 });
+    return Response.json({
+      items: [{ id: `recipe-${page}`, title: `Recipe page ${page}`, slug: `recipe-${page}`,
+        description: "Loaded", prepTime: 10, cookTime: 20, servings: 2, difficulty: 1,
+        thumbnailUrl: null, publishedAt: null, relevanceScore: 1 }],
+      totalCount: 24, page: Number(page), pageSize: 12, totalPages: 2,
+    });
+  };
+
+  await render(<RecipeListClient page={1} query="phở" />);
+  assert.match(text(view!.root), /Chưa thể tải công thức/);
+  await act(async () => {
+    view!.update(withRouter(<RecipeListClient page={2} query="phở" />));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+  assert.match(text(view!.root), /Recipe page 2/);
+  await act(async () => {
+    view!.update(withRouter(<RecipeListClient page={1} query="phở" />));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+
+  assert.equal(pageOneRequests, 2);
+  assert.match(text(view!.root), /Recipe page 1/);
+  assert.doesNotMatch(text(view!.root), /Chưa thể tải công thức/);
+});
+
+for (const query of ["", "phở & bò"]) {
+  test(`${query ? "search" : "recipe list"} retry requests the same page and renders recovered results`, async () => {
+    const requested: string[] = [];
+    let resolveRetry!: (response: Response) => void;
+    clearRecipeRequests();
+    globalThis.fetch = async (url) => {
+      if (String(url).includes("/categories")) return Response.json([]);
+      requested.push(String(url));
+      if (requested.length === 1) return new Response(null, { status: 503 });
+      return new Promise<Response>((resolve) => { resolveRetry = resolve; });
+    };
+    await render(<RecipeListClient page={2} query={query} />);
+    assert.match(text(view!.root), /Chưa thể tải công thức/);
+    const retry = view!.root.findAllByType("button").find((button) => button.props.className === "cb-button cb-button-secondary");
+    assert.ok(retry);
+    assert.equal(retry.props.type, "button");
+    assert.equal(retry.parent!.type, "section");
+    await act(async () => { retry.props.onClick(); });
+    assert.equal(requested.length, 2);
+    assert.equal(requested[0], requested[1]);
+    const url = new URL(requested[1]);
+    assert.equal(url.pathname, query ? "/api/v1/recipes/search" : "/api/v1/recipes");
+    assert.equal(url.searchParams.get("page"), "2");
+    assert.equal(url.searchParams.get("pageSize"), "12");
+    assert.equal(url.searchParams.get("q"), query || null);
+    assert.match(text(view!.root.findByProps({ role: "status" })), /Đang tải công thức/);
+    await act(async () => {
+      resolveRetry(Response.json({ items: [{ id: "recovered", title: "Recovered recipe", slug: "recovered",
+        description: "Loaded after retry", prepTime: 10, cookTime: 20, servings: 2, difficulty: 1,
+        thumbnailUrl: null, publishedAt: null, relevanceScore: 1 }],
+      totalCount: 36, page: 2, pageSize: 12, totalPages: 3 }));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    });
+    assert.equal(requested.length, 2);
+    assert.match(text(view!.root), /Recovered recipe/);
+    assert.doesNotMatch(text(view!.root), /Chưa thể tải công thức|Đang tải công thức/);
+    const hrefs = view!.root.findAll((node) => typeof node.props.href === "string")
+      .map((node) => node.props.href as string);
+    assert.ok(hrefs.includes("/recipes/recovered"));
+    assert.ok(hrefs.includes(query ? `/recipes?q=${encodeURIComponent(query)}&page=3` : "/recipes?page=3"));
+  });
+}
 
 test("homepage category failure never invents category names or slugs", async () => {
   globalThis.fetch = async (url) => String(url).endsWith("/health")

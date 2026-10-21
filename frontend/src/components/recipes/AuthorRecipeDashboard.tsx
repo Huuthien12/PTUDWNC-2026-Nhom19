@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import RecipeImage from "@/components/shared/RecipeImage";
+import ContentState from "@/components/shared/ContentState";
 import { useSession } from "@/components/auth/useSession";
 import { ApiError } from "@/services/api-client";
 import { changeRecipeLifecycle, deleteRecipe, getMyRecipes, type RecipeLifecycleAction } from "@/services/recipe-service";
@@ -104,8 +105,9 @@ export default function AuthorRecipeDashboard() {
   return <main className="cb-container cb-section">
     <header className="mb-8"><p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#254b3b]">Không gian tác giả</p><h1 className="cb-section-title">Công thức của bạn</h1></header>
     {message && <p role="alert" className="mb-5 rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900">{message}</p>}
-    {!result.items.length ? <section className="cb-state"><h2 className="cb-section-title">Chưa có công thức</h2><p>Bạn có thể tạo công thức đầu tiên của mình.</p><Link className="mt-4 inline-block underline" href="/recipes/create">Tạo công thức</Link></section> :
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">{result.items.map((recipe) => {
+{!result.items.length ? <ContentState headingAs="h2" title="Chưa có công thức" description="Bạn có thể tạo công thức đầu tiên của mình." href="/recipes/create" action="Tạo công thức" /> :
+  <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">{result.items.map((recipe) => {
+
         const actions = dashboardActions(recipe.status);
         const pending = pendingId === recipe.id;
         return <article key={recipe.id} className="overflow-hidden rounded-[28px] border border-[#dfe1d1] bg-white shadow-[0_12px_30px_rgba(37,75,59,0.05)]">

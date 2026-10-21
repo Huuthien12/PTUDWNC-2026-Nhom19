@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import type { RecipeDetail, RecipeStep } from "@/types/recipe";
 import { createRecipeStep, deleteRecipeStep, updateRecipeStep,
   type RecipeStepMutationResult } from "@/services/recipe-step-service";
@@ -19,18 +19,25 @@ interface StepForm { title: string; description: string; timerMinutes: string }
 const emptyForm: StepForm = { title: "", description: "", timerMinutes: "" };
 const sortSteps = (steps: RecipeStep[]) => [...steps].sort((a, b) => a.stepNumber - b.stepNumber);
 
-export default function RecipeStepManager({ recipeId, initialSteps, rowVersion, mutation,
+export default function RecipeStepManager(props: RecipeStepManagerProps) {
+  return <RecipeStepManagerState key={props.recipeId} {...props} />;
+}
+
+function RecipeStepManagerState({ recipeId, initialSteps, rowVersion, mutation,
   onRowVersionChange, onReload }: RecipeStepManagerProps) {
   const [steps, setSteps] = useState(() => sortSteps(initialSteps));
+  const [previousSteps, setPreviousSteps] = useState(initialSteps);
   const [form, setForm] = useState<StepForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const blocked = mutation.pending || mutation.needsReload;
 
-  // Prop changes are authoritative after aggregate reloads.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => setSteps(sortSteps(initialSteps)), [initialSteps]);
+  // Reconcile new server data before committing children; preserve the form draft.
+  if (initialSteps !== previousSteps) {
+    setPreviousSteps(initialSteps);
+    setSteps(sortSteps(initialSteps));
+  }
 
   function resetForm() { setForm(emptyForm); setEditingId(null); }
   function acknowledge(result: RecipeStepMutationResult) {

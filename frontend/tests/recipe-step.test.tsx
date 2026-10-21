@@ -100,6 +100,43 @@ function stepForm() { return manager().findByType("form"); }
 function input(id: string) { return manager().findByProps({ id }); }
 function mutations() { return calls.filter((call) => call.method !== "GET"); }
 
+function DataHost({ recipeId, steps }: { recipeId: string; steps: RecipeStep[] }) {
+  const mutation = useRecipeMutation();
+  return <RecipeStepManager recipeId={recipeId} initialSteps={steps} rowVersion={recipe.rowVersion}
+    mutation={mutation} onRowVersionChange={() => {}} onReload={async () => clone(recipe)} />;
+}
+
+test("Step data refresh replaces and sorts steps while preserving the same Recipe draft", async () => {
+  await dispatch(() => { view = create(<DataHost recipeId="recipe" steps={recipe.steps} />); });
+  await dispatch(() => stepButton("Sửa").props.onClick());
+  await dispatch(() => input("recipe-step-description").props.onChange({ target: { value: "Unsaved draft" } }));
+  const refreshed = [step("D", 2), step("C", 1)];
+  await dispatch(() => { view!.update(<DataHost recipeId="recipe" steps={refreshed} />); });
+  assert.deepEqual(manager().findAllByType("article").map((node) => node.findByType("h3").children.join("")),
+    ["Title C", "Title D"]);
+  assert.equal(input("recipe-step-description").props.value, "Unsaved draft");
+  await dispatch(() => { view!.update(<DataHost recipeId="recipe" steps={[]} />); });
+  assert.equal(manager().findAllByType("article").length, 0);
+  assert.match(text(manager()), /Chưa có bước nấu nào/);
+  assert.equal(mutations().length, 0);
+});
+
+test("Changing Recipe clears old steps, editing state, draft and validation error", async () => {
+  await dispatch(() => { view = create(<DataHost recipeId="recipe" steps={recipe.steps} />); });
+  await dispatch(() => stepButton("Sửa").props.onClick());
+  await dispatch(() => input("recipe-step-description").props.onChange({ target: { value: "" } }));
+  await dispatch(() => stepForm().props.onSubmit({ preventDefault() {} }));
+  assert.equal(manager().findAllByProps({ role: "alert" }).length, 1);
+  await dispatch(() => { view!.update(<DataHost recipeId="other-recipe" steps={[step("Other", 1)]} />); });
+  assert.deepEqual(manager().findAllByType("article").map((node) => node.findByType("h3").children.join("")),
+    ["Title Other"]);
+  assert.equal(input("recipe-step-description").props.value, "");
+  assert.equal(input("recipe-step-title").props.value, "");
+  assert.equal(manager().findAllByProps({ role: "alert" }).length, 0);
+  assert.equal(stepForm().findByType("h3").children.join(""), "Thêm bước nấu");
+  assert.equal(mutations().length, 0);
+});
+
 test("Step CRUD maps timerMinutes, keeps the latest RowVersion, and delete restores contiguous order", async () => {
   await mount();
   await dispatch(() => stepButton("Sửa").props.onClick());
