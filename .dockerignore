@@ -1,0 +1,9 @@
+.git
+.worktrees
+**/node_modules
+**/.next
+**/bin
+**/obj
+.env
+*.user
+*.suo
