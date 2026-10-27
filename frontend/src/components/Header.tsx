@@ -8,6 +8,8 @@ import { Suspense } from "react";
 
 export default function Header() {
   const pathname = usePathname();
+  if (pathname === "/login" || pathname === "/register") return null;
+
   return <header className="cb-header">
     <div className="cb-container cb-header-inner">
       <Link href="/" className="cb-brand shrink-0 whitespace-nowrap" aria-label="Culinary Blog — Trang chủ">Culinary <span>Blog</span><span className="text-gold" aria-hidden="true">.</span></Link>
