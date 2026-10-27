@@ -25,6 +25,9 @@ public interface IIdentityService
 
     Task<UserProfileResult?> GetProfileAsync(string userId, CancellationToken cancellationToken = default);
 
+    Task<PagedIdentityUsersResult> GetUsersAsync(int page, int pageSize, string? search, string? role,
+        CancellationToken cancellationToken = default);
+
     Task<UserProfileResult?> UpdateProfileAsync(
         string userId,
         string? fullName,
@@ -73,6 +76,12 @@ public sealed record UserProfileResult(
     IReadOnlyList<string> Roles,
     bool EmailConfirmed,
     DateTime CreatedAt);
+
+public sealed record IdentityUserListItem(string Id, string FullName, string Email, string UserName,
+    IReadOnlyList<string> Roles, bool EmailConfirmed, DateTime CreatedAt);
+
+public sealed record PagedIdentityUsersResult(IReadOnlyList<IdentityUserListItem> Items, int TotalCount,
+    int Page, int PageSize, int TotalPages);
 
 public sealed record IdentityPasswordChangeResult(
     bool Succeeded,
