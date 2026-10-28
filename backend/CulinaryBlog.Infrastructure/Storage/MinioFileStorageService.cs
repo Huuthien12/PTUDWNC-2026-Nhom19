@@ -158,7 +158,8 @@ public sealed class MinioFileStorageService(
         try
         {
             var config = options.Value;
-            return await CreateClient(config).BucketExistsAsync(new BucketExistsArgs().WithBucket(config.Bucket), cancellationToken);
+            await CreateClient(config).ListBucketsAsync(cancellationToken);
+            return true;
         }
         catch { return false; }
     }
