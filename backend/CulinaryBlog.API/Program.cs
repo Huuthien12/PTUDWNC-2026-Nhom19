@@ -899,6 +899,7 @@ categories.MapDelete("/{id:guid}", async (
 
 app.MapRecipeEndpoints();
 app.MapRecipeImageEndpoints();
+app.MapAdminUserEndpoints();
 
 app.Run();
 }

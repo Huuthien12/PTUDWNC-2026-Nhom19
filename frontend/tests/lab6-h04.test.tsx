@@ -8,15 +8,21 @@ import RootError from "../src/app/error";
 import NotFound from "../src/app/not-found";
 import UnauthorizedPage from "../src/app/unauthorized/page";
 import StaticUserList from "../src/components/admin/StaticUserList";
+import { SESSION_KEY } from "../src/services/auth-session";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const originalSelf = Object.getOwnPropertyDescriptor(globalThis, "self");
+const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+const originalFetch = globalThis.fetch;
 Object.defineProperty(globalThis, "self", { configurable: true, value: globalThis });
 const router = { back() {}, forward() {}, refresh() {}, hmrRefresh() {}, push() {}, replace() {}, prefetch() {}, bfcacheId: "test" };
 
 after(() => {
   if (originalSelf) Object.defineProperty(globalThis, "self", originalSelf);
   else Reflect.deleteProperty(globalThis, "self");
+  if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+  else Reflect.deleteProperty(globalThis, "window");
+  globalThis.fetch = originalFetch;
 });
 
 function text(node: ReactTestInstance): string {
@@ -29,11 +35,24 @@ async function render(node: ReactElement) {
   return view;
 }
 
-test("admin users page renders presentation controls, rows and pagination", async () => {
+test("admin users page renders API users, controls and pagination", async () => {
+  const session = { sessionId: "admin", accessToken: "access", refreshToken: "refresh", tokenType: "Bearer",
+    expiresAt: new Date(Date.now() + 60_000).toISOString(), user: { id: "admin", fullName: "Admin", userName: "admin",
+      email: "admin@example.test", avatarUrl: null, roles: ["Admin"] } };
+  Object.defineProperty(globalThis, "window", { configurable: true, value: Object.assign(new EventTarget(), {
+    localStorage: { getItem: (key: string) => key === SESSION_KEY ? JSON.stringify(session) : null }, setTimeout, clearTimeout,
+  }) });
+  globalThis.fetch = async (url, options) => {
+    assert.match(String(url), /\/api\/v1\/admin\/users\?page=1&pageSize=12/);
+    assert.equal(new Headers(options?.headers).get("Authorization"), "Bearer access");
+    return Response.json({ items: [{ id: "a", userName: "admin", fullName: "Admin", email: "admin@example.test",
+      roles: ["Admin"], emailConfirmed: true, createdAt: "2026-01-01T00:00:00Z" }], totalCount: 1, page: 1, pageSize: 12, totalPages: 1 });
+  };
   const view = await render(<AdminUsersPage />);
+  await act(async () => { await new Promise((resolve) => setImmediate(resolve)); });
   assert.match(text(view.root), /Quản lý người dùng/);
-  assert.equal(view.root.findByProps({ "aria-label": "Tìm kiếm người dùng" }).props.disabled, true);
-  assert.equal(view.root.findAllByType("tbody")[0].findAllByType("tr").length, 3);
+  assert.equal(view.root.findByProps({ "aria-label": "Tìm kiếm người dùng" }).props.disabled, undefined);
+  assert.equal(view.root.findAllByType("tbody")[0].findAllByType("tr").length, 1);
   assert.match(text(view.root), /Trang 1/);
 });
 
