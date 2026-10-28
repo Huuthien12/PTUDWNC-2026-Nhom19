@@ -5,12 +5,14 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from "rea
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import Home from "../src/app/page";
 import Loading from "../src/app/loading";
+import sitemap from "../src/app/sitemap";
 import RecipesPage from "../src/app/recipes/page";
 import RecipeListClient from "../src/components/recipes/RecipeListClient";
 import SearchPagination from "../src/components/search/SearchPagination";
 import RecipePagination from "../src/components/recipes/RecipePagination";
 import RecipeImage from "../src/components/shared/RecipeImage";
 import ContentState from "../src/components/shared/ContentState";
+import { buildRecipeJsonLd, buildRecipeMetadata } from "../src/services/recipe-seo";
 import { searchRecipes } from "../src/services/search-service";
 import { clearRecipeRequests } from "../src/services/recipe-requests";
 import type { RecipeSearchPage } from "../src/types/search";
@@ -397,3 +399,91 @@ test("homepage has a route loading state", async () => {
   assert.match(text(view!.root), /Đang tải trang chủ/);
   assert.equal(view!.root.findByProps({ role: "status" }).type, "p");
 });
+
+test("homepage renders category list inside a sidebar alongside latest recipes", async () => {
+  globalThis.fetch = async (url) => String(url).includes("/categories")
+    ? Response.json([
+        { id: "c1", name: "Món Việt", slug: "mon-viet", description: null, recipeCount: 5 },
+        { id: "c2", name: "Món Chay", slug: "mon-chay", description: null, recipeCount: 3 },
+      ])
+    : Response.json({
+        items: [{ id: "r1", slug: "canh-chua", title: "Canh chua cá lóc", description: "Đậm đà", prepTime: 15, cookTime: 25, servings: 4, difficulty: 1, thumbnailUrl: null, mediumUrl: null, publishedAt: null }],
+        totalCount: 1, page: 1, pageSize: 6, totalPages: 1,
+      });
+
+  await render(<Home />);
+
+  const sidebar = view!.root.findByType("aside");
+  assert.equal(sidebar.props["aria-label"], "Danh mục món ăn");
+  assert.match(text(sidebar), /Món Việt/);
+  assert.match(text(sidebar), /Món Chay/);
+  assert.match(text(view!.root), /Canh chua cá lóc/);
+});
+
+test("empty search or filtered recipe list offers a reset link back to all recipes", async () => {
+  globalThis.fetch = async () => Response.json(emptyPage);
+  await render(<RecipeListClient page={1} query="phở" />);
+  const links = view!.root.findAll((node) => node.props.href === "/recipes");
+  assert.ok(links.length >= 1);
+  assert.match(text(view!.root), /Xem tất cả món ăn/);
+});
+
+test("sitemap includes static routes, categories, and recipes with graceful upstream fallback", async () => {
+  globalThis.fetch = async (url) => String(url).includes("/categories")
+    ? Response.json([{ id: "c1", name: "Món Việt", slug: "mon-viet", description: null, recipeCount: 2 }])
+    : Response.json({
+        items: [{ id: "r1", slug: "bun-bo-hue", title: "Bún bò Huế", description: "Cay nồng", prepTime: 20, cookTime: 60, servings: 4, difficulty: 2, thumbnailUrl: null, mediumUrl: null, publishedAt: "2026-10-20T00:00:00Z" }],
+        totalCount: 1, page: 1, pageSize: 50, totalPages: 1,
+      });
+
+  const entries = await sitemap();
+  const urls = entries.map((entry) => entry.url);
+  assert.ok(urls.includes("http://localhost:3000/"));
+  assert.ok(urls.includes("http://localhost:3000/recipes"));
+  assert.ok(urls.includes("http://localhost:3000/categories"));
+  assert.ok(urls.includes("http://localhost:3000/categories/mon-viet"));
+  assert.ok(urls.includes("http://localhost:3000/recipes/bun-bo-hue"));
+
+  globalThis.fetch = async () => new Response(null, { status: 503 });
+  const fallbackEntries = await sitemap();
+  assert.equal(fallbackEntries.length, 3);
+});
+
+test("recipe SEO helpers build Open Graph metadata and Schema.org Recipe JSON-LD", () => {
+  const sampleRecipe = {
+    id: "r1",
+    slug: "pho-bo",
+    title: "Phở bò truyền thống",
+    description: "Nước dùng trong và thơm mùi quế hồi.",
+    instructions: "Ninh xương và chan nước dùng.",
+    prepTime: 30,
+    cookTime: 120,
+    servings: 4,
+    difficulty: 2 as const,
+    status: 2 as const,
+    rowVersion: "AQ==",
+    createdAt: "2026-10-01T00:00:00Z",
+    publishedAt: "2026-10-02T00:00:00Z",
+    author: { id: "a1", fullName: "Nguyễn Khiêm Thuận", avatarUrl: null },
+    category: { id: "c1", name: "Món nước", slug: "mon-nuoc" },
+    nutrition: { calories: 450, protein: 28, carbs: 52, fat: 12, fiber: 3 },
+    ingredients: [{ id: "i1", name: "Bánh phở", quantity: 500, unit: "g", notes: null, orderIndex: 0 }],
+    steps: [{ id: "s1", stepNumber: 1, title: "Ninh xương", description: "Hầm xương bò trong 2 giờ.", imageUrl: null, timerMinutes: 120, rowVersion: "AQ==" }],
+    images: [{ id: "img1", originalUrl: "https://storage.test/pho-original.jpg", mediumUrl: "https://storage.test/pho-medium.jpg", thumbnailUrl: null, altText: "Tô phở bò", isPrimary: true, orderIndex: 0 }],
+  };
+
+  const metadata = buildRecipeMetadata(sampleRecipe, "https://culinary.example");
+  assert.equal(metadata.title, "Phở bò truyền thống | Culinary Blog");
+  assert.equal(metadata.alternates?.canonical, "https://culinary.example/recipes/pho-bo");
+  assert.equal(metadata.openGraph?.title, "Phở bò truyền thống");
+
+  const jsonLd = buildRecipeJsonLd(sampleRecipe, "https://culinary.example");
+  assert.equal(jsonLd["@context"], "https://schema.org");
+  assert.equal(jsonLd["@type"], "Recipe");
+  assert.equal(jsonLd.name, "Phở bò truyền thống");
+  assert.equal(jsonLd.prepTime, "PT30M");
+  assert.equal(jsonLd.cookTime, "PT120M");
+  assert.equal(jsonLd.totalTime, "PT150M");
+  assert.deepEqual(jsonLd.recipeIngredient, ["500 g Bánh phở"]);
+});
+

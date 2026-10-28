@@ -17,33 +17,39 @@ async function CategorySection() {
   }
 
   return (
-    <section className="mx-auto w-[min(100%-3rem,1160px)] py-12 sm:py-16">
-      <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+    <section aria-labelledby="home-categories-heading" className="rounded-3xl border border-[#d8d9cb] bg-white p-6 shadow-[0_12px_28px_rgba(37,75,59,.05)]">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-[#eae7dc] pb-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#254b3b]">Bắt đầu từ đây</p>
-          <h2 className="mt-2 font-serif text-3xl text-[#1d2b22] sm:text-4xl">Khám phá theo khẩu vị</h2>
+          <h2 id="home-categories-heading" className="mt-1 font-serif text-2xl text-[#1d2b22] sm:text-3xl">Khám phá theo khẩu vị</h2>
         </div>
         <Link href="/categories" className="text-sm font-semibold text-[#254b3b] hover:text-[#18382b]">Xem tất cả →</Link>
       </div>
       {categoriesFailed ? (
-        <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-800" role="alert">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800" role="alert">
           <p className="font-semibold">Chưa thể tải danh mục.</p>
-          <p className="mt-2 text-sm">Vui lòng tải lại trang hoặc thử lại sau.</p>
+          <p className="mt-1 text-sm">Vui lòng tải lại trang hoặc thử lại sau.</p>
         </div>
       ) : categories.length === 0 ? (
-        <div className="rounded-3xl border border-[#d8d9cb] bg-white p-6 text-[#61695c]" role="status">
+        <div className="rounded-2xl border border-[#d8d9cb] bg-[#faf8f2] p-4 text-[#61695c]" role="status">
           Chưa có danh mục để hiển thị.
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {categories.slice(0, 4).map((category, index) => (
-            <Link key={category.id} href={`/categories/${category.slug}`} className="group rounded-3xl border border-[#d8d9cb] bg-white p-6 hover:-translate-y-1 hover:border-[#254b3b] hover:shadow-[0_14px_32px_rgba(37,75,59,.08)]">
-              <span className="text-3xl" aria-hidden="true">{["🍲", "☀️", "🌿", "🍰"][index]}</span>
-              <h3 className="mt-5 font-serif text-2xl text-[#1d2b22] group-hover:text-[#254b3b]">{category.name}</h3>
-              <span className="mt-4 block text-sm font-semibold text-[#61695c]">Khám phá ngay →</span>
-            </Link>
+        <ul className="grid gap-2.5" aria-label="Danh sách danh mục">
+          {categories.map((category, index) => (
+            <li key={category.id}>
+              <Link href={`/categories/${category.slug}`} className="group flex items-center justify-between gap-3 rounded-2xl border border-[#e6e4d8] bg-[#faf8f2] px-4 py-3 transition hover:border-[#254b3b] hover:bg-white">
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="text-xl" aria-hidden="true">{["🍲", "☀️", "🌿", "🍰", "🥗", "🍜", "🥘", "🧁"][index % 8]}</span>
+                  <span className="truncate font-serif text-lg text-[#1d2b22] group-hover:text-[#254b3b]">{category.name}</span>
+                </span>
+                <span className="shrink-0 rounded-full bg-[#e9efe6] px-2.5 py-0.5 text-xs font-semibold text-[#254b3b]">
+                  {category.recipeCount}
+                </span>
+              </Link>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </section>
   );
@@ -57,7 +63,7 @@ async function LatestRecipesSection() {
 
   if (!recipes) {
     return (
-      <section className="mx-auto w-[min(100%-3rem,1160px)] pb-12 sm:pb-16" aria-labelledby="latest-recipes-heading">
+      <section aria-labelledby="latest-recipes-heading">
         <h2 id="latest-recipes-heading" className="mb-7 font-serif text-3xl text-[#1d2b22] sm:text-4xl">Công thức mới nhất</h2>
         <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-800" role="alert">
           <p className="font-semibold">Chưa thể tải công thức mới.</p>
@@ -68,7 +74,7 @@ async function LatestRecipesSection() {
   }
 
   return (
-    <section className="mx-auto w-[min(100%-3rem,1160px)] pb-12 sm:pb-16" aria-labelledby="latest-recipes-heading">
+    <section aria-labelledby="latest-recipes-heading">
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#254b3b]">Vừa ra lò</p>
@@ -81,7 +87,7 @@ async function LatestRecipesSection() {
           Chưa có công thức để hiển thị.
         </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2">
           {recipes.items.map((recipe) => <RecipeCard key={recipe.id} recipe={recipe} />)}
         </div>
       )}
@@ -90,7 +96,7 @@ async function LatestRecipesSection() {
 }
 
 const sectionLoading = (label: string) => (
-  <p className="mx-auto w-[min(100%-3rem,1160px)] py-12 text-[#61695c]" role="status">{label}</p>
+  <p className="py-6 text-[#61695c]" role="status">{label}</p>
 );
 
 export default function Home() {
@@ -123,8 +129,14 @@ export default function Home() {
         </div>
       </section>
 
-      <Suspense fallback={sectionLoading("Đang tải danh mục...")}><CategorySection /></Suspense>
-      <Suspense fallback={sectionLoading("Đang tải công thức mới...")}><LatestRecipesSection /></Suspense>
+      <div className="mx-auto grid w-[min(100%-3rem,1160px)] items-start gap-8 py-12 sm:py-16 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <aside aria-label="Danh mục món ăn" className="lg:sticky lg:top-24">
+          <Suspense fallback={sectionLoading("Đang tải danh mục...")}><CategorySection /></Suspense>
+        </aside>
+        <div className="min-w-0">
+          <Suspense fallback={sectionLoading("Đang tải công thức mới...")}><LatestRecipesSection /></Suspense>
+        </div>
+      </div>
 
       <section className="mx-auto mb-12 w-[min(100%-3rem,1160px)] rounded-3xl bg-[#dce4d3] px-6 py-8 sm:px-10">
         <div className="flex flex-wrap items-center justify-between gap-5">
