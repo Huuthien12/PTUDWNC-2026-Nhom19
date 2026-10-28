@@ -19,7 +19,12 @@ services:
       - redisdata:/data
 
   minio:
+<<<<<<< Updated upstream
     image: quay.io/minio/minio:latest
+=======
+    image: docker.io/pgsty/silo:RELEASE.2026-10-18T00-00-00Z
+    container_name: culinary_minio
+>>>>>>> Stashed changes
     ports:
       - "${MINIO_API_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
