@@ -20,6 +20,8 @@ public sealed class RecipeImageApiTests
 {
     private static readonly byte[] Png = [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13];
     private static readonly byte[] Jpeg = [0xFF, 0xD8, 0xFF, 0xE0, 0, 16, 0x4A, 0x46];
+    private const int MaxFileBytes = 5 * 1024 * 1024;
+    private const int MaxMultipartBytes = MaxFileBytes + 64 * 1024;
 
     // ---------- helpers ----------
 
@@ -497,10 +499,27 @@ public sealed class RecipeImageApiTests
         await using var factory = new RecipeApiFactory();
         var (recipe, _) = await SeedAsync(factory);
         using var client = factory.Client();
-        var oversized = new byte[5 * 1024 * 1024 + 1];
+        var oversized = new byte[MaxFileBytes + 1];
         Png.CopyTo(oversized, 0);
 
         await AssertProblem(await client.SendAsync(UploadRequest(recipe.Id, oversized, "image/png", Rv(recipe))), 400, "INVALID_IMAGE_FILE");
+        Assert.Empty(await LoadImagesAsync(factory));
+    }
+
+    [Fact]
+    public async Task Multipart_body_larger_than_envelope_is_rejected_before_storage()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, _) = await SeedAsync(factory);
+        using var client = factory.Client();
+        var oversized = new byte[MaxMultipartBytes + 1];
+        Png.CopyTo(oversized, 0);
+
+        var response = await client.SendAsync(UploadRequest(recipe.Id, oversized, "image/png", Rv(recipe)));
+
+        Assert.NotEqual(HttpStatusCode.InternalServerError, response.StatusCode);
+        await AssertProblem(response, 400, "VALIDATION_ERROR");
+        Assert.Empty(factory.Storage.StoreCalls);
         Assert.Empty(await LoadImagesAsync(factory));
     }
 
