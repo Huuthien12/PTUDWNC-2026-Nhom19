@@ -4,6 +4,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CulinaryBlog.API.Recipes;
@@ -13,6 +14,8 @@ namespace CulinaryBlog.API.Recipes;
 // Every success response returns the Recipe's NEW RowVersion in the body and in the ETag header.
 public static class RecipeImageEndpoints
 {
+    // 5 MB file plus a small multipart envelope; storage still enforces the exact file limit.
+    private const long MaxMultipartBytes = 5 * 1024 * 1024 + 64 * 1024;
     public static void MapRecipeImageEndpoints(this WebApplication app)
     {
         var images = app.MapGroup("/api/v1/recipes/{id:guid}/images")
@@ -30,6 +33,12 @@ public static class RecipeImageEndpoints
     {
         var userId = RequireUserId(user);
         var request = http.Request;
+        var bodySize = http.Features.Get<IHttpMaxRequestBodySizeFeature>();
+        if (bodySize is { IsReadOnly: false }) bodySize.MaxRequestBodySize = MaxMultipartBytes;
+        http.Features.Set<IFormFeature>(new FormFeature(request, new FormOptions
+        {
+            MultipartBodyLengthLimit = MaxMultipartBytes,
+        }));
         if (!request.HasFormContentType)
             throw Invalid("file", "Request must be multipart/form-data with a \"file\" field.");
 

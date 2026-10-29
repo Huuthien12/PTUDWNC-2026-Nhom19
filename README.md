@@ -67,6 +67,34 @@ Các service development:
 -   **Redis 7:** `localhost:6379`
 -   **MinIO Console:** `http://localhost:9001`
 -   **Mailhog UI:** `http://localhost:8025`
+### Docker Compose full-stack
+
+Sao chép `.env.example` thành `.env`, thay toàn bộ placeholder bằng secret local, rồi chạy:
+
+```powershell
+docker compose up --build -d
+docker compose ps
+```
+
+Compose chạy PostgreSQL, Redis, MinIO, Mailhog, API, frontend, Hangfire và OTLP Collector. API health endpoints là `/health/live`, `/health/ready` và `/health`. MinIO console mặc định ở `http://localhost:9001`; Mailhog ở `http://localhost:8025`.
+
+`API_URL=http://api:8080` chỉ dành cho server-side trong mạng Compose. `BROWSER_API_URL` và `MINIO_PUBLIC_BASE_URL` phải được đặt thành URL host/public thực tế khi truy cập từ máy khác; `localhost` chỉ đúng trên máy đang chạy Docker.
+
+Collector hiện dùng debug exporter để quan sát local; chưa có backend lưu trữ telemetry. Không coi GitHub Actions là pass trước khi workflow chạy trên GitHub.
+
+### Kiểm thử
+
+```powershell
+dotnet test backend/CulinaryBlog.Tests/CulinaryBlog.Tests.csproj
+cd frontend
+npm ci
+npm test
+npm run lint
+npm run typecheck
+npm run build
+```
+
+Nếu Windows báo `ENOTEMPTY` trong `node_modules` khi `npm ci`, đóng tiến trình Node/Next đang dùng đúng worktree và chạy trong checkout sạch hoặc container Node; không dùng `npm audit fix --force`.
 
 Thông tin PostgreSQL phải khớp với cấu hình development trong
 `docker-compose.yml`.

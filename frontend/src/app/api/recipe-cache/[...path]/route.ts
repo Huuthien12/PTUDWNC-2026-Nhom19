@@ -1,7 +1,7 @@
 import { revalidateTag } from "next/cache";
 import { forwardRecipeRequest } from "@/services/recipe-cache-proxy";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5062";
+const API_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5062";
 type Context = { params: Promise<{ path: string[] }> };
 
 async function proxy(request: Request, context: Context) {
