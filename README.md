@@ -2,7 +2,7 @@
 
 Hệ thống nền tảng Blog Ẩm thực và Nấu ăn xây dựng theo kiến trúc
 API-Driven: - **Backend:** .NET 10 Minimal APIs (Clean Architecture +
-CQRS) - **Frontend:** Next.js 15 App Router (TypeScript, Tailwind CSS) -
+CQRS) - **Frontend:** Next.js 16.4.3 App Router (TypeScript, Tailwind CSS) -
 **Infrastructure:** PostgreSQL 16, Redis 7, MinIO, Mailhog (Docker
 Compose)
 
@@ -14,7 +14,7 @@ Trước khi khởi chạy dự án, máy tính cần cài đặt:
 
 1.  **Docker Desktop**.
 2.  **.NET 10 SDK**.
-3.  **Node.js 20+** và **npm**.
+3.  **Node.js 24** và **npm**.
 4.  **Git**.
 
 Kiểm tra:
@@ -49,7 +49,7 @@ Nếu đã có project:
 
 ``` powershell
 git switch main
-git pull origin main
+git pull --ff-only origin main
 ```
 
 ### 2. Khởi chạy hạ tầng bằng Docker
@@ -76,9 +76,9 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Compose chạy PostgreSQL, Redis, MinIO, Mailhog, API, frontend, Hangfire và OTLP Collector. API health endpoints là `/health/live`, `/health/ready` và `/health`. MinIO console mặc định ở `http://localhost:9001`; Mailhog ở `http://localhost:8025`.
+Compose chạy PostgreSQL, Redis, MinIO, Mailhog, API, frontend, Nginx, Hangfire và OTLP Collector. Nginx là entrypoint HTTP duy nhất: mở `http://localhost:3000`; health endpoints qua proxy là `/health/live`, `/health/ready` và `/health`. MinIO console mặc định ở `http://localhost:9001`; Mailhog ở `http://localhost:8025`.
 
-`API_URL=http://api:8080` chỉ dành cho server-side trong mạng Compose. `BROWSER_API_URL` và `MINIO_PUBLIC_BASE_URL` phải được đặt thành URL host/public thực tế khi truy cập từ máy khác; `localhost` chỉ đúng trên máy đang chạy Docker.
+`API_URL=http://api:8080` chỉ dành cho server-side trong mạng Compose. Browser dùng same-origin qua Nginx; frontend image được build với API URL rỗng để gọi `/api/...` cùng host. `BROWSER_API_URL` vẫn là URL công khai được dùng bởi các consumer ngoài browser. `MINIO_PUBLIC_BASE_URL` phải được đặt thành URL host/public thực tế khi truy cập từ máy khác; `localhost` chỉ đúng trên máy đang chạy Docker. Nginx chỉ tin cậy cho forwarded headers trên network Compose; API không tin header forwarded từ client trực tiếp.
 
 Collector hiện dùng debug exporter để quan sát local; chưa có backend lưu trữ telemetry. Không coi GitHub Actions là pass trước khi workflow chạy trên GitHub.
 
@@ -95,6 +95,14 @@ npm run build
 ```
 
 Nếu Windows báo `ENOTEMPTY` trong `node_modules` khi `npm ci`, đóng tiến trình Node/Next đang dùng đúng worktree và chạy trong checkout sạch hoặc container Node; không dùng `npm audit fix --force`.
+
+### Release checklist
+
+- Sau khi pull an toàn bằng `git pull --ff-only origin main`, chạy `npm ci` khi lockfile đổi; dùng `dotnet restore` khi project/package đổi.
+- Dùng `docker compose up --build -d` sau Dockerfile, Compose hoặc frontend build-time environment thay đổi; các lần khác dùng `docker compose up -d` để tái sử dụng PostgreSQL, Redis và MinIO.
+- Xác minh `docker compose ps`, `/health/live`, `/health/ready`, đăng nhập, role Admin/Author, dashboard và giới hạn upload. Không dùng `docker compose down -v`: lệnh đó xóa dữ liệu chung trong named volumes.
+- Nginx nhận frontend tại `/`, API tại `/api/`, và giữ health endpoints ở root. Multipart lớn hơn policy bị Nginx chặn trước API; API vẫn kiểm tra chính xác giới hạn upload sau khi request được chuyển tiếp.
+- Collector debug chỉ chứng minh nhận telemetry cục bộ; cần backend observability riêng để lưu và truy vấn trace/metric lâu dài. Browser responsive smoke cần nghiệm thu thủ công nếu automation không khả dụng.
 
 Thông tin PostgreSQL phải khớp với cấu hình development trong
 `docker-compose.yml`.

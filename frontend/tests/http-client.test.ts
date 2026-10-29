@@ -5,6 +5,24 @@ import { ApiError, httpClient, parseRetryAfter } from "../src/services/http-clie
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 
+test("SSR uses the internal API URL", async () => {
+  const previous = process.env.API_URL;
+  process.env.API_URL = "http://api:8080";
+  let target = "";
+  globalThis.fetch = async (input) => {
+    target = String(input);
+    return new Response(JSON.stringify({ ok: true }));
+  };
+
+  try {
+    await httpClient("/api/v1/auth/login", { method: "POST" });
+    assert.equal(target, "http://api:8080/api/v1/auth/login");
+  } finally {
+    if (previous === undefined) delete process.env.API_URL;
+    else process.env.API_URL = previous;
+  }
+});
+
 test("parses RFC 7807 validation problems without serializing server details", async () => {
   globalThis.fetch = async () => new Response(JSON.stringify({
     type: "VALIDATION_ERROR", title: "Validation failed.", status: 400,

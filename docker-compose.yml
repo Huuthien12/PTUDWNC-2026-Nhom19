@@ -60,7 +60,7 @@ services:
       Minio__PublicBaseUrl: ${MINIO_PUBLIC_BASE_URL:-http://localhost:9000}
       Email__Smtp__Host: mailhog
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-    ports: ["${API_PORT:-5062}:8080"]
+      ForwardedHeaders__KnownProxy: 172.28.0.250
     depends_on:
       postgres: { condition: service_started }
       redis: { condition: service_started }
@@ -76,14 +76,38 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ""
     environment:
       API_URL: http://api:8080
       NEXT_PUBLIC_API_URL: ${BROWSER_API_URL:-http://localhost:5062}
-    ports: ["${FRONTEND_PORT:-3000}:3000"]
     depends_on:
       api: { condition: service_healthy }
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports: ["${PROXY_PORT:-3000}:80"]
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      frontend: { condition: service_started }
+      api: { condition: service_healthy }
+    networks:
+      default:
+        ipv4_address: 172.28.0.250
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health/live >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 
 volumes:
   pgdata:
   redisdata:
   miniodata:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
