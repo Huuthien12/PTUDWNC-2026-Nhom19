@@ -146,6 +146,25 @@ public sealed class PasswordRecoveryApiTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Forgot_email_reset_then_login_works_as_a_complete_recovery_flow()
+    {
+        using var forgot = await ForgotAsync(Email);
+        Assert.Equal(HttpStatusCode.Accepted, forgot.StatusCode);
+
+        var recoveryEmail = await _factory.Emails.WaitForDeliveryAsync();
+        Assert.Equal(Email, recoveryEmail.Email);
+        Assert.False(string.IsNullOrWhiteSpace(recoveryEmail.Token));
+
+        using var reset = await ResetAsync(recoveryEmail.Email, recoveryEmail.Token, NewPassword, NewPassword);
+        Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
+
+        using var oldPasswordLogin = await LoginAsync(OldPassword);
+        Assert.Equal(HttpStatusCode.Unauthorized, oldPasswordLogin.StatusCode);
+        using var newPasswordLogin = await LoginAsync(NewPassword);
+        Assert.Equal(HttpStatusCode.OK, newPasswordLogin.StatusCode);
+    }
+
+    [Fact]
     public async Task Reset_password_changes_login_password_and_revokes_refresh_sessions()
     {
         using var login = await LoginAsync(OldPassword);
