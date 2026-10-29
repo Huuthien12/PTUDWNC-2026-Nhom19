@@ -2,7 +2,10 @@ import { recipeProxyPath } from "./recipe-cache-policy";
 import { clearRecipeRequests } from "./recipe-requests";
 import type { ApiErrorKind, ApiProblem } from "@/types/api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5062";
+function apiBaseUrl(): string {
+  if (typeof window !== "undefined") return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5062";
+  return process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5062";
+}
 
 export class ApiError extends Error {
   public readonly problem?: ApiProblem;
@@ -95,7 +98,7 @@ export async function httpClient<T>(endpoint: string, options: HttpOptions = {})
     headers.set("Content-Type", "application/json");
   }
   const target = typeof window !== "undefined" && recipeProxyPath(endpoint, request.method ?? "GET")
-    ? `/api/recipe-cache${endpoint}` : `${API_URL}${endpoint}`;
+    ? `/api/recipe-cache${endpoint}` : `${apiBaseUrl()}${endpoint}`;
   let response: Response;
   try {
     response = await fetch(target, { ...request, headers });
