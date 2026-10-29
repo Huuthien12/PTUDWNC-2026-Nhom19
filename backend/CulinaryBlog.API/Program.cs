@@ -38,9 +38,11 @@ using System.Threading.RateLimiting;
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
+using System.Net;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console(new JsonFormatter())
@@ -437,6 +439,19 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+var knownProxy = builder.Configuration["ForwardedHeaders:KnownProxy"];
+if (IPAddress.TryParse(knownProxy, out var knownProxyAddress))
+{
+    app.UseForwardedHeaders(new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor |
+            ForwardedHeaders.XForwardedProto |
+            ForwardedHeaders.XForwardedHost,
+        ForwardLimit = 1,
+        KnownProxies = { knownProxyAddress }
+    });
+}
+
 // =========================
 // Database Migration & Seed
 // =========================
@@ -452,11 +467,15 @@ if (!app.Environment.IsEnvironment("Testing"))
     var userManager =
         services.GetRequiredService<UserManager<ApplicationUser>>();
 
+    var roleManager =
+        services.GetRequiredService<RoleManager<IdentityRole>>();
+
     await dbContext.Database.MigrateAsync();
 
     await DataSeeder.SeedAsync(
         dbContext,
-        userManager);
+        userManager,
+        roleManager);
 
     services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<OrphanImageCleanupJob>(
         "orphan-image-cleanup", job => job.RunAsync(), "30 3 * * *",
@@ -899,6 +918,7 @@ categories.MapDelete("/{id:guid}", async (
 
 app.MapRecipeEndpoints();
 app.MapRecipeImageEndpoints();
+app.MapAdminUserEndpoints();
 
 app.Run();
 }

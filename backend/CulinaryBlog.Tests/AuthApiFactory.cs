@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Data.Common;
 using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Application.Authentication.Commands;
 using CulinaryBlog.Domain.Entities;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -139,6 +141,28 @@ public sealed class FakeGoogleCredentialVerifier : IGoogleCredentialVerifier
     }
 }
 
+public sealed class SqlCommandCounter : DbCommandInterceptor
+{
+    private int _count;
+
+    public int Count => _count;
+    public void Reset() => Interlocked.Exchange(ref _count, 0);
+
+    public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command,
+        CommandEventData eventData, InterceptionResult<DbDataReader> result)
+    {
+        Interlocked.Increment(ref _count);
+        return base.ReaderExecuting(command, eventData, result);
+    }
+
+    public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+        CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref _count);
+        return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+    }
+}
+
 public sealed class AuthApiFactory : WebApplicationFactory<Program>
 {
     // Public, test-only signing material. Never loaded from user secrets.
@@ -150,6 +174,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     public RejectingPasswordResetEmailQueue RejectedEmails { get; } = new();
     public FakeGoogleCredentialVerifier GoogleVerifier { get; } = new();
     public RecordingRecipeInvalidator RecipeInvalidator { get; } = new();
+    public SqlCommandCounter SqlCommands { get; } = new();
     public bool EnableRateLimiting { get; init; }
     public bool RejectPasswordResetEmails { get; init; }
     public bool FailRefreshRevocation { get; set; }
@@ -194,7 +219,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
     }
 
     public AuthTestDbContext NewContext() => new(new DbContextOptionsBuilder<AppDbContext>()
-        .UseSqlite($"Data Source={DatabasePath};Pooling=False").Options);
+        .UseSqlite($"Data Source={DatabasePath};Pooling=False")
+        .AddInterceptors(SqlCommands).Options);
 
     public override async ValueTask DisposeAsync()
     {

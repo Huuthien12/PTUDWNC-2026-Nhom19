@@ -86,14 +86,15 @@ public static class DataSeeder
 
     public static async Task SeedAsync(
         AppDbContext context,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        RoleManager<IdentityRole> roleManager)
     {
         // Cố định seed để dữ liệu có thể tái tạo.
         Randomizer.Seed = new Random(2312753);
 
         Console.WriteLine("===== LAB 02 DATA SEED =====");
 
-        var author = await SeedAuthorAsync(userManager);
+        var author = await SeedAuthorAsync(userManager, roleManager);
 
         var categories = await SeedCategoriesAsync(context);
 
@@ -112,16 +113,31 @@ public static class DataSeeder
     // =========================================================
 
     private static async Task<ApplicationUser> SeedAuthorAsync(
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        RoleManager<IdentityRole> roleManager)
     {
         const string email =
             "seed.author@culinaryblog.local";
+        const string authorRole = "Author";
+
+        if (!await roleManager.RoleExistsAsync(authorRole))
+        {
+            var roleResult = await roleManager.CreateAsync(new IdentityRole(authorRole));
+            if (!roleResult.Succeeded)
+                throw new InvalidOperationException("Cannot create seed Author role.");
+        }
 
         var existingUser =
             await userManager.FindByEmailAsync(email);
 
         if (existingUser is not null)
         {
+            if (!await userManager.IsInRoleAsync(existingUser, authorRole))
+            {
+                var addRoleResult = await userManager.AddToRoleAsync(existingUser, authorRole);
+                if (!addRoleResult.Succeeded)
+                    throw new InvalidOperationException("Cannot assign seed Author role.");
+            }
             Console.WriteLine("Seed author already exists.");
 
             return existingUser;
@@ -150,6 +166,10 @@ public static class DataSeeder
             throw new InvalidOperationException(
                 $"Cannot create seed author: {errors}");
         }
+
+        var authorRoleResult = await userManager.AddToRoleAsync(user, authorRole);
+        if (!authorRoleResult.Succeeded)
+            throw new InvalidOperationException("Cannot assign seed Author role.");
 
         Console.WriteLine("Created seed author.");
 

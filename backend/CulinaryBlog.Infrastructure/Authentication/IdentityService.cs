@@ -2,6 +2,8 @@ using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.EntityFrameworkCore;
+using CulinaryBlog.Infrastructure.Persistence;
 
 namespace CulinaryBlog.Infrastructure.Authentication;
 
@@ -10,13 +12,15 @@ public sealed class IdentityService : IIdentityService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
     private readonly IRecipeCacheInvalidator? _recipeCache;
+    private readonly AppDbContext _db;
 
     public IdentityService(
         UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole> roleManager, IRecipeCacheInvalidator? recipeCache = null)
+        RoleManager<IdentityRole> roleManager, AppDbContext db, IRecipeCacheInvalidator? recipeCache = null)
     {
         _userManager = userManager;
         _roleManager = roleManager;
+        _db = db;
         _recipeCache = recipeCache;
     }
 
@@ -202,6 +206,35 @@ public sealed class IdentityService : IIdentityService
         cancellationToken.ThrowIfCancellationRequested();
         var user = await _userManager.FindByIdAsync(userId);
         return user is null ? null : await ToProfileAsync(user);
+    }
+
+    public async Task<PagedIdentityUsersResult> GetUsersAsync(int page, int pageSize, string? search, string? role,
+        CancellationToken cancellationToken = default)
+    {
+        var users = _db.Users.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToUpper();
+            users = users.Where(user => user.UserName!.ToUpper().Contains(term) || user.Email!.ToUpper().Contains(term) ||
+                user.FullName.ToUpper().Contains(term));
+        }
+        if (!string.IsNullOrWhiteSpace(role))
+            users = users.Where(user => _db.UserRoles.Join(_db.Roles, membership => membership.RoleId,
+                assignedRole => assignedRole.Id, (_, assignedRole) => new { assignedRole.Name, _.UserId })
+                .Any(item => item.UserId == user.Id && item.Name == role));
+        var total = await users.CountAsync(cancellationToken);
+        var rows = await users.OrderBy(user => user.UserName).Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(user => new { user.Id, user.FullName, user.Email, user.UserName, user.EmailConfirmed, user.CreatedAt })
+            .ToListAsync(cancellationToken);
+        var ids = rows.Select(user => user.Id).ToArray();
+        var roles = await _db.UserRoles.Where(membership => ids.Contains(membership.UserId)).Join(_db.Roles,
+            membership => membership.RoleId, assignedRole => assignedRole.Id,
+            (membership, assignedRole) => new { membership.UserId, assignedRole.Name }).ToListAsync(cancellationToken);
+        var items = rows.Select(user => new IdentityUserListItem(user.Id, user.FullName, user.Email ?? string.Empty,
+            user.UserName ?? string.Empty, roles.Where(role => role.UserId == user.Id).Select(role => role.Name!).ToArray(),
+            user.EmailConfirmed, user.CreatedAt)).ToArray();
+        return new(items, total, page, pageSize,
+            (int)Math.Ceiling(total / (double)pageSize));
     }
 
     public async Task<UserProfileResult?> UpdateProfileAsync(string userId, string? fullName, string? avatarUrl,
