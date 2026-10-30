@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import ContentState from "@/components/shared/ContentState";
 import RecipeCard from "./RecipeCard";
@@ -28,6 +29,7 @@ export default function RecipeListClient({ page, query = "", filters: inputFilte
   const [failedKey, setFailedKey] = useState("");
   const [attempt, setAttempt] = useState(0);
   const normalizedQuery = query.trim();
+  const hasActiveCriteria = Boolean(normalizedQuery || categoryId || difficulty !== undefined || maxCookTime !== undefined || minServings !== undefined);
   const filtersKey = JSON.stringify(filters);
   const requestKey = `${normalizedQuery}:${page}:${filtersKey}`;
 
@@ -62,6 +64,6 @@ const filterPanel = normalizedQuery.length >= 2 ? null : (
 if (failedKey === requestKey) return <>{filterPanel}<ContentState headingAs="h2" title="Chưa thể tải công thức" description="Vui lòng thử lại sau."
   retryAction={<button type="button" className="cb-button cb-button-secondary" onClick={() => { setFailedKey(""); setLoadedKey(""); setAttempt(value => value + 1); }}>Thử tải lại</button>} /></>;
 if (!recipes || loadedKey !== requestKey) return <>{filterPanel}<p role="status">Đang tải công thức...</p></>;
-if (!recipes.items.length) return <>{filterPanel}<div className="cb-state"><h2 className="cb-section-title">{normalizedQuery ? "Không tìm thấy món ăn phù hợp" : "Chưa có công thức"}</h2><p>{normalizedQuery ? "Hãy thử từ khóa khác." : "Hãy đổi bộ lọc để xem thêm công thức."}</p></div></>;
+if (!recipes.items.length) return <>{filterPanel}<div className="cb-state"><h2 className="cb-section-title">{normalizedQuery ? "Không tìm thấy món ăn phù hợp" : "Chưa có công thức"}</h2><p>{normalizedQuery ? "Hãy thử từ khóa khác." : "Hãy đổi bộ lọc để xem thêm công thức."}</p>{hasActiveCriteria && <Link className="cb-button cb-button-secondary mt-4 inline-flex" href="/recipes">Xem tất cả món ăn</Link>}</div></>;
 return <>{filterPanel}<div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">{recipes.items.map((recipe) => <RecipeCard key={recipe.id} recipe={recipe} />)}</div>{normalizedQuery ? <SearchPagination query={normalizedQuery} currentPage={recipes.page} totalPages={recipes.totalPages} /> : <RecipePagination currentPage={recipes.page} totalPages={recipes.totalPages} filters={filters} />}</>;
 }
