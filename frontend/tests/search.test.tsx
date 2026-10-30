@@ -551,4 +551,3 @@ test("recipe detail route emits public metadata and escaped JSON-LD only for a p
   assert.deepEqual(hidden.robots, { index: false, follow: false });
   assert.equal(serializeJsonLd({ value: "<script>" }), '{"value":"\\u003cscript>"}');
 });
-
