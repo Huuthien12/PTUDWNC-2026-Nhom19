@@ -1,9 +1,79 @@
+using CulinaryBlog.Application.Common.Models;
 using CulinaryBlog.Domain.Entities;
+using CulinaryBlog.Domain.Enums;
+using CulinaryBlog.Application.Recipes.DTOs;
 
 namespace CulinaryBlog.Application.Common.Interfaces;
 
 public interface IRecipeRepository
 {
+    Task<int> CountMineAsync(
+        string authorId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<RecipeDashboardItemDto>> GetMineAsync(
+        string authorId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
+    Task<int> CountVisibleAsync(
+        string? userId,
+        bool isAdmin,
+        Guid? categoryId,
+        RecipeDifficulty? difficulty,
+        int? maxCookTime,
+        int? minServings,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Recipe>> GetVisibleAsync(
+        int page,
+        int pageSize,
+        string? userId,
+        bool isAdmin,
+        Guid? categoryId,
+        RecipeDifficulty? difficulty,
+        int? maxCookTime,
+        int? minServings,
+        string sortBy,
+        string sortOrder,
+        CancellationToken cancellationToken = default);
+
+    Task<Recipe?> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    Task<Recipe?> GetForLifecycleAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    Task AddAsync(
+        Recipe recipe,
+        CancellationToken cancellationToken = default);
+
+    Task AddStepAsync(
+        RecipeStep step,
+        CancellationToken cancellationToken = default);
+
+    void AddIngredient(RecipeIngredient ingredient);
+
+    // Use the client's decoded Base64 token, not the token from a fresh database read.
+    // Empty tokens are supported for legacy rows; request validation is the caller's responsibility.
+    void Update(Recipe recipe, byte[] originalRowVersion);
+
+    void UpdateForChildMutation(Recipe recipe, byte[] originalRowVersion);
+
+    Task<int> CountSearchAsync(string tsQuery, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<SearchRecipeResult>> SearchAsync(
+        string tsQuery, int page, int pageSize,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> SlugExistsAsync(
+        string slug,
+        Guid? excludeRecipeId = null,
+        CancellationToken cancellationToken = default);
+
     Task<int> CountByCategoryAsync(
         Guid categoryId,
         string? userId,
@@ -24,5 +94,41 @@ public interface IRecipeRepository
 
     Task<int> CountAllByCategoryAsync(
         Guid categoryId,
+        CancellationToken cancellationToken = default);
+
+    Task<Recipe?> GetBySlugAsync(
+        string slug,
+        string? userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default);
+
+    Task<RecipeDetailAccessResult?> GetDetailAccessBySlugAsync(
+        string slug,
+        string? userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default);
+
+    // ---- RecipeImage mutations (FR-RCP-008) ----
+
+    // Returns a tracked recipe with its (non-deleted) Images for RecipeImage mutations.
+    Task<Recipe?> GetForImagesAsync(Guid id, CancellationToken cancellationToken = default);
+
+    // New RecipeImage rows have client-generated GUIDs, so they must be tracked explicitly as Added.
+    void AddImage(RecipeImage image);
+
+    // RecipeImage rows are physically deleted (SRS FR-RCP-008 step 13).
+    void RemoveImage(RecipeImage image);
+
+    // Runs several SaveChanges calls atomically (used when the DB unique-primary index
+    // forces "demote old primary" and "promote new primary" to be separate statements).
+    Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken = default);
+
+    Task<Recipe?> GetForStepMutationAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<RecipeSuggestionDto>> GetSuggestionsAsync(
+        string normalizedQuery,
         CancellationToken cancellationToken = default);
 }

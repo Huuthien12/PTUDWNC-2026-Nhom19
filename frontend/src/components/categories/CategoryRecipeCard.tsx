@@ -1,73 +1,69 @@
+import Link from "next/link";
+
+import RecipeImage from "@/components/shared/RecipeImage";
+
 import type { RecipeSummary } from "@/types/category";
 
-interface CategoryRecipeCardProps {
-  recipe: RecipeSummary;
+function difficultyLabel(value: RecipeSummary["difficulty"]) {
+  const labels: Record<string, string> = {
+    "1": "Dễ",
+    "2": "Trung bình",
+    "3": "Khó",
+    easy: "Dễ",
+    medium: "Trung bình",
+    hard: "Khó",
+  };
+
+  return labels[String(value).toLowerCase()] ?? "Chưa xác định";
 }
-
-function getDifficultyLabel(
-  difficulty: RecipeSummary["difficulty"]
-) {
-  if (typeof difficulty === "string") {
-    return difficulty;
-  }
-
-  switch (difficulty) {
-    case 0:
-      return "Dễ";
-    case 1:
-      return "Trung bình";
-    case 2:
-      return "Khó";
-    default:
-      return "Chưa xác định";
-  }
-}
-
 export default function CategoryRecipeCard({
   recipe,
-}: CategoryRecipeCardProps) {
+}: {
+  recipe: RecipeSummary;
+}) {
   return (
-    <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-      <div className="flex h-44 items-center justify-center bg-orange-50">
-        <div className="text-center">
-          <div className="text-5xl">🍲</div>
+    <Link
+      href={`/recipes/${recipe.slug}`}
+      className="block"
+      aria-label={`Xem chi tiết ${recipe.title}`}
+    >
+      <article className="cb-recipe">
+        <RecipeImage
+          src={recipe.mediumUrl ?? recipe.thumbnailUrl}
+          mediumSrc={recipe.mediumUrl}
+          thumbnailSrc={recipe.thumbnailUrl}
+          title={recipe.title}
+        />
 
-          {recipe.thumbnailUrl && (
-            <p className="mt-2 text-xs text-gray-400">
-              Có ảnh công thức
-            </p>
-          )}
-        </div>
-      </div>
+        <h2>{recipe.title}</h2>
 
-      <div className="p-5">
-        <h2 className="text-lg font-bold text-gray-900">
-          {recipe.title}
-        </h2>
-
-        <p className="mt-2 line-clamp-2 text-sm leading-6 text-gray-600">
+        <p className="cb-recipe-description line-clamp-2">
           {recipe.description ||
-            "Chưa có mô tả cho công thức này."}
+            "Một gợi ý cho những bữa ăn đầy cảm hứng."}
         </p>
 
-        <div className="mt-4 grid grid-cols-2 gap-2 text-sm text-gray-600">
-          <span>
-            Chuẩn bị: {recipe.prepTime} phút
-          </span>
+        <dl className="cb-recipe-meta">
+          <div>
+            <dt>Chuẩn bị</dt>
+            <dd>{recipe.prepTime} phút</dd>
+          </div>
 
-          <span>
-            Nấu: {recipe.cookTime} phút
-          </span>
+          <div>
+            <dt>Chế biến</dt>
+            <dd>{recipe.cookTime} phút</dd>
+          </div>
 
-          <span>
-            {recipe.servings} khẩu phần
-          </span>
+          <div>
+            <dt>Khẩu phần</dt>
+            <dd>{recipe.servings} người</dd>
+          </div>
 
-          <span>
-            {getDifficultyLabel(recipe.difficulty)}
-          </span>
-        </div>
-      </div>
-    </article>
+          <div>
+            <dt>Độ khó</dt>
+            <dd>{difficultyLabel(recipe.difficulty)}</dd>
+          </div>
+        </dl>
+      </article>
+    </Link>
   );
 }

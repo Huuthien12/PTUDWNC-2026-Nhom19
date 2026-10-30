@@ -1,43 +1,28 @@
+"use client";
+
 import Link from "next/link";
+import AuthControls from "@/components/auth/AuthControls";
+import SearchBar from "@/components/search/SearchBar";
+import { usePathname } from "next/navigation";
+import { Suspense } from "react";
 
 export default function Header() {
-  return (
-    <header className="border-b bg-white">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
-        <Link href="/" className="text-xl font-bold">
-          Culinary Blog
-        </Link>
+  const pathname = usePathname();
+  if (pathname === "/login" || pathname === "/register") return null;
 
-        <nav className="flex items-center gap-6">
-          <Link
-            href="/"
-            className="text-sm font-medium hover:text-gray-600"
-          >
-            Trang chủ
-          </Link>
-
-          <Link
-            href="/recipes"
-            className="text-sm font-medium hover:text-gray-600"
-          >
-            Công thức
-          </Link>
-
-          <Link
-            href="/categories"
-            className="text-sm font-medium hover:text-gray-600"
-          >
-            Danh mục
-          </Link>
-
-          <Link
-            href="/about"
-            className="text-sm font-medium hover:text-gray-600"
-          >
-            Giới thiệu
-          </Link>
-        </nav>
+  return <header className="cb-header">
+    <div className="cb-container cb-header-inner">
+      <Link href="/" className="cb-brand shrink-0 whitespace-nowrap" aria-label="Culinary Blog — Trang chủ">Culinary <span>Blog</span><span className="text-gold" aria-hidden="true">.</span></Link>
+      <div className="hidden min-w-0 flex-1 justify-center px-4 md:flex">
+        <Suspense fallback={<span className="text-sm text-[#61695c]">Đang tải tìm kiếm...</span>}>
+          <SearchBar compact />
+        </Suspense>
       </div>
-    </header>
-  );
+      <nav className="cb-nav min-w-0 justify-end" aria-label="Điều hướng chính">
+        <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>Trang chủ</Link>
+        <Link href="/categories" aria-current={pathname.startsWith("/categories") ? "page" : undefined}>Khám phá danh mục</Link>
+        <AuthControls />
+      </nav>
+    </div>
+  </header>;
 }

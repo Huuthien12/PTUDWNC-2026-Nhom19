@@ -38,7 +38,7 @@ export async function createCategory(
 ): Promise<Category> {
   return apiClient<Category>("/api/v1/categories", {
     method: "POST",
-    credentials: "include",
+    auth: true,
     body: JSON.stringify(input),
   });
 }
@@ -51,7 +51,7 @@ export async function updateCategory(
     `/api/v1/categories/${id}`,
     {
       method: "PUT",
-      credentials: "include",
+      auth: true,
       body: JSON.stringify(input),
     }
   );
@@ -64,7 +64,7 @@ export async function deleteCategory(
     `/api/v1/categories/${id}`,
     {
       method: "DELETE",
-      credentials: "include",
+      auth: true,
     }
   );
 }

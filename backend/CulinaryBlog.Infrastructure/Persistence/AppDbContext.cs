@@ -2,6 +2,7 @@ using CulinaryBlog.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using NpgsqlTypes;
 
 namespace CulinaryBlog.Infrastructure.Persistence;
 
@@ -31,6 +32,75 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<Category> Categories => Set<Category>();
 
+    public DbSet<SearchHistory> SearchHistories => Set<SearchHistory>();
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        PrepareRecipeVersions();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        PrepareRecipeVersions();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void PrepareRecipeVersions()
+{
+    ChangeTracker.DetectChanges();
+
+    foreach (var recipe in ChangeTracker.Entries<Recipe>().ToList())
+    {
+        var nutrition = recipe.Reference(x => x.Nutrition).TargetEntry;
+
+        var nutritionChanged =
+            nutrition?.State is EntityState.Added
+                or EntityState.Modified
+                or EntityState.Deleted;
+
+        var childChanged =
+            ChangeTracker.Entries<RecipeIngredient>().Any(entry =>
+                entry.Entity.RecipeId == recipe.Entity.Id &&
+                entry.State is EntityState.Added
+                    or EntityState.Modified
+                    or EntityState.Deleted) ||
+            ChangeTracker.Entries<RecipeStep>().Any(entry =>
+                entry.Entity.RecipeId == recipe.Entity.Id &&
+                entry.State is EntityState.Added
+                    or EntityState.Modified
+                    or EntityState.Deleted);
+
+        if (recipe.State is not (EntityState.Added or EntityState.Modified)
+            && !nutritionChanged
+            && !childChanged)
+        {
+            continue;
+        }
+
+        // Recipe.RowVersion is the single concurrency token
+        // for the Recipes table. Nutrition shares the same table,
+        // so it must not have a second concurrency property mapped
+        // to the same physical column.
+        if (recipe.State == EntityState.Unchanged)
+        {
+            recipe.State = EntityState.Modified;
+        }
+
+        var version = recipe.Property(x => x.RowVersion);
+        var nextVersion = Guid.NewGuid().ToByteArray();
+
+        version.CurrentValue = nextVersion;
+
+        if (recipe.State != EntityState.Added)
+        {
+            version.IsModified = true;
+        }
+    }
+}
+
     // =========================
     // Model Configuration
     // =========================
@@ -44,6 +114,15 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.ApplyConfigurationsFromAssembly(
             typeof(AppDbContext).Assembly
         );
+
+        if (Database.IsNpgsql())
+        {
+            builder.Entity<Recipe>().Property<NpgsqlTsVector>("SearchVector")
+                .HasColumnType("tsvector");
+            builder.Entity<Recipe>().HasIndex("SearchVector")
+                .HasDatabaseName("IDX_Recipe_Search")
+                .HasMethod("GIN");
+        }
 
 
         // =========================
@@ -72,6 +151,15 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<RefreshToken>(entity =>
         {
             entity.HasKey(rt => rt.Id);
+
+            entity.Property(rt => rt.Token)
+                .HasMaxLength(64);
+
+            entity.Property(rt => rt.ReplacedByToken)
+                .HasMaxLength(64);
+
+            entity.HasIndex(rt => rt.Token)
+                .IsUnique();
 
             entity.Property(rt => rt.UserId)
                 .HasMaxLength(450);

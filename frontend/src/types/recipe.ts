@@ -1,0 +1,136 @@
+import type { PaginatedResult } from "./api";
+
+export type RecipeDifficulty = 1 | 2 | 3;
+export type RecipeStatus = 1 | 2 | 3;
+
+export interface RecipeListFilters {
+  categoryId?: string;
+  difficulty?: RecipeDifficulty;
+  maxCookTime?: number;
+  minServings?: number;
+  sortBy?: "createdAt" | "title";
+  sortOrder?: "asc" | "desc";
+}
+
+export interface RecipeCategory {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface RecipeAuthor {
+  id: string;
+  fullName: string;
+  avatarUrl: string | null;
+}
+
+export interface RecipeNutrition {
+  calories: number | null;
+  protein: number | null;
+  carbs: number | null;
+  fat: number | null;
+}
+
+export interface CreateRecipeRequest {
+  title: string;
+  description: string;
+  categoryId: string;
+  prepTime: number;
+  cookTime: number;
+  servings: number;
+  difficulty: RecipeDifficulty;
+  instructions?: string | null;
+  nutrition?: RecipeNutrition | null;
+}
+
+export interface UpdateRecipeRequest extends CreateRecipeRequest {
+  instructions: string;
+  rowVersion: string;
+}
+
+export interface RecipeDto extends Omit<CreateRecipeRequest, "instructions" | "nutrition"> {
+  id: string;
+  slug: string;
+  authorId: string;
+  instructions: string;
+  nutrition: RecipeNutrition;
+  status: RecipeStatus;
+  rowVersion: string;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+}
+
+export interface RecipeIngredient {
+  id: string;
+  name: string;
+  quantity: number | null;
+  unit: string | null;
+  notes: string | null;
+  orderIndex: number;
+}
+
+export interface RecipeStep {
+  id: string;
+  stepNumber: number;
+  title: string | null;
+  description: string;
+  timerMinutes: number | null;
+  imageUrl: string | null;
+  rowVersion: string;
+}
+
+export interface RecipeImage {
+  id: string;
+  originalUrl: string;
+  mediumUrl: string | null;
+  thumbnailUrl: string | null;
+  altText: string | null;
+  isPrimary: boolean;
+  orderIndex: number;
+}
+
+export interface RecipeDetail {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  instructions: string;
+  prepTime: number;
+  cookTime: number;
+  servings: number;
+  difficulty: RecipeDifficulty;
+  status: RecipeStatus;
+  rowVersion: string;
+  createdAt: string;
+  publishedAt: string | null;
+  category: RecipeCategory;
+  author: RecipeAuthor;
+  nutrition: RecipeNutrition | null;
+  ingredients: RecipeIngredient[];
+  steps: RecipeStep[];
+  images: RecipeImage[];
+}
+
+export interface RecipeSummary {
+  id: string; title: string; slug: string; description: string; prepTime: number; cookTime: number;
+  servings: number; difficulty: RecipeDifficulty; thumbnailUrl: string | null; mediumUrl?: string | null; publishedAt: string | null;
+}
+
+export type RecipePage = PaginatedResult<RecipeSummary>;
+
+export interface RecipeDashboardItem {
+  id: string;
+  title: string;
+  slug: string;
+  status: RecipeStatus;
+  rowVersion: string;
+  categoryName: string;
+  thumbnailUrl: string | null;
+  mediumUrl?: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RecipeDashboardPage = PaginatedResult<RecipeDashboardItem>;

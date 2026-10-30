@@ -36,6 +36,16 @@ thái
 chỉnh theo IEEE 830 / ISO 29148.  Approved  
 1.0.1 16/09/2026 Senior BA / Architect  Đồng bộ hóa FR/NFR/API/Data Model; hoàn thiện đầy đủ FR-CAT đến FR-OBS; chuẩn hóa Redis, sorting, HTTP status, publish rule, refresh token và Google OAuth flow.  Approved
 1.0.2 16/09/2026 Senior BA / Architect  Hoàn thiện FR-SRCH đến FR-OBS; đồng bộ Google OAuth Frontend→Backend verification; chuẩn hóa Output Cache 2 phút, Next.js cache invalidation và Optimistic Concurrency cho Recipe aggregate.  Approved
+
+Ghi chú đồng bộ 01/10/2026 – Áp dụng 6 quyết định xử lý mâu thuẫn trên toàn tài liệu:
+1. FR-RCP-007: Soft Delete (`IsDeleted=true`), không physical/cascade delete child entities.
+2. FR-CAT-001: Redis Distributed Cache, Category TTL = 30 phút.
+3. FR-RCP-001: dùng `sortBy` + `sortOrder`.
+4. HTTP Status theo Appendix A: 400 Validation/Business Rule; 409 Duplicate/Unique Conflict; 422 chỉ Optimistic Concurrency (`RowVersion`).
+5. FR-RCP-005: Publish yêu cầu `Ingredients >= 1` AND `Steps >= 1`.
+6. Refresh Token: 128-bit cryptographically secure random + SHA-256 hash khi lưu database.
+
+Ghi chú hiệu chỉnh 01/10/2026: FR-RCP-007 được đồng bộ với NFR-REL, Data Model và REST API Spec: Recipe DELETE sử dụng Soft Delete (`IsDeleted=true`), không physical/cascade delete child entities.
 0.9.0 20/05/2026 Senior BA Bổ sung Chương 7 (Data Model), 
 Chương 8 (API Spec) và Ph ụ lục. 
 Under 
@@ -917,8 +927,7 @@ refresh token đư ợc persist, email chào m ừng đư ợc đẩy vào Hangf
 queue. Client nhận đư ợc access token và refresh token.  
 HTTP Status Code tr ả 
 về 
-201 Created – Đăng ký thành công. 409 Conflict – Email đã t ồn tại. 422 
-Unprocessable Entity – Dữ liệu không h ợp lệ. 500 Internal Server Error 
+201 Created – Đăng ký thành công. 409 Conflict – Email đã t ồn tại. 400 Bad Request – Dữ liệu không hợp lệ. 500 Internal Server Error 
 – Lỗi hệ thống. 
  
 FR-AUTH-002: Đăng nhập bằng Email/Mật khẩu (Local Login) 
@@ -1824,54 +1833,48 @@ về
  
 FR-RCP-007: Xóa Công thức [Author-Owner/Admin] 
 Mã yêu cầu FR-RCP-007 
-Tên yêu cầu Xóa Vĩnh vi ễn Công thức Nấu ăn 
+Tên yêu cầu Xóa Công thức Nấu ăn (Soft Delete) 
 Nhóm chức năng  Module Quản lý Công th ức Nấu ăn (FR-RCP) 
 Tác nhân Tác giả sở hữu (Author – Owner) / Quản trị viên (Admin) 
 Mức ưu tiên 
 (MoSCoW) 
 M – Must Have 
-Mô tả Xóa vĩnh viễn một công th ức và t ất cả dữ liệu liên quan (cascade 
-delete: Steps, Ingredients, Images). Các file ảnh trên MinIO đư ợc xóa
-
-
----
-
-<!-- PAGE 33 -->
-
-Culinary Blog – Tài liệu Đặc tả Yêu cầu Phần mềm (SRS) v1.0.2 
-CONFIDENTIAL  •  Phát triển Ứng dụng Web Nâng cao V4  •  Trang 33 / 71 
-bất đồng bộ qua Hangfire fire -and-forget job đ ể tránh blocking HTTP 
-response. Đây là hard delete (không dùng soft delete pattern cho 
-recipe). 
-Điều kiện tiên quyết 1. Recipe t ồn tại. 2. Ngư ời dùng là owner ho ặc Admin.  
+Mô tả 
+Thực hiện xóa mềm (Soft Delete) một công thức bằng cách đánh dấu 
+`IsDeleted=true`. Recipe và các child entities liên quan (Steps, Ingredients, 
+Images) không bị xóa vật lý khỏi database, nhằm bảo toàn dữ liệu và cho phép 
+khôi phục theo retention policy. Recipe đã soft delete bị loại khỏi các query 
+thông thường bởi Global Query Filter. Việc dọn dẹp file ảnh trên MinIO được 
+thực hiện bất đồng bộ theo chính sách cleanup của hệ thống và không làm 
+blocking HTTP response. 
+Điều kiện tiên quyết 
+1. Recipe tồn tại và chưa bị soft delete. 2. Người dùng là owner hoặc Admin. 
 Luồng chính (Happy 
 Path) 
-1. Author/Admin g ửi DELETE /api/v1/recipes/{id}.  
-2. Kiểm tra xác th ực và resource -based authorization.  
-3. Lấy danh sách URL ảnh từ recipe.Images.  
-4. _unitOfWork.Recipes.Remove(recipe), SaveChangesAsync() – 
-cascade delete Steps, Ingredients, Images trong database.  
-5. Với mỗi imageUrl: 
-BackgroundJob.Enqueue<IFileStorageService>(svc => 
-svc.DeleteAsync(url)) – xóa ảnh trên MinIO b ất đồng bộ. 
-6. EvictByTagAsync("recipes"), 
-EvictByTagAsync($"recipe:{recipe.Slug}") – invalidate cache.  
-7. Trả về HTTP 204 No Content.  
-Luồng thay th ế / 
-Ngoại l ệ 
-A1 – ID không t ồn tại: HTTP 404. 
-A2 – Không ph ải owner: HTTP 403.  
-A3 – Xóa MinIO file th ất bại (job retry): Hangfire t ự động retry 3 lần. 
-Nếu vẫn fail, log error nhưng không ảnh hưởng response đã tr ả về. 
+1. Author/Admin gửi DELETE /api/v1/recipes/{id}. 
+2. Kiểm tra xác thực và resource-based authorization. 
+3. Đánh dấu `recipe.IsDeleted = true` và cập nhật `UpdatedAt`. 
+4. `SaveChangesAsync()`; không physical delete Recipe, Steps, Ingredients hoặc Images. 
+5. Invalidate cache liên quan đến danh sách recipe và recipe theo slug. 
+6. Nếu hệ thống đã cấu hình MinIO cleanup, lên lịch cleanup bất đồng bộ theo 
+chính sách Background Job; cleanup không ảnh hưởng response của thao tác xóa mềm. 
+7. Trả về HTTP 204 No Content. 
+Luồng thay thế / 
+Ngoại lệ 
+A1 – ID không tồn tại hoặc Recipe đã soft delete: HTTP 404. 
+A2 – Người dùng đã xác thực nhưng không phải owner và không phải Admin: HTTP 403. 
+A3 – Chưa xác thực / token không hợp lệ: HTTP 401 theo quy ước chung. 
 HTTP Method & 
 Endpoint 
-DELETE  /api/v1/recipes/{id:guid}  
-Kết quả mong đợi Recipe được đánh dấu IsDeleted=true; child entities không bị xóa vật lý. Ảnh trên MinIO 
-được lên lịch xóa qua Hangfire.  
-HTTP Status Code tr ả 
+DELETE  /api/v1/recipes/{id:guid} 
+Kết quả mong đợi 
+Recipe được đánh dấu `IsDeleted=true`; Recipe và child entities không bị xóa vật lý. 
+Global Query Filter loại Recipe khỏi các query thông thường. Dữ liệu liên quan 
+được giữ lại theo retention policy. MinIO cleanup (nếu áp dụng) được xử lý bất đồng bộ. 
+HTTP Status Code trả 
 về 
-204 No Content – Xóa thành công. 403 Forbidden. 404 Not Found.  
- 
+204 No Content – Xóa thành công. 401 Unauthorized. 403 Forbidden. 404 Not Found. 
+
 FR-RCP-008: Quản lý Ảnh Công thức (Upload / Set Primary / Delete) 
 Mã yêu cầu FR-RCP-008 
 Tên yêu cầu Upload Ảnh, Đặt Ảnh Chính, Xóa Ảnh Công thức 
@@ -2625,7 +2628,7 @@ Hệ thống tuân thủ các nguyên tắc OWASP Top 10, đặc biệt Injectio
 - Redis failure có graceful degradation cho cache.
 - Hangfire retry job tối đa 3 lần theo exponential backoff trừ job có policy riêng.
 - PostgreSQL WAL + daily backup; retention 30 ngày.
-- Recipe dùng Soft Delete (`IsDeleted=true`) thay vì hard delete.
+- Recipe dùng Soft Delete (`IsDeleted=true`); không xóa vật lý Recipe hoặc child entities.
 - MinIO dùng persistent volume và orphan cleanup job.
 
 ## 4.5. Khả năng Bảo trì (NFR-MAINT)

@@ -17,7 +17,7 @@ public sealed class JwtTokenService : IJwtTokenService
         _configuration = configuration;
     }
 
-    public Task<string> GenerateAccessTokenAsync(
+    public Task<AccessTokenResult> GenerateAccessTokenAsync(
         IdentityLoginResult loginResult)
     {
         if (!loginResult.Succeeded ||
@@ -109,8 +109,10 @@ public sealed class JwtTokenService : IJwtTokenService
             expires: expiresAt,
             signingCredentials: credentials);
 
-        return Task.FromResult(
+        return Task.FromResult(new AccessTokenResult(
             new JwtSecurityTokenHandler()
-                .WriteToken(token));
+                .WriteToken(token),
+            // JWT exp has whole-second precision; return that exact UTC instant.
+            token.ValidTo));
     }
 }

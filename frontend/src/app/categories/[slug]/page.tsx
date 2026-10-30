@@ -1,4 +1,6 @@
 import Link from "next/link";
+import CulinaryIllustration from "@/components/shared/CulinaryIllustration";
+import ContentState from "@/components/shared/ContentState";
 import { notFound } from "next/navigation";
 
 import CategoryPagination from "@/components/categories/CategoryPagination";
@@ -57,106 +59,37 @@ export default async function CategoryDetailPage({
   }
 
   if (hasError || detail === null) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-50 px-6">
-        <div className="max-w-md rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
-          <h1 className="text-xl font-bold text-gray-900">
-            Không thể tải danh mục
-          </h1>
-
-          <p className="mt-3 text-gray-600">
-            Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.
-          </p>
-
-          <Link
-            href="/categories"
-            className="mt-6 inline-block font-semibold text-orange-600 hover:text-orange-700"
-          >
-            ← Quay lại danh mục
-          </Link>
-        </div>
-      </main>
-    );
+    return <div className="cb-container cb-section"><ContentState title="Chưa thể tải danh mục" description="Đã có lỗi khi tải dữ liệu. Vui lòng thử lại sau một chút." href="/categories" action="Quay lại danh mục" /></div>;
   }
-
   const { category, recipes } = detail;
-
-  return (
-    <main className="min-h-screen bg-gray-50">
-      <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-7xl px-6 py-12">
-          <Link
-            href="/categories"
-            className="text-sm font-semibold text-orange-600 hover:text-orange-700"
-          >
-            ← Tất cả danh mục
-          </Link>
-
-          <div className="mt-6">
-            <p className="font-semibold text-orange-600">
-              Danh mục
-            </p>
-
-            <h1 className="mt-2 text-4xl font-bold tracking-tight text-gray-900">
-              {category.name}
-            </h1>
-
-            <p className="mt-4 max-w-2xl leading-7 text-gray-600">
-              {category.description ||
-                "Khám phá các công thức trong danh mục này."}
-            </p>
-
-            <p className="mt-4 text-sm font-medium text-gray-500">
-              {category.recipeCount} công thức đã xuất bản
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-6 py-10">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <h2 className="text-2xl font-bold text-gray-900">
-            Công thức
+  return <>
+    <section className="cb-hero"><div className="cb-container cb-hero-inner">
+      <div>
+        <Link href="/categories" className="cb-text-link">← Tất cả danh mục</Link>
+        <p className="cb-eyebrow mt-8">Danh mục</p>
+        <h1 className="cb-title">{category.name}</h1>
+        <p className="cb-lead">{category.description || "Khám phá những gợi ý cho bữa ăn của bạn."}</p>
+        <p className="mt-6 text-sm text-forest">{category.recipeCount} công thức đã xuất bản</p>
+      </div>
+      <div className="cb-hero-art"><CulinaryIllustration /></div>
+    </div></section>
+    <section className="cb-container cb-section" aria-labelledby="recipes-heading">
+      <div className="cb-section-heading"><h2 id="recipes-heading" className="cb-section-title">Cảm hứng vào bếp</h2><span className="text-sm text-muted">{recipes.totalCount} công thức</span></div>
+      {recipes.items.length === 0 ? (
+        <div className="cb-state">
+          <h2 className="cb-section-title">
+            {recipes.totalCount === 0 ? "Danh mục chưa có công thức" : "Chưa có công thức ở trang này"}
           </h2>
-
-          <span className="text-sm text-gray-500">
-            {recipes.totalCount} kết quả
-          </span>
+          <p>{recipes.totalCount === 0
+            ? "Bạn có thể khám phá các danh mục khác để tìm thêm cảm hứng vào bếp."
+            : "Quay về trang đầu để xem các công thức trong danh mục."}</p>
+          <Link className="cb-text-link" href={recipes.totalCount === 0 ? "/categories" : `/categories/${category.slug}`}>
+            {recipes.totalCount === 0 ? "Khám phá danh mục khác →" : "Về trang đầu →"}
+          </Link>
         </div>
-
-        {recipes.items.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-16 text-center">
-            <div className="text-5xl">
-              🍲
-            </div>
-
-            <h2 className="mt-4 text-xl font-bold text-gray-900">
-              Chưa có công thức
-            </h2>
-
-            <p className="mt-2 text-gray-500">
-              Hiện chưa có công thức nào trong danh mục này.
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {recipes.items.map((recipe) => (
-                <CategoryRecipeCard
-                  key={recipe.id}
-                  recipe={recipe}
-                />
-              ))}
-            </div>
-
-            <CategoryPagination
-              slug={category.slug}
-              currentPage={recipes.page}
-              totalPages={recipes.totalPages}
-            />
-          </>
-        )}
-      </section>
-    </main>
-  );
+      ) :
+        <div className="cb-grid">{recipes.items.map(recipe => <CategoryRecipeCard key={recipe.id} recipe={recipe} />)}</div>}
+      <CategoryPagination slug={category.slug} currentPage={recipes.page} totalPages={recipes.totalPages} />
+    </section>
+  </>;
 }

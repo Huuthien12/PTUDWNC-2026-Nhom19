@@ -12,5 +12,6 @@ public sealed record RecipeSummaryDto(
     int Servings,
     RecipeDifficulty Difficulty,
     string? ThumbnailUrl,
+    string? MediumUrl,
     DateTime? PublishedAt
 );

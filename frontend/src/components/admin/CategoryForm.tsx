@@ -42,18 +42,19 @@ export default function CategoryForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
+      className="cb-form"
+      aria-busy={isSubmitting}
     >
-      <h2 className="text-xl font-bold text-gray-900">
+      <h2 className="cb-section-title">
         {category
           ? "Cập nhật danh mục"
           : "Thêm danh mục"}
       </h2>
 
-      <div className="mt-5">
+      <div className="cb-field">
         <label
           htmlFor="category-name"
-          className="mb-2 block text-sm font-semibold text-gray-700"
+          className=""
         >
           Tên danh mục
         </label>
@@ -64,23 +65,25 @@ export default function CategoryForm({
           onChange={(event) =>
             setName(event.target.value)
           }
+          aria-describedby="category-name-hint"
+          autoFocus
           minLength={2}
           maxLength={50}
           required
           disabled={isSubmitting}
-          className="w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 outline-none transition focus:border-orange-500"
+          className="cb-input"
           placeholder="Ví dụ: Món Việt"
         />
 
-        <p className="mt-1 text-xs text-gray-500">
+        <p id="category-name-hint" className="cb-field-hint">
           Từ 2 đến 50 ký tự.
         </p>
       </div>
 
-      <div className="mt-5">
+      <div className="cb-field">
         <label
           htmlFor="category-description"
-          className="mb-2 block text-sm font-semibold text-gray-700"
+          className=""
         >
           Mô tả
         </label>
@@ -93,27 +96,27 @@ export default function CategoryForm({
           }
           disabled={isSubmitting}
           rows={4}
-          className="w-full resize-none rounded-xl border border-gray-300 px-4 py-3 text-gray-900 outline-none transition focus:border-orange-500"
+          className="cb-input resize-y"
           placeholder="Mô tả ngắn về danh mục..."
         />
       </div>
 
       {category && (
-        <div className="mt-4 rounded-xl bg-gray-50 p-3 text-sm text-gray-600">
+        <div className="mt-4 bg-cream p-4 text-sm text-muted break-words">
           Slug hiện tại:{" "}
           <strong>{category.slug}</strong>
 
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="cb-field-hint">
             Slug không thay đổi khi sửa tên.
           </p>
         </div>
       )}
 
-      <div className="mt-6 flex gap-3">
+      <div className="mt-6 flex flex-wrap gap-3">
         <button
           type="submit"
           disabled={isSubmitting}
-          className="rounded-xl bg-orange-600 px-5 py-3 font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="cb-button"
         >
           {isSubmitting
             ? "Đang xử lý..."
@@ -126,7 +129,7 @@ export default function CategoryForm({
           type="button"
           onClick={onCancel}
           disabled={isSubmitting}
-          className="rounded-xl border border-gray-300 px-5 py-3 font-semibold text-gray-700 hover:bg-gray-50"
+          className="cb-button cb-button-secondary"
         >
           Hủy
         </button>

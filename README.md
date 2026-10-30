@@ -507,13 +507,13 @@ Người dùng có thể đăng ký, đăng nhập, refresh token, logout và h�
 **Frontend**
 - Author Recipe Dashboard.
 - Các nút:
-- Chuẩn bị giao diện Profile, Author Dashboard, Admin User List và error/unauthorized, tái sử dụng Profile UI có sẵn.
-- Hoàn thiện Author Dashboard với xác nhận thao tác, toast và refresh danh sách sau Draft/Publish/Unpublish/Archive/Soft Delete.
   - Edit
   - Publish
   - Unpublish
   - Archive
   - Delete
+- Chuẩn bị giao diện Profile, Author Dashboard, Admin User List và error/unauthorized, tái sử dụng Profile UI có sẵn.
+- Hoàn thiện Author Dashboard với xác nhận thao tác, toast và refresh danh sách sau Draft/Publish/Unpublish/Archive/Soft Delete.
 
 ### Cả nhóm
 - Kiểm tra Recipe Aggregate.

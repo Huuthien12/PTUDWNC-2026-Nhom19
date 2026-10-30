@@ -47,6 +47,7 @@ public class RecipeConfiguration : IEntityTypeConfiguration<Recipe>
 
         builder.Property(x => x.RowVersion)
             .IsConcurrencyToken()
+            .ValueGeneratedNever()
             .IsRequired();
 
         builder.HasQueryFilter(x => !x.IsDeleted);
