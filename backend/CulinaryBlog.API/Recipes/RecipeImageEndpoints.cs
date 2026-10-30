@@ -9,7 +9,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace CulinaryBlog.API.Recipes;
 
-// SRS 8.5 / FR-RCP-008. The current Recipe RowVersion (Base64) is sent in the If-Match header
+// SRS 8.5 / FR-RCP-008. Uploads require a stable multipart uploadId reused for retries;
+// it is also the RecipeImage ID and MinIO original-object key.
+// The current Recipe RowVersion (Base64) is sent in the If-Match header
 // or, when the header is absent, in the "rowVersion" field (multipart form for POST, JSON body otherwise).
 // Every success response returns the Recipe's NEW RowVersion in the body and in the ETag header.
 public static class RecipeImageEndpoints
@@ -50,11 +52,14 @@ public static class RecipeImageEndpoints
         if (file is null || file.Length == 0)
             throw Invalid("file", "An image file is required in the \"file\" field.");
 
+        if (!Guid.TryParse(form["uploadId"].ToString(), out var uploadId) || uploadId == Guid.Empty)
+            throw Invalid("uploadId", "A non-empty uploadId is required and must be reused for retries of the same upload.");
+
         var rowVersion = ResolveRowVersion(request, form["rowVersion"].ToString());
         var altText = form["altText"].ToString();
 
         await using var content = file.OpenReadStream();
-        var result = await sender.Send(new UploadRecipeImageCommand(id, content, file.ContentType,
+        var result = await sender.Send(new UploadRecipeImageCommand(id, uploadId, content, file.ContentType,
             string.IsNullOrWhiteSpace(altText) ? null : altText, rowVersion, userId, user.IsInRole("Admin")),
             cancellationToken);
 

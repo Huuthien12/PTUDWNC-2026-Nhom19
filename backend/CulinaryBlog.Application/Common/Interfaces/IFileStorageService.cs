@@ -4,6 +4,7 @@ public interface IFileStorageService
 {
     Task<StoredFile> StoreAsync(
         Guid recipeId,
+        Guid uploadId,
         Stream content,
         string? declaredContentType,
         CancellationToken cancellationToken = default);

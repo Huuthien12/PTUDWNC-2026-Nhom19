@@ -27,6 +27,7 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
     public bool FailWithSlugConstraint { get; set; }
     public RecordingRecipeCache Cache { get; } = new();
     public FakeFileStorageService Storage { get; } = new();
+    public FakeRecipeImageOperationLock ImageOperationLock { get; } = new();
     public RecordingImageCleanupQueue ImageCleanup { get; } = new();
     public RecordingImageProcessingQueue ImageProcessing { get; } = new();
     public TestOutputCacheStore? OutputCache { get; set; }
@@ -68,6 +69,8 @@ public sealed class RecipeApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<ICacheService>(Cache);
             services.RemoveAll<IFileStorageService>();
             services.AddSingleton<IFileStorageService>(Storage);
+            services.RemoveAll<IRecipeImageOperationLock>();
+            services.AddSingleton<IRecipeImageOperationLock>(ImageOperationLock);
             services.RemoveAll<IImageCleanupQueue>();
             services.AddSingleton<IImageCleanupQueue>(ImageCleanup);
             services.RemoveAll<IImageProcessingQueue>();

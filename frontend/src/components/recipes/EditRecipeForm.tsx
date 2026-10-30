@@ -9,10 +9,11 @@ import type { Category } from "@/types/category";
 import { ApiError } from "@/services/api-client";
 import IngredientEditor from "./IngredientEditor";
 import RecipeStepManager from "./RecipeStepManager";
-import type { RecipeDetail, RecipeIngredient, RecipeStep } from "@/types/recipe";
+import type { RecipeDetail, RecipeImage, RecipeIngredient, RecipeStep } from "@/types/recipe";
 import { useSession } from "@/components/auth/useSession";
 import { canManageIngredients } from "@/services/ingredient-form";
 import { useRecipeMutation } from "./useRecipeMutation";
+import RecipeImageManager from "./RecipeImageManager";
 
 const labels: Record<RecipeField, string> = {
   title: "Tiêu đề", description: "Mô tả", categoryId: "Danh mục", prepTime: "Chuẩn bị (phút)",
@@ -28,6 +29,8 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
   const [recipeSteps, setRecipeSteps] = useState<RecipeStep[]>([]);
   const [rowVersion, setRowVersion] = useState("");
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([]);
+  const [recipeImages, setRecipeImages] = useState<RecipeImage[]>([]);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [message, setMessage] = useState("");
@@ -51,6 +54,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
       baseline.current = recipeValuesFromDetail(recipe);
       setAuthorId(recipe.author.id);
       setIngredients(recipe.ingredients);
+      setRecipeImages(recipe.images);
       setCategories(items);
       setLoadedSlug(slug);
       setRecipeSteps(recipe.steps);
@@ -71,6 +75,7 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
     snapshot.current = recipe;
     setRowVersion(recipe.rowVersion);
     setIngredients(recipe.ingredients);
+    setRecipeImages(recipe.images);
     setRecipeSteps(recipe.steps);
     setAuthorId(recipe.author.id);
     if (changed) {
@@ -157,6 +162,10 @@ export default function EditRecipeForm({ slug }: { slug: string }) {
       {message && <p role="alert" className="text-red-700">{message}</p>}
       {mutation.needsReload && <button type="button" disabled={pending} onClick={() => void reloadRecipeDraft()}
         className="rounded-lg border px-4 py-2">Tải dữ liệu mới (bỏ bản nháp công thức)</button>}
+      {canManageIngredients(session, authorId) && <RecipeImageManager recipeId={recipeId} images={recipeImages}
+        rowVersion={rowVersion} selectedFile={selectedImage} onSelectedFileChange={setSelectedImage}
+        onImagesChange={setRecipeImages} onRowVersionChange={setRowVersion}
+        mutation={mutation} onReload={reloadChildren} disabled={mutation.needsReload} />}
       <fieldset disabled={pending || !categories.length} className="space-y-5 disabled:opacity-60">
         {control("title")}{control("description", "textarea")}{control("categoryId", "select")}
         <div className="grid gap-4 sm:grid-cols-3">{control("prepTime", "number")}{control("cookTime", "number")}{control("servings", "number")}</div>

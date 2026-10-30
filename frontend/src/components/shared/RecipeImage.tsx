@@ -1,15 +1,17 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import CulinaryIllustration from "./CulinaryIllustration";
 
-export default function RecipeImage({ src, mediumSrc, thumbnailSrc, title, className = "" }: {
+export default function RecipeImage({ src, mediumSrc, thumbnailSrc, title, alt, className = "", style }: {
   src?: string | null;
   mediumSrc?: string | null;
   thumbnailSrc?: string | null;
   title: string;
   className?: string;
+  alt?: string | null;
+  style?: CSSProperties;
 }) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
   const [failedVariants, setFailedVariants] = useState<{ sourceKey: string; urls: string[] }>({ sourceKey: "", urls: [] });
@@ -27,13 +29,13 @@ export default function RecipeImage({ src, mediumSrc, thumbnailSrc, title, class
     catch { return candidate === currentSrc; }
   };
   return (
-    <div className={`cb-recipe-visual ${className}`.trim()}>
+    <div className={`cb-recipe-visual ${className}`.trim()} style={style}>
       {safeSource && failedSource !== safeSource ? (
         <picture>
           {safeThumbnailSource && !failedVariantUrls.includes(safeThumbnailSource) &&
             <source media="(max-width: 400px)" srcSet={safeThumbnailSource} />}
           {safeMediumSource && !failedVariantUrls.includes(safeMediumSource) && <source srcSet={safeMediumSource} />}
-          <Image src={safeSource} alt={title} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+          <Image src={safeSource} alt={alt ?? title} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             unoptimized onError={(event) => {
               const currentSrc = event.currentTarget.currentSrc;
               const failedVariant = [safeThumbnailSource, safeMediumSource]
