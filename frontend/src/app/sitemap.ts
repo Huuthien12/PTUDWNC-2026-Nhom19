@@ -1,11 +1,12 @@
 import type { MetadataRoute } from "next";
 import { getCategories } from "@/services/category-service";
 import { getRecipes } from "@/services/recipe-service";
+import { getSiteUrl } from "@/services/recipe-seo";
 
-const DEFAULT_SITE_URL = "http://localhost:3000";
+const PAGE_SIZE = 50;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? DEFAULT_SITE_URL).replace(/\/+$/, "");
+  const baseUrl = getSiteUrl();
   const entries: MetadataRoute.Sitemap = [
     { url: `${baseUrl}/`, changeFrequency: "daily", priority: 1 },
     { url: `${baseUrl}/recipes`, changeFrequency: "daily", priority: 0.9 },
@@ -26,14 +27,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   try {
-    const recipes = await getRecipes(1, 50, { sortBy: "createdAt", sortOrder: "desc" });
-    for (const recipe of recipes.items) {
-      entries.push({
-        url: `${baseUrl}/recipes/${encodeURIComponent(recipe.slug)}`,
-        ...(recipe.publishedAt ? { lastModified: new Date(recipe.publishedAt) } : {}),
-        changeFrequency: "weekly",
-        priority: 0.8,
-      });
+    const urls = new Set(entries.map((entry) => entry.url));
+    let page = 1;
+    let totalPages = 1;
+    while (page <= totalPages) {
+      const recipes = await getRecipes(page, PAGE_SIZE, { sortBy: "createdAt", sortOrder: "desc" });
+      const maxPages = Math.ceil(Math.max(0, recipes.totalCount) / Math.max(1, recipes.pageSize));
+      totalPages = Math.min(recipes.totalPages, maxPages);
+      if (recipes.page !== page) break;
+      for (const recipe of recipes.items) {
+        if (!recipe.publishedAt) continue;
+        const url = `${baseUrl}/recipes/${encodeURIComponent(recipe.slug)}`;
+        if (urls.has(url)) continue;
+        urls.add(url);
+        entries.push({ url, ...(recipe.publishedAt ? { lastModified: new Date(recipe.publishedAt) } : {}), changeFrequency: "weekly", priority: 0.8 });
+      }
+      page++;
     }
   } catch {
     // Keep static/category sitemap entries if recipe API is temporarily unavailable.

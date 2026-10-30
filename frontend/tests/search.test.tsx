@@ -6,13 +6,14 @@ import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared
 import Home from "../src/app/page";
 import Loading from "../src/app/loading";
 import sitemap from "../src/app/sitemap";
+import RecipeDetailPage, { generateMetadata } from "../src/app/recipes/[slug]/page";
 import RecipesPage from "../src/app/recipes/page";
 import RecipeListClient from "../src/components/recipes/RecipeListClient";
 import SearchPagination from "../src/components/search/SearchPagination";
 import RecipePagination from "../src/components/recipes/RecipePagination";
 import RecipeImage from "../src/components/shared/RecipeImage";
 import ContentState from "../src/components/shared/ContentState";
-import { buildRecipeJsonLd, buildRecipeMetadata } from "../src/services/recipe-seo";
+import { buildRecipeJsonLd, buildRecipeMetadata, serializeJsonLd } from "../src/services/recipe-seo";
 import { searchRecipes } from "../src/services/search-service";
 import { clearRecipeRequests } from "../src/services/recipe-requests";
 import type { RecipeSearchPage } from "../src/types/search";
@@ -485,5 +486,69 @@ test("recipe SEO helpers build Open Graph metadata and Schema.org Recipe JSON-LD
   assert.equal(jsonLd.cookTime, "PT120M");
   assert.equal(jsonLd.totalTime, "PT150M");
   assert.deepEqual(jsonLd.recipeIngredient, ["500 g Bánh phở"]);
+});
+
+function sitemapRecipe(index: number, publishedAt = "2026-10-20T00:00:00Z") {
+  return { id: `r${index}`, slug: `recipe-${index}`, title: `Recipe ${index}`, description: "Published", prepTime: 10, cookTime: 20, servings: 2, difficulty: 1, thumbnailUrl: null, publishedAt };
+}
+
+async function sitemapFor(pages: Record<number, { items: ReturnType<typeof sitemapRecipe>[]; totalCount: number; page: number; pageSize: number; totalPages: number }>) {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/categories")) return Response.json([]);
+    const page = Number(new URL(String(url)).searchParams.get("page"));
+    return Response.json(pages[page]);
+  };
+  return sitemap();
+}
+
+test("sitemap handles zero, fewer than 50, and exactly 50 published recipes", async () => {
+  for (const count of [0, 3, 50]) {
+    const entries = await sitemapFor({
+      1: { items: Array.from({ length: count }, (_, index) => sitemapRecipe(index + 1)), totalCount: count, page: 1, pageSize: 50, totalPages: count ? 1 : 0 },
+    });
+    assert.equal(entries.filter((entry) => entry.url.includes("/recipes/")).length, count);
+  }
+});
+
+test("sitemap includes every later page once and excludes private recipes", async () => {
+  const requested: number[] = [];
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/categories")) return Response.json([]);
+    const page = Number(new URL(String(url)).searchParams.get("page"));
+    requested.push(page);
+    if (page === 1) return Response.json({ items: Array.from({ length: 50 }, (_, index) => sitemapRecipe(index + 1)), totalCount: 101, page, pageSize: 50, totalPages: 3 });
+    if (page === 2) return Response.json({ items: [...Array.from({ length: 50 }, (_, index) => sitemapRecipe(index + 51)), sitemapRecipe(1)], totalCount: 101, page, pageSize: 50, totalPages: 3 });
+    return Response.json({ items: [sitemapRecipe(101), sitemapRecipe(102, null as unknown as string)], totalCount: 101, page, pageSize: 50, totalPages: 3 });
+  };
+
+  const entries = await sitemap();
+  const recipeUrls = entries.filter((entry) => entry.url.includes("/recipes/")).map((entry) => entry.url);
+  assert.deepEqual(requested, [1, 2, 3]);
+  assert.equal(recipeUrls.length, 101);
+  assert.equal(new Set(recipeUrls).size, 101);
+  assert.ok(!recipeUrls.some((url) => url.endsWith("/recipe-102")));
+});
+
+test("recipe detail route emits public metadata and escaped JSON-LD only for a published recipe", async () => {
+  const recipe = {
+    id: "r1", slug: "pho-bo", title: "Phở </script><script>alert(1)</script>", description: "Nước dùng", instructions: "Ninh xương",
+    prepTime: 30, cookTime: 120, servings: 4, difficulty: 2, status: 2, rowVersion: "AQ==", createdAt: "2026-10-01T00:00:00Z", publishedAt: "2026-10-02T00:00:00Z",
+    author: { id: "a1", fullName: "Tác giả", avatarUrl: null }, category: { id: "c1", name: "Món nước", slug: "mon-nuoc" }, nutrition: null,
+    ingredients: [], steps: [], images: [],
+  };
+  globalThis.fetch = async () => Response.json(recipe);
+  const metadata = await generateMetadata({ params: Promise.resolve({ slug: recipe.slug }) });
+  assert.equal(metadata.alternates?.canonical, "http://localhost:3000/recipes/pho-bo");
+  const page = await RecipeDetailPage({ params: Promise.resolve({ slug: recipe.slug }) });
+  const [script, client] = page.props.children;
+  assert.equal(script.type, "script");
+  assert.equal(client.props.slug, recipe.slug);
+  assert.ok(!script.props.dangerouslySetInnerHTML.__html.includes("</script>"));
+  assert.match(script.props.dangerouslySetInnerHTML.__html, /\\u003c\/script>/);
+
+  globalThis.fetch = async () => new Response(null, { status: 404 });
+  const hidden = await generateMetadata({ params: Promise.resolve({ slug: "draft" }) });
+  assert.deepEqual(hidden.robots, { index: false, follow: false });
+  assert.equal(serializeJsonLd({ value: "<script>" }), '{"value":"\\u003cscript>"}');
 });
 

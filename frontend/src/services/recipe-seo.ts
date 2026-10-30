@@ -3,8 +3,16 @@ import type { RecipeDetail } from "@/types/recipe";
 
 const DEFAULT_SITE_URL = "http://localhost:3000";
 
-export function buildRecipeMetadata(recipe: RecipeDetail, siteUrl = DEFAULT_SITE_URL): Metadata {
-  const baseUrl = siteUrl.replace(/\/+$/, "");
+export function getSiteUrl(siteUrl = process.env.NEXT_PUBLIC_SITE_URL): string {
+  return (siteUrl || DEFAULT_SITE_URL).replace(/\/+$/, "");
+}
+
+export function serializeJsonLd(value: Record<string, unknown>): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+export function buildRecipeMetadata(recipe: RecipeDetail, siteUrl = getSiteUrl()): Metadata {
+  const baseUrl = getSiteUrl(siteUrl);
   const canonicalUrl = `${baseUrl}/recipes/${encodeURIComponent(recipe.slug)}`;
   const primaryImage = recipe.images.find((item) => item.isPrimary) ?? recipe.images[0];
   const imageUrl = primaryImage?.mediumUrl ?? primaryImage?.originalUrl ?? undefined;
@@ -26,8 +34,8 @@ export function buildRecipeMetadata(recipe: RecipeDetail, siteUrl = DEFAULT_SITE
   };
 }
 
-export function buildRecipeJsonLd(recipe: RecipeDetail, siteUrl = DEFAULT_SITE_URL): Record<string, unknown> {
-  const baseUrl = siteUrl.replace(/\/+$/, "");
+export function buildRecipeJsonLd(recipe: RecipeDetail, siteUrl = getSiteUrl()): Record<string, unknown> {
+  const baseUrl = getSiteUrl(siteUrl);
   const primaryImage = recipe.images.find((item) => item.isPrimary) ?? recipe.images[0];
   const imageUrl = primaryImage?.originalUrl ?? primaryImage?.mediumUrl ?? null;
 
