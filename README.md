@@ -311,6 +311,8 @@ Xây dựng nền tảng chung để cả nhóm có thể bắt đầu phát tri
 **Frontend**
 - Khởi tạo Next.js App Router.
 - Thiết lập TypeScript và cấu trúc thư mục frontend.
+- Rà soát UI library hiện có trước khi chọn shadcn/ui hoặc bộ tương đương; thống nhất theme, design tokens, typography và accessibility cơ bản.
+- Chuẩn hóa Button, Input, Label, FormField, Dialog, Toast/Alert và các trạng thái validation, loading, disabled, error/success để tái sử dụng.
 
 ### Member 2 – Nguyễn Quốc Thái
 
@@ -327,6 +329,8 @@ Xây dựng nền tảng chung để cả nhóm có thể bắt đầu phát tri
 **Frontend**
 - Tạo Global Layout.
 - Tạo Header / Navigation cơ bản.
+- Hoàn thiện điều hướng mobile và menu theo trạng thái xác thực; thống nhất contract auth state với Thiện.
+- Thiết kế layout responsive với grid, sidebar slot và breadcrumbs nếu cần; phối hợp tích hợp app/layout.tsx để tránh sửa chồng.
 
 ### Member 3 – Nguyễn Khiêm Thuận
 
@@ -343,6 +347,7 @@ Xây dựng nền tảng chung để cả nhóm có thể bắt đầu phát tri
 **Frontend**
 - Tạo Footer.
 - Tạo cấu trúc component dùng chung.
+- Xây Category Sidebar/Card/List, Search Bar mock, Pagination và các component loading skeleton, empty/error, not-found dùng chung với props nhất quán.
 
 ### Member 4 – Lương Hữu Thiện
 
@@ -363,6 +368,10 @@ Xây dựng nền tảng chung để cả nhóm có thể bắt đầu phát tri
 **Frontend**
 - Tạo API client/service cơ bản.
 - Thiết lập biến môi trường frontend.
+- Chuẩn hóa API client/fetch wrapper: auth header, abort/timeout, lỗi mạng và RFC 7807 ProblemDetails cho HTTP 400/401/403/404/409/422/423/429.
+- Chuẩn hóa auth store, selectors/actions, refresh/logout; phân biệt client auth state với TanStack Query server cache và bảo vệ refresh token.
+- Đối chiếu TypeScript types Auth, Profile, Category, Recipe, Ingredient, Step, Image, PaginatedResult và ApiProblem với backend contract.
+- Tích hợp providers và global styles sau khi nhận UI kit/layout; tránh trùng component và kiểm tra import, typecheck, build.
 
 ### Cả nhóm
 - Review ERD.
@@ -385,11 +394,14 @@ Project Backend + Frontend chạy được, PostgreSQL kết nối thành công 
 - FR-AUTH-001: Register.
 - Validation đăng ký.
 - Gán role Author mặc định.
+- Phối hợp chốt endpoint, DTO và chính sách change/forgot/reset password; reset token một lần, có TTL, giới hạn lạm dụng và phản hồi chống dò email.
 
 **Frontend**
 - Trang Register.
 - Form validation.
 - Tích hợp API Register.
+- Thiết kế các trang /login, /forgot-password, /reset-password và /change-password cùng /register; hỗ trợ trạng thái disabled/loading/error/success, hiện/ẩn mật khẩu, bàn phím và responsive.
+- Tích hợp Register/Login/Logout/Change Password/Forgot Password/Reset Password với API thật; xử lý validation, session và HTTP 401/403/423.
 
 ### Member 2 – Nguyễn Quốc Thái
 
@@ -422,11 +434,14 @@ Project Backend + Frontend chạy được, PostgreSQL kết nối thành công 
 - Xem danh mục.
 - Xem chi tiết danh mục.
 - Admin Create / Update / Delete Category.
+- Rà soát phân quyền owner/Admin và lỗi 409 cho thao tác quản lý Category.
 
 **Frontend**
 - Trang danh sách Category.
 - Component Category.
 - UI quản lý Category cho Admin.
+- Đồng bộ auth store/session lifecycle, refresh rotation/reuse, logout/revocation và route protection; không log token hoặc lưu refresh token thiếu an toàn.
+- Kết nối UI Category Admin CRUD với API thật, validation, quyền và hiển thị lỗi khi trùng dữ liệu.
 
 ### Cả nhóm
 - Seed Roles: Admin, Author.
@@ -465,6 +480,8 @@ Người dùng có thể đăng ký, đăng nhập, refresh token, logout và h�
 - Hiển thị nguyên liệu.
 - Hiển thị các bước nấu.
 - Hiển thị thông tin dinh dưỡng.
+- Hoàn thiện Recipe Card/List/Grid và Recipe Detail skeleton, loading/empty/no-image states; bảo đảm accessibility và responsive.
+- Tích hợp Recipe Detail với API thật: hiển thị Ingredients, Steps, Images, Nutrition, Category, Author; xử lý Published/Draft/Deleted theo quyền, 404, lỗi tải và ảnh placeholder.
 
 ### Member 3 – Nguyễn Khiêm Thuận
 
@@ -485,6 +502,7 @@ Người dùng có thể đăng ký, đăng nhập, refresh token, logout và h�
 - FR-RCP-006: Archive.
 - FR-RCP-007: Delete.
 - Resource-Based Authorization.
+- Áp dụng điều kiện Publish khi có ít nhất một Ingredient và một Step hợp lệ; xác minh quyền Author-owner/Admin, Soft Delete bằng IsDeleted và RowVersion Base64 (stale update trả HTTP 422).
 
 **Frontend**
 - Author Recipe Dashboard.
@@ -494,6 +512,8 @@ Người dùng có thể đăng ký, đăng nhập, refresh token, logout và h�
   - Unpublish
   - Archive
   - Delete
+- Chuẩn bị giao diện Profile, Author Dashboard, Admin User List và error/unauthorized, tái sử dụng Profile UI có sẵn.
+- Hoàn thiện Author Dashboard với xác nhận thao tác, toast và refresh danh sách sau Draft/Publish/Unpublish/Archive/Soft Delete.
 
 ### Cả nhóm
 - Kiểm tra Recipe Aggregate.
@@ -517,15 +537,19 @@ Hoàn thành luồng CRUD và vòng đời chính của Recipe.
 **Frontend**
 - Component thêm/xóa/sửa nguyên liệu.
 - Sắp xếp nguyên liệu.
+- Rà soát Ingredient Editor đã có trước khi tích hợp; kết nối CRUD/reorder vào Recipe Create/Edit, đồng bộ validation và RowVersion, kiểm thử thêm/sửa/xóa/sắp xếp.
 
 ### Member 2 – Nguyễn Quốc Thái
 
 **Backend**
 - FR-RCP-010: CRUD RecipeStep.
+- Kiểm tra Step CRUD/reorder và thứ tự Step, RowVersion Base64, stale update HTTP 422 và quyền Author-owner/Admin.
 
 **Frontend**
 - Component quản lý các bước nấu.
 - Thêm/xóa/sắp xếp Step.
+- Hoàn thiện Recipe Create/Edit với React Hook Form, Zod và API thật: nutrition, category, Ingredient/Step editor; không làm mất dữ liệu form khi API lỗi.
+- Phối hợp Thuận gắn upload ảnh vào Recipe Form; kiểm thử chuỗi create → edit → add Ingredient/Step/Image.
 
 ### Member 3 – Nguyễn Khiêm Thuận
 
@@ -533,11 +557,13 @@ Hoàn thành luồng CRUD và vòng đời chính của Recipe.
 - FR-RCP-008: Upload RecipeImage.
 - Set Primary Image.
 - Delete Image.
+- Kiểm tra quyền upload/set primary/delete và validation file ở backend theo MIME/magic bytes, dung lượng, quyền truy cập.
 
 **Frontend**
 - Component Upload ảnh.
 - Preview ảnh.
 - Chọn ảnh Primary.
+- Hoàn thiện upload/preview/progress/loading/retry/error và chọn ảnh chính/xóa ảnh; validate trước upload tối đa 5 MiB, JPEG/PNG/WebP/AVIF, xử lý file sai.
 
 ### Member 4 – Lương Hữu Thiện
 
@@ -553,6 +579,8 @@ Hoàn thành luồng CRUD và vòng đời chính của Recipe.
   - MIME type.
   - Magic bytes.
 - Chuẩn bị xử lý resize ảnh.
+- Giới hạn kích thước multipart request trước khi đọc form (5 MiB file và phần envelope cho phép); từ chối file không hợp lệ trước storage, không tạo image DB ngoài ý muốn.
+- Kiểm thử authorization, RowVersion, MIME/magic bytes và quyền truy cập file với MinIO.
 
 **Frontend**
 - Validate file trước upload.
@@ -598,6 +626,7 @@ Có thể tạo một công thức hoàn chỉnh gồm thông tin, dinh dưỡng
 - Difficulty.
 - Cook Time.
 - Sorting.
+- Thống nhất RecipeCard và DTO pagination/filter/sort với Thuận; dùng next/image, placeholder và xử lý ảnh lỗi trên mobile.
 
 ### Member 3 – Nguyễn Khiêm Thuận
 
@@ -606,11 +635,14 @@ Có thể tạo một công thức hoàn chỉnh gồm thông tin, dinh dưỡng
 - Output Cache Recipe List TTL 2 phút.
 - Cache Recipe Detail.
 - Cache invalidation khi Recipe/Category thay đổi.
+- Kiểm chứng Category Redis cache TTL 30 phút, Recipe List output cache 2 phút, Recipe Detail cache và invalidation khi Recipe/Category thay đổi; không cache lộ công thức riêng tư.
 
 **Frontend**
 - Next.js cache/revalidation.
 - Loading / Empty State.
 - Tối ưu request dữ liệu.
+- Hoàn thiện Homepage, Search Results, Category List/Detail và filter/sort panel, đồng bộ URL state, loading/empty/error và responsive.
+- Kết nối Homepage/Search/Category với API thật; chỉ hiện Published Recipe, tìm kiếm tiếng Việt có/không dấu, debounce, sortBy/sortOrder, filter, offset pagination và Category 404.
 
 Tài liệu triển khai và kiểm chứng Member 3: [Buổi 5 — Recipe cache](doc/lab5_cache_member3.md).
 
@@ -621,11 +653,14 @@ Tài liệu triển khai và kiểm chứng Member 3: [Buổi 5 — Recipe cache
 - FR-AUTH-006: View Profile.
 - FR-AUTH-007: Update Profile.
 - Backend verification Google credential/code.
+- Kiểm chứng Profile GET/PATCH, 401/403 và Google OAuth credential/code được xác minh ở backend; không tin ID token chưa verify.
 
 **Frontend**
 - Login with Google.
 - Trang Profile.
 - Form Update Profile.
+- Tích hợp Profile View/Update với React Hook Form, Zod, TanStack Query; validation và reload phải giữ dữ liệu.
+- Hoàn thiện Google Login callback, error handling và liên kết trạng thái đăng nhập frontend với backend.
 
 ### Cả nhóm
 - Test Search tiếng Việt.
@@ -647,10 +682,13 @@ Search, Filter, Sort, Cache, Google Login và Profile hoạt động.
 - Welcome Email Background Job.
 - Hangfire retry.
 - Email provider configuration.
+- Kiểm thử welcome email qua Mailhog/Hangfire: retry khi lỗi, idempotency, tránh gửi trùng và cấu hình secrets ngoài Git.
+- Chốt API và quyền Admin User List: chỉ Admin, DTO whitelist không lộ dữ liệu nhạy cảm, phân trang/tìm kiếm, 401/403; Author list chỉ triển khai khi đã thống nhất dữ liệu được phép hiển thị.
 
 **Frontend**
 - Hoàn thiện UI Auth.
 - Error/Success notification.
+- Triển khai Admin User List theo API/role contract, có tìm kiếm, phân trang và trạng thái loading/empty/error.
 
 ### Member 2 – Nguyễn Quốc Thái
 
@@ -660,6 +698,7 @@ Search, Filter, Sort, Cache, Google Login và Profile hoạt động.
   - Medium 800×600.
   - Thumbnail 300×300.
 - Cleanup orphan files.
+- Kiểm thử xử lý ảnh qua Hangfire: resize/error/retry, cleanup orphan an toàn và không xóa MinIO object vẫn được tham chiếu.
 
 **Frontend**
 - Tối ưu hiển thị ảnh.
@@ -675,6 +714,8 @@ Search, Filter, Sort, Cache, Google Login và Profile hoạt động.
 - Metadata.
 - ISR / Revalidation.
 - Tối ưu SEO và Core Web Vitals.
+- Đồng bộ Redis/Next.js cache invalidation và ISR/revalidation khi Recipe/Category thay đổi; không công khai nội dung Draft/Archived/Deleted.
+- Chỉ phát hành sitemap, canonical, Open Graph và Schema.org Recipe JSON-LD cho công thức Published; sitemap phải phân trang đầy đủ và không trùng URL.
 
 ### Member 4 – Lương Hữu Thiện
 
@@ -688,6 +729,9 @@ Search, Filter, Sort, Cache, Google Login và Profile hoạt động.
 - OpenTelemetry.
 - Dockerfile Backend.
 - Dockerfile Frontend.
+- Bảo đảm Serilog/CorrelationId không ghi password, JWT/token hoặc PII nhạy cảm; chuẩn hóa error mapping và ProblemDetails.
+- Theo dõi OpenTelemetry traces/metrics qua OTLP Collector và kiểm tra health PostgreSQL/Redis/MinIO.
+- Tích hợp/kiểm chứng Compose full-stack và Nginx reverse proxy: /api/ đến API, / đến Next.js; giới hạn upload và trusted forwarded headers, không tin forwarded headers từ client trực tiếp.
 
 ### Cả nhóm
 - Hoàn thiện `docker-compose.yml`.
@@ -719,6 +763,8 @@ Hệ thống Full-Stack chạy bằng Docker, có background jobs, monitoring, h
   - Logout.
   - Profile.
 - Kiểm tra JWT / Authorization.
+- Unit/component tests Auth UI và ảnh chụp desktop/mobile; regression Register → Login → Logout, Forgot → email → Reset → Login, Change Password làm mật khẩu cũ hết hiệu lực.
+- Kiểm thử lockout sau 5 lần sai (HTTP 423), Auth/Profile/Admin User List 401/403, phân quyền và DTO không lộ dữ liệu nhạy cảm; ghi screenshot/video minh chứng.
 
 **Frontend**
 - Fix UI Auth/Profile.
@@ -732,6 +778,8 @@ Hệ thống Full-Stack chạy bằng Docker, có background jobs, monitoring, h
 - Step.
 - Publish / Archive / Delete.
 - Optimistic Concurrency.
+- Kiểm thử Recipe Detail Guest/Author/Admin và điều hướng từ Home/Search; create → edit → Ingredient/Step/Image, stale RowVersion 422, quyền và API failure.
+- Kiểm tra component Recipe/loading/empty/no-image desktop/mobile, accessibility và screenshots.
 
 **Frontend**
 - Fix Recipe Form.
@@ -747,6 +795,8 @@ Hệ thống Full-Stack chạy bằng Docker, có background jobs, monitoring, h
 - Redis Cache.
 - Cache Invalidation.
 - SEO.
+- Regression tìm kiếm tiếng Việt có/không dấu, query invalid, filter+sort+pagination, Category, stale cache và SEO; lưu minh chứng sitemap/metadata/JSON-LD.
+- Kiểm tra accessibility/responsive và screenshot Homepage, Category List, Search/Filter.
 
 **Frontend**
 - Fix Homepage.
@@ -762,11 +812,15 @@ Hệ thống Full-Stack chạy bằng Docker, có background jobs, monitoring, h
 - Health Checks.
 - Logging.
 - Docker Compose.
+- Review API password/error/rate-limit contract cùng Uyên; smoke tích hợp Auth/Profile/Home/Detail/Search và kiểm thử quyền theo vai trò.
+- Kiểm chứng API bằng Postman/Scalar, Docker/MinIO/OTLP, browser desktop/mobile, Author/Admin/Guest, và clean-clone khi có môi trường phù hợp; ghi rõ các bước chưa chạy.
 
 **Frontend / DevOps**
 - Fix Recipe Detail.
 - Error Pages.
 - Kiểm tra môi trường Docker.
+- Duy trì docs/lab6/ui-inventory.md về route/component owner và checklist demo.
+- Hoàn thiện GitHub Actions CI (.NET 10, Node 24), .env.example, seed/demo data, release checklist và tài liệu chạy/bàn giao.
 
 ### Cả nhóm
 - Integration Test Frontend ↔ Backend.
