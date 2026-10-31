@@ -4,6 +4,7 @@ import { getRecipes } from "@/services/recipe-service";
 import { getSiteUrl } from "@/services/recipe-seo";
 
 const PAGE_SIZE = 50;
+export const revalidate = 120;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = getSiteUrl();
