@@ -3,6 +3,8 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Security.Cryptography;
+using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Application.Recipes.DTOs;
 using CulinaryBlog.Application.Recipes.Images;
 using CulinaryBlog.Domain.Entities;
@@ -27,6 +29,12 @@ public sealed class RecipeImageApiTests
 
     private static string ObjectUrl(Guid recipeId, int n) =>
         $"https://storage.test/culinary-blog/recipes/{recipeId:D}/{n:D32}.png";
+
+    private static string UploadObjectKey(Guid recipeId, Guid uploadId, byte[] bytes)
+    {
+        var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        return $"recipes/{recipeId:D}/{uploadId:N}-{hash}.png";
+    }
 
     private static string Rv(Recipe recipe) => Convert.ToBase64String(recipe.RowVersion);
 
@@ -67,9 +75,12 @@ public sealed class RecipeImageApiTests
     }
 
     private static HttpRequestMessage UploadRequest(Guid recipeId, byte[]? bytes, string contentType,
-        string? rowVersion, string? ifMatch = null, string? altText = null)
+        string? rowVersion, string? ifMatch = null, string? altText = null,
+        Guid? uploadId = null, bool includeUploadId = true)
     {
         var form = new MultipartFormDataContent();
+        if (includeUploadId)
+            form.Add(new StringContent((uploadId ?? Guid.NewGuid()).ToString()), "uploadId");
         if (bytes is not null)
         {
             var file = new ByteArrayContent(bytes);
@@ -300,6 +311,113 @@ public sealed class RecipeImageApiTests
         await Assert.ThrowsAsync<AggregateException>(() => job.RunAsync());
         Assert.Equal($"recipes/{recipe.Id:D}/orphan.jpg", Assert.Single(factory.Storage.DeletedKeys));
         Assert.Empty(factory.ImageProcessing.Jobs);
+    }
+
+    [Fact]
+    public async Task Orphan_cleanup_waits_for_upload_commit_and_rechecks_references_under_the_shared_lock()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, _) = await SeedAsync(factory);
+        using var client = factory.Client();
+        var uploadId = Guid.NewGuid();
+        var objectKey = UploadObjectKey(recipe.Id, uploadId, Png);
+        factory.Storage.Objects.Add(new StoredImageObject(objectKey, DateTime.UtcNow.AddDays(-2)));
+        var storeReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowStore = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cleanupContended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        factory.Storage.BeforeStore = async cancellationToken =>
+        {
+            storeReached.TrySetResult();
+            await allowStore.Task.WaitAsync(cancellationToken);
+        };
+        factory.ImageOperationLock.Contended = id =>
+        {
+            if (id == recipe.Id) cleanupContended.TrySetResult();
+        };
+
+        var uploadTask = client.SendAsync(UploadRequest(
+            recipe.Id, Png, "image/png", Rv(recipe), uploadId: uploadId));
+        await storeReached.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        using var scope = factory.Services.CreateScope();
+        var cleanup = ActivatorUtilities.CreateInstance<OrphanImageCleanupJob>(scope.ServiceProvider);
+        var cleanupTask = cleanup.RunAsync();
+        await cleanupContended.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        allowStore.TrySetResult();
+        var uploadResponse = await uploadTask.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(HttpStatusCode.Created, uploadResponse.StatusCode);
+        await cleanupTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var image = Assert.Single(await LoadImagesAsync(factory));
+        Assert.Equal(objectKey, RecipeImageStorageKey.ForImage(recipe.Id, image).First());
+        Assert.Contains(factory.Storage.Objects, item => item.ObjectKey == objectKey);
+        Assert.DoesNotContain(objectKey, factory.Storage.DeletedKeys);
+    }
+
+    [Fact]
+    public async Task Cleanup_retries_when_delete_result_cannot_be_verified()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, _) = await SeedAsync(factory);
+        var objectKey = $"recipes/{recipe.Id:D}/uncertain-delete.png";
+        factory.Storage.Objects.Add(new StoredImageObject(objectKey, DateTime.UtcNow.AddDays(-2)));
+        factory.Storage.DeleteVerificationFailures.Add(objectKey);
+        using var scope = factory.Services.CreateScope();
+        var job = ActivatorUtilities.CreateInstance<OrphanImageCleanupJob>(scope.ServiceProvider);
+
+        await Assert.ThrowsAsync<AggregateException>(() => job.RunAsync());
+        Assert.DoesNotContain(factory.Storage.Objects, item => item.ObjectKey == objectKey);
+
+        factory.Storage.DeleteVerificationFailures.Remove(objectKey);
+        var objectCleanup = scope.ServiceProvider.GetRequiredService<IRecipeImageObjectCleanup>();
+        Assert.True(await objectCleanup.DeleteIfUnreferencedAsync(objectKey));
+    }
+
+    [Fact]
+    public async Task Cancelled_upload_releases_the_recipe_operation_lock_without_storing()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, _) = await SeedAsync(factory);
+        using var client = factory.Client();
+        using var cancellation = new CancellationTokenSource();
+        var storeReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        factory.Storage.BeforeStore = async cancellationToken =>
+        {
+            storeReached.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        };
+
+        var upload = client.SendAsync(
+            UploadRequest(recipe.Id, Png, "image/png", Rv(recipe)),
+            cancellation.Token);
+        await storeReached.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => upload);
+
+        using var reacquireTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        await using var reacquired = await factory.ImageOperationLock.AcquireAsync(
+            recipe.Id,
+            reacquireTimeout.Token);
+        Assert.Empty(factory.Storage.StoreCalls);
+        Assert.Empty(await LoadImagesAsync(factory));
+    }
+
+    [Fact]
+    public async Task Cleanup_accepts_a_lost_delete_response_only_after_fake_storage_confirms_absence()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, _) = await SeedAsync(factory);
+        var objectKey = $"recipes/{recipe.Id:D}/lost-delete-response.png";
+        factory.Storage.Objects.Add(new StoredImageObject(objectKey, DateTime.UtcNow.AddDays(-2)));
+        factory.Storage.DeleteFailuresAfterEffect.Add(objectKey);
+        using var scope = factory.Services.CreateScope();
+        var job = ActivatorUtilities.CreateInstance<OrphanImageCleanupJob>(scope.ServiceProvider);
+
+        await job.RunAsync();
+
+        Assert.DoesNotContain(factory.Storage.Objects, item => item.ObjectKey == objectKey);
+        Assert.Contains(objectKey, factory.Storage.DeletedKeys);
     }
 
     [Fact]
@@ -543,7 +661,7 @@ public sealed class RecipeImageApiTests
     }
 
     [Fact]
-    public async Task Upload_losing_a_commit_race_is_422_and_the_orphan_object_is_queued_for_cleanup()
+    public async Task Upload_losing_a_commit_race_is_422_and_the_grace_sweep_cleans_the_orphan()
     {
         await using var factory = new RecipeApiFactory();
         var (recipe, _) = await SeedAsync(factory);
@@ -560,7 +678,13 @@ public sealed class RecipeImageApiTests
         await AssertProblem(await client.SendAsync(UploadRequest(recipe.Id, Png, "image/png", Rv(recipe))), 422, "RECIPE_CONCURRENCY_CONFLICT");
 
         Assert.Empty(await LoadImagesAsync(factory));
-        Assert.Equal(Assert.Single(factory.Storage.StoreCalls).ObjectKey, Assert.Single(factory.ImageCleanup.Keys));
+        Assert.Empty(factory.ImageCleanup.Keys);
+        var storedObject = Assert.Single(factory.Storage.Objects);
+        factory.Storage.Objects[0] = storedObject with { LastModifiedUtc = DateTime.UtcNow.AddDays(-2) };
+        using var scope = factory.Services.CreateScope();
+        var cleanup = ActivatorUtilities.CreateInstance<OrphanImageCleanupJob>(scope.ServiceProvider);
+        await cleanup.RunAsync();
+        Assert.Equal(storedObject.ObjectKey, Assert.Single(factory.Storage.DeletedKeys));
     }
 
     [Fact]
@@ -574,6 +698,157 @@ public sealed class RecipeImageApiTests
         await AssertProblem(await client.SendAsync(UploadRequest(recipe.Id, Png, "image/png", Rv(recipe))), 503, "MINIO_UNAVAILABLE");
         Assert.Empty(await LoadImagesAsync(factory));
         Assert.Empty(factory.ImageCleanup.Keys);
+    }
+
+    [Fact]
+    public async Task Upload_requires_a_retry_stable_upload_id_before_storage()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, _) = await SeedAsync(factory);
+        using var client = factory.Client();
+
+        await AssertProblem(
+            await client.SendAsync(UploadRequest(
+                recipe.Id, Png, "image/png", Rv(recipe), includeUploadId: false)),
+            400,
+            "VALIDATION_ERROR");
+
+        Assert.Empty(factory.Storage.StoreCalls);
+        Assert.Empty(await LoadImagesAsync(factory));
+    }
+
+    [Fact]
+    public async Task Upload_retry_after_storage_write_error_reuses_image_id_without_duplicate_rows()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, _) = await SeedAsync(factory);
+        using var client = factory.Client();
+        var uploadId = Guid.NewGuid();
+        var failAfterStore = true;
+        factory.Storage.AfterStore = () =>
+        {
+            if (!failAfterStore) return Task.CompletedTask;
+            failAfterStore = false;
+            throw new ServiceUnavailableException("MINIO_UNAVAILABLE", "Image storage is unavailable.");
+        };
+
+        await AssertProblem(
+            await client.SendAsync(UploadRequest(recipe.Id, Png, "image/png", Rv(recipe), uploadId: uploadId)),
+            503,
+            "MINIO_UNAVAILABLE");
+        Assert.Empty(await LoadImagesAsync(factory));
+
+        var retry = await client.SendAsync(UploadRequest(
+            recipe.Id, Png, "image/png", Rv(recipe), uploadId: uploadId));
+
+        Assert.Equal(HttpStatusCode.Created, retry.StatusCode);
+        var result = (await retry.Content.ReadFromJsonAsync<RecipeImageDto>())!;
+        Assert.Equal(uploadId, result.ImageId);
+        Assert.Equal(2, factory.Storage.StoreCalls.Count);
+        Assert.Equal(factory.Storage.StoreCalls[0].ObjectKey, factory.Storage.StoreCalls[1].ObjectKey);
+        Assert.Single(await LoadImagesAsync(factory));
+        var storedObject = Assert.Single(factory.Storage.Objects);
+        factory.Storage.Objects[0] = storedObject with { LastModifiedUtc = DateTime.UtcNow.AddDays(-2) };
+        using var scope = factory.Services.CreateScope();
+        var cleanup = ActivatorUtilities.CreateInstance<OrphanImageCleanupJob>(scope.ServiceProvider);
+        await cleanup.RunAsync();
+        Assert.Empty(factory.Storage.DeletedKeys);
+    }
+
+    [Fact]
+    public async Task Upload_replay_after_commit_returns_existing_image_without_storing_again()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, _) = await SeedAsync(factory);
+        using var client = factory.Client();
+        var uploadId = Guid.NewGuid();
+
+        var firstResponse = await client.SendAsync(UploadRequest(
+            recipe.Id, Png, "image/png", Rv(recipe), uploadId: uploadId));
+        Assert.Equal(HttpStatusCode.Created, firstResponse.StatusCode);
+        var first = (await firstResponse.Content.ReadFromJsonAsync<RecipeImageDto>())!;
+
+        var replay = await client.SendAsync(UploadRequest(
+            recipe.Id, Png, "image/png", Rv(recipe), uploadId: uploadId));
+
+        Assert.Equal(HttpStatusCode.Created, replay.StatusCode);
+        var replayed = (await replay.Content.ReadFromJsonAsync<RecipeImageDto>())!;
+        Assert.Equal(first.ImageId, replayed.ImageId);
+        Assert.Equal(first.OriginalUrl, replayed.OriginalUrl);
+        Assert.Equal(first.RowVersion, replayed.RowVersion);
+        Assert.Single(factory.Storage.StoreCalls);
+        Assert.Single(await LoadImagesAsync(factory));
+    }
+
+    [Fact]
+    public async Task Upload_reusing_upload_id_with_different_content_or_alt_text_is_conflict_without_mutation()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, _) = await SeedAsync(factory);
+        using var client = factory.Client();
+        var uploadId = Guid.NewGuid();
+
+        var firstResponse = await client.SendAsync(UploadRequest(
+            recipe.Id, Png, "image/png", Rv(recipe), uploadId: uploadId, altText: "Original"));
+        Assert.Equal(HttpStatusCode.Created, firstResponse.StatusCode);
+        var first = (await firstResponse.Content.ReadFromJsonAsync<RecipeImageDto>())!;
+        var originalObject = Assert.Single(factory.Storage.Objects);
+
+        await AssertProblem(
+            await client.SendAsync(UploadRequest(
+                recipe.Id, Jpeg, "image/jpeg", first.RowVersion, uploadId: uploadId, altText: "Original")),
+            409,
+            "UPLOAD_ID_CONFLICT");
+        await AssertProblem(
+            await client.SendAsync(UploadRequest(
+                recipe.Id, Png, "image/png", first.RowVersion, uploadId: uploadId, altText: "Changed")),
+            409,
+            "UPLOAD_ID_CONFLICT");
+
+        var persisted = Assert.Single(await LoadImagesAsync(factory));
+        Assert.Equal(first.OriginalUrl, persisted.OriginalUrl);
+        Assert.Equal("Original", persisted.AltText);
+        Assert.Equal(first.RowVersion, await CurrentRowVersionAsync(factory, recipe.Id));
+        Assert.Equal(originalObject, Assert.Single(factory.Storage.Objects));
+        Assert.Single(factory.Storage.StoreCalls);
+    }
+
+    [Fact]
+    public async Task Concurrent_uploads_with_same_upload_id_and_different_content_accept_only_one_payload()
+    {
+        await using var factory = new RecipeApiFactory();
+        var (recipe, _) = await SeedAsync(factory);
+        using var firstClient = factory.Client();
+        using var secondClient = factory.Client();
+        var uploadId = Guid.NewGuid();
+        var firstAtStorage = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowFirstStore = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondRequestWaiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        factory.Storage.BeforeStore = async cancellationToken =>
+        {
+            firstAtStorage.TrySetResult();
+            await allowFirstStore.Task.WaitAsync(cancellationToken);
+        };
+        factory.ImageOperationLock.Contended = id =>
+        {
+            if (id == recipe.Id) secondRequestWaiting.TrySetResult();
+        };
+
+        var firstTask = firstClient.SendAsync(UploadRequest(
+            recipe.Id, Png, "image/png", Rv(recipe), uploadId: uploadId));
+        await firstAtStorage.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var secondTask = secondClient.SendAsync(UploadRequest(
+            recipe.Id, Jpeg, "image/jpeg", Rv(recipe), uploadId: uploadId));
+        await secondRequestWaiting.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        allowFirstStore.TrySetResult();
+        var responses = await Task.WhenAll(firstTask, secondTask);
+
+        Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Created);
+        var conflict = Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Conflict);
+        await AssertProblem(conflict, 409, "UPLOAD_ID_CONFLICT");
+        Assert.Single(await LoadImagesAsync(factory));
+        Assert.Single(factory.Storage.Objects);
+        Assert.Single(factory.Storage.StoreCalls);
     }
 
     // ---------- SET PRIMARY ----------
@@ -911,10 +1186,16 @@ public sealed class RecipeImageApiTests
     [Fact]
     public async Task Cleanup_job_deletes_the_object_through_the_storage_abstraction()
     {
-        var storage = new FakeFileStorageService();
+        await using var factory = new RecipeApiFactory();
+        var (recipe, _) = await SeedAsync(factory);
+        var objectKey = $"recipes/{recipe.Id:D}/orphan.png";
+        factory.Storage.Objects.Add(new StoredImageObject(objectKey, DateTime.UtcNow.AddDays(-2)));
+        using var scope = factory.Services.CreateScope();
+        var cleanup = ActivatorUtilities.CreateInstance<ImageCleanupJob>(scope.ServiceProvider);
 
-        await new ImageCleanupJob(storage).DeleteAsync("recipes/abc/def.png");
+        await cleanup.DeleteAsync(objectKey);
 
-        Assert.Equal("recipes/abc/def.png", Assert.Single(storage.DeletedKeys));
+        Assert.Equal(objectKey, Assert.Single(factory.Storage.DeletedKeys));
+        Assert.DoesNotContain(factory.Storage.Objects, item => item.ObjectKey == objectKey);
     }
 }

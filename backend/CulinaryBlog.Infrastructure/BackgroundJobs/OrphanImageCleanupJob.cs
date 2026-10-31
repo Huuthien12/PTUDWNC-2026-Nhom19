@@ -8,31 +8,38 @@ using Microsoft.Extensions.Logging;
 namespace CulinaryBlog.Infrastructure.BackgroundJobs;
 
 public sealed class OrphanImageCleanupJob(AppDbContext db, IFileStorageService storage,
-    IImageProcessingQueue processing, TimeProvider clock, ILogger<OrphanImageCleanupJob> logger)
+    IRecipeImageObjectCleanup objectCleanup, IImageProcessingQueue processing,
+    TimeProvider clock, ILogger<OrphanImageCleanupJob> logger)
 {
     private const int BatchSize = 200;
 
     [AutomaticRetry(Attempts = 3)]
     [DisableConcurrentExecution(timeoutInSeconds: 3600)]
-    public async Task RunAsync()
+    public async Task RunAsync(CancellationToken cancellationToken = default)
     {
         var cutoff = clock.GetUtcNow().UtcDateTime.AddHours(-24);
-        // Include soft-deleted rows: a file with a DB reference is never an orphan.
-        // Load DB references before any delete; a database failure must leave storage untouched.
-        var referenced = await LoadReferencedKeysAsync();
         var scanned = 0;
         var deleted = 0;
         var failures = new List<Exception>();
-        await foreach (var item in storage.ListRecipeObjectsAsync())
+        await foreach (var item in storage.ListRecipeObjectsAsync(cancellationToken))
         {
             scanned++;
             if (!item.ObjectKey.StartsWith("recipes/", StringComparison.Ordinal) ||
-                item.LastModifiedUtc >= cutoff || referenced.Contains(item.ObjectKey)) continue;
+                item.LastModifiedUtc >= cutoff) continue;
+
+            if (!RecipeImageStorageKey.TryGetRecipeIdFromObjectKey(item.ObjectKey, out _))
+            {
+                logger.LogWarning("Skipping recipe object with an unrecognized key format {ObjectKey}.",
+                    item.ObjectKey);
+                continue;
+            }
+
             try
             {
-                await storage.DeleteAsync(item.ObjectKey);
-                deleted++;
+                if (await objectCleanup.DeleteIfUnreferencedAsync(item.ObjectKey, cancellationToken))
+                    deleted++;
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception exception)
             {
                 logger.LogError(exception, "Could not delete orphan image object {ObjectKey}.", item.ObjectKey);
@@ -77,32 +84,5 @@ public sealed class OrphanImageCleanupJob(AppDbContext db, IFileStorageService s
         }
         if (failures.Count > 0)
             throw new AggregateException("One or more pending images could not be queued for processing.", failures);
-    }
-
-    private async Task<HashSet<string>> LoadReferencedKeysAsync()
-    {
-        var referenced = new HashSet<string>(StringComparer.Ordinal);
-        Guid? lastId = null;
-        while (true)
-        {
-            var query = db.RecipeImages.IgnoreQueryFilters().AsNoTracking();
-            if (lastId.HasValue) query = query.Where(image => image.Id.CompareTo(lastId.Value) > 0);
-            var images = await query
-                .OrderBy(image => image.Id)
-                .Select(image => new
-                {
-                    image.Id,
-                    image.RecipeId,
-                    image.OriginalUrl,
-                    image.MediumUrl,
-                    image.ThumbnailUrl
-                })
-                .Take(BatchSize).ToListAsync();
-            foreach (var image in images)
-            foreach (var url in new[] { image.OriginalUrl, image.MediumUrl, image.ThumbnailUrl })
-                if (RecipeImageStorageKey.TryFromUrl(url, image.RecipeId, out var key)) referenced.Add(key);
-            if (images.Count < BatchSize) return referenced;
-            lastId = images[^1].Id;
-        }
     }
 }

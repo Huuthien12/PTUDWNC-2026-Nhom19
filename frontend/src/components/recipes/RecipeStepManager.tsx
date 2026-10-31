@@ -2,7 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import type { RecipeDetail, RecipeStep } from "@/types/recipe";
-import { createRecipeStep, deleteRecipeStep, updateRecipeStep,
+import { ApiError } from "@/services/api-client";
+import { createRecipeStep, deleteRecipeStep, reorderRecipeSteps, updateRecipeStep,
   type RecipeStepMutationResult } from "@/services/recipe-step-service";
 import type { RecipeMutationLock } from "./useRecipeMutation";
 
@@ -61,7 +62,12 @@ function RecipeStepManagerState({ recipeId, initialSteps, rowVersion, mutation,
       mutation.invalidate();
       let recovered = false;
       try { await reload(); recovered = true; } catch { /* Keep aggregate mutations blocked until reload succeeds. */ }
-      setError(`${reason instanceof Error ? reason.message : "Không thể cập nhật bước nấu."}${recovered ? "" : " Hãy tải lại dữ liệu trước khi thao tác tiếp."}`);
+      let message = reason instanceof Error ? reason.message : "Không thể cập nhật bước nấu.";
+      if (reason instanceof ApiError && reason.status === 422)
+        message = "Công thức đã thay đổi. Thứ tự mới nhất đã được tải lại; hãy kiểm tra trước khi thử lại.";
+      else if (reason instanceof ApiError && (reason.status === 0 || reason.status >= 500))
+        message = "Không thể xác nhận kết quả lưu. Đã tải lại trạng thái từ máy chủ; hãy kiểm tra trước khi tiếp tục.";
+      setError(`${message}${recovered ? "" : " Hãy tải lại dữ liệu trước khi thao tác tiếp."}`);
     } finally { mutation.end(); }
   }
 
@@ -112,6 +118,22 @@ function RecipeStepManagerState({ recipeId, initialSteps, rowVersion, mutation,
     });
   }
 
+  function move(stepIndex: number, offset: -1 | 1) {
+    if (mutation.isBlocked()) return;
+    const targetIndex = stepIndex + offset;
+    if (targetIndex < 0 || targetIndex >= steps.length) return;
+    const orderedSteps = [...steps];
+    [orderedSteps[stepIndex], orderedSteps[targetIndex]] = [orderedSteps[targetIndex], orderedSteps[stepIndex]];
+
+    void run("Đã cập nhật thứ tự các bước nấu.", async () => {
+      const result = await reorderRecipeSteps(recipeId, {
+        rowVersion,
+        orderedStepIds: orderedSteps.map((step) => step.id),
+      });
+      acknowledge(result);
+    });
+  }
+
   async function retryReload() {
     if (!mutation.begin(true)) return;
     try { await reload(); setMessage("Đã tải lại các bước và RowVersion mới nhất."); setError(""); }
@@ -121,20 +143,26 @@ function RecipeStepManagerState({ recipeId, initialSteps, rowVersion, mutation,
 
   return <section className="space-y-6 rounded-xl border bg-white p-6" aria-busy={mutation.pending}>
     <div><h2 className="text-xl font-bold text-gray-900">Các bước nấu</h2>
-      <p className="mt-1 text-sm text-gray-600">Bước mới được thêm cuối danh sách; khi xóa, thứ tự được cập nhật liên tục.</p></div>
+      <p className="mt-1 text-sm text-gray-600">Bước mới được thêm cuối danh sách; dùng nút lên/xuống để đổi thứ tự.</p></div>
     {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     {message && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-700">{message}</p>}
     {mutation.needsReload && <button type="button" disabled={mutation.pending} onClick={() => void retryReload()}
       className="rounded-lg border px-4 py-2">Tải lại dữ liệu</button>}
     <div className="space-y-4">{steps.length === 0
       ? <p className="rounded-lg border border-dashed p-6 text-center text-gray-500">Chưa có bước nấu nào.</p>
-      : steps.map((step) => <article key={step.id} className="rounded-xl border p-4">
+      : steps.map((step, index) => <article key={step.id} className="rounded-xl border p-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 font-bold text-orange-700">{step.stepNumber}</div>
           <div className="min-w-0 flex-1"><h3 className="font-semibold text-gray-900">{step.title || `Bước ${step.stepNumber}`}</h3>
             <p className="mt-2 whitespace-pre-wrap text-gray-700">{step.description}</p>
             {step.timerMinutes != null && <p className="mt-2 text-sm text-gray-500">Thời gian: {step.timerMinutes} phút</p>}</div>
           <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => move(index, -1)} disabled={blocked || index === 0}
+              aria-label={`Di chuyển bước ${step.stepNumber} lên`}
+              className="rounded-lg border px-3 py-2 text-sm disabled:opacity-40">Lên</button>
+            <button type="button" onClick={() => move(index, 1)} disabled={blocked || index === steps.length - 1}
+              aria-label={`Di chuyển bước ${step.stepNumber} xuống`}
+              className="rounded-lg border px-3 py-2 text-sm disabled:opacity-40">Xuống</button>
             <button type="button" onClick={() => startEdit(step)} disabled={blocked}
               className="rounded-lg border border-blue-300 px-3 py-2 text-sm text-blue-700 disabled:opacity-40">Sửa</button>
             <button type="button" onClick={() => remove(step)} disabled={blocked}

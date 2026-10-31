@@ -36,6 +36,11 @@ export interface UpdateRecipeStepRequest {
   rowVersion: string;
 }
 
+export interface ReorderRecipeStepsRequest {
+  orderedStepIds: string[];
+  rowVersion: string;
+}
+
 function normalizeResult(
   result: RecipeStepApiResult,
 ): RecipeStepMutationResult {
@@ -117,4 +122,23 @@ export async function deleteRecipeStep(
     },
   );
   return nextVersion;
+}
+
+export async function reorderRecipeSteps(
+  recipeId: string,
+  input: ReorderRecipeStepsRequest,
+): Promise<RecipeStepMutationResult> {
+  const result = await apiClient<RecipeStepApiResult>(
+    `/api/v1/recipes/${encodeURIComponent(recipeId)}/steps/order`,
+    {
+      method: "PUT",
+      auth: true,
+      body: JSON.stringify({
+        rowVersion: input.rowVersion,
+        orderedStepIds: input.orderedStepIds,
+      }),
+    },
+  );
+
+  return normalizeResult(result);
 }

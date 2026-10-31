@@ -154,6 +154,8 @@ builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 builder.Services.AddScoped<ISearchHistoryRepository, SearchHistoryRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<IRecipeImageOperationLock, PostgresRecipeImageOperationLock>();
+builder.Services.AddScoped<IRecipeImageObjectCleanup, RecipeImageObjectCleanup>();
 builder.Services.AddScoped<IIdentityService, IdentityService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
@@ -478,7 +480,7 @@ if (!app.Environment.IsEnvironment("Testing"))
         roleManager);
 
     services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<OrphanImageCleanupJob>(
-        "orphan-image-cleanup", job => job.RunAsync(), "30 3 * * *",
+        "orphan-image-cleanup", job => job.RunAsync(CancellationToken.None), "30 3 * * *",
         new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
     services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<OrphanImageCleanupJob>(
         "pending-image-recovery", job => job.RecoverPendingAsync(), "*/5 * * * *",

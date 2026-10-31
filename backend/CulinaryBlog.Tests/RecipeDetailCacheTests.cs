@@ -308,6 +308,8 @@ public sealed class RecipeDetailCacheTests
         public Task<int> CountPublishedByCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<int> CountAllByCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<Recipe?> GetForImagesAsync(Guid id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<RecipeImage?> GetImageByIdAsync(Guid imageId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<byte[]?> GetCurrentRowVersionAsync(Guid recipeId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public void AddImage(RecipeImage image) => throw new NotSupportedException();
         public void RemoveImage(RecipeImage image) => throw new NotSupportedException();
         public Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken = default) => throw new NotSupportedException();

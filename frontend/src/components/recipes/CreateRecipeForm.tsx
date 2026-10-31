@@ -7,6 +7,8 @@ import { createRecipe } from "@/services/recipe-service";
 import { buildRecipePayload, initialRecipeValues, mapRecipeError, nutritionFields, recipeCreatedDestination,
   type FieldErrors, type RecipeField } from "@/services/recipe-form";
 import type { Category } from "@/types/category";
+import type { RecipeDto, RecipeImage } from "@/types/recipe";
+import RecipeImageManager from "./RecipeImageManager";
 
 const labels: Record<RecipeField, string> = {
   title: "Tiêu đề", description: "Mô tả", categoryId: "Danh mục", prepTime: "Chuẩn bị (phút)",
@@ -24,6 +26,11 @@ export default function CreateRecipeForm() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
+  const [createdRecipe, setCreatedRecipe] = useState<RecipeDto | null>(null);
+  const [rowVersion, setRowVersion] = useState("");
+  const [images, setImages] = useState<RecipeImage[]>([]);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [notice, setNotice] = useState("");
   const submitting = useRef(false);
   const alertRef = useRef<HTMLParagraphElement>(null);
 
@@ -49,16 +56,25 @@ export default function CreateRecipeForm() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current || categoryState !== "ready" || !categories.length) return;
+    if (submitting.current || createdRecipe || categoryState !== "ready" || !categories.length) return;
     const result = buildRecipePayload(values, categories.map((category) => category.id));
     setErrors(result.errors ?? {});
     if (result.errors) { setMessage("Vui lòng kiểm tra các trường được đánh dấu."); return; }
     submitting.current = true;
     setPending(true);
     setMessage("");
+    setNotice("");
     try {
-      await createRecipe(result.payload);
-      router.replace(recipeCreatedDestination);
+      const created = await createRecipe(result.payload);
+      setCreatedRecipe(created);
+      setRowVersion(created.rowVersion);
+      if (selectedImage) {
+        setNotice("Công thức đã được lưu thành bản nháp. Bạn có thể tải ảnh đã chọn lên.");
+        submitting.current = false;
+        setPending(false);
+      } else {
+        router.replace(recipeCreatedDestination);
+      }
     } catch (error) {
       const mapped = mapRecipeError(error);
       setErrors(mapped.fields);
@@ -91,8 +107,9 @@ export default function CreateRecipeForm() {
   }
 
   return <main className="mx-auto max-w-3xl px-6 py-10 text-gray-900">
-    <h1 className="text-3xl font-bold">Tạo công thức</h1>
-    <p className="my-4 text-gray-600">Công thức được lưu dưới dạng bản nháp. Sau khi lưu, bạn sẽ về trang danh mục; bản nháp chưa xuất hiện trong danh sách công khai.</p>
+    <h1 className="text-3xl font-bold">{createdRecipe ? "Ảnh công thức" : "Tạo công thức"}</h1>
+    <p className="my-4 text-gray-600">Công thức được lưu dưới dạng bản nháp và chưa xuất hiện công khai. Nếu đã chọn ảnh, bạn có thể tải ảnh lên trước khi hoàn tất.</p>
+    {notice && <p role="status" className="mb-4 text-green-800">{notice}</p>}
     {categoryState === "loading" && <p role="status">Đang tải danh mục...</p>}
     {categoryState === "error" && <div role="alert">Không tải được danh mục. <button type="button" className="underline"
       onClick={reloadCategories}>Thử lại</button></div>}
@@ -101,7 +118,8 @@ export default function CreateRecipeForm() {
       className="mb-4 text-sm text-orange-700 underline disabled:opacity-50">Tải lại danh mục</button>}
     <form noValidate aria-busy={pending} onSubmit={submit} className="space-y-6 rounded-xl border bg-white p-6">
       {message && <p ref={alertRef} tabIndex={-1} role="alert" className="text-red-700">{message}</p>}
-      <fieldset disabled={pending || categoryState !== "ready" || !categories.length} className="space-y-5 disabled:opacity-60">
+      <fieldset disabled={pending || Boolean(createdRecipe) || categoryState !== "ready" || !categories.length}
+        className="space-y-5 disabled:opacity-60">
         <legend className="sr-only">Thông tin công thức</legend>
         {control("title")}{control("description", "textarea")}{control("categoryId", "select")}
         <div className="grid gap-4 sm:grid-cols-3">{control("prepTime", "number")}{control("cookTime", "number")}{control("servings", "number")}</div>
@@ -110,10 +128,21 @@ export default function CreateRecipeForm() {
           <p className="text-sm text-gray-600">Để trống nếu chưa có thông tin; 0 là giá trị thực.</p>
           <div className="grid gap-4 sm:grid-cols-2">{nutritionFields.map((field) => control(field, "number"))}</div>
         </fieldset>
-        <button type="submit" className="rounded-lg bg-orange-600 px-5 py-3 font-semibold text-white disabled:opacity-50">
+      </fieldset>
+      <RecipeImageManager recipeId={createdRecipe?.id ?? null} images={images} rowVersion={rowVersion}
+        selectedFile={selectedImage} onSelectedFileChange={setSelectedImage} onImagesChange={setImages}
+        onRowVersionChange={setRowVersion} disabled={pending} />
+      {createdRecipe ? (
+        <button type="button" onClick={() => router.replace(recipeCreatedDestination)}
+          className="rounded-lg bg-orange-600 px-5 py-3 font-semibold text-white">
+          Hoàn tất
+        </button>
+      ) : (
+        <button type="submit" disabled={pending || categoryState !== "ready" || !categories.length}
+          className="rounded-lg bg-orange-600 px-5 py-3 font-semibold text-white disabled:opacity-50">
           {pending ? "Đang lưu..." : "Lưu bản nháp"}
         </button>
-      </fieldset>
+      )}
     </form>
   </main>;
 }
