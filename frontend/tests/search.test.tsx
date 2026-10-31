@@ -5,15 +5,17 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from "rea
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import Home from "../src/app/page";
 import Loading from "../src/app/loading";
-import sitemap from "../src/app/sitemap";
-import RecipeDetailPage, { generateMetadata } from "../src/app/recipes/[slug]/page";
+import sitemap, { revalidate as sitemapRevalidate } from "../src/app/sitemap";
+import { metadata as categoriesMetadata, revalidate as categoriesRevalidate } from "../src/app/categories/page";
+import { generateMetadata as generateCategoryMetadata, revalidate as categoryDetailRevalidate } from "../src/app/categories/[slug]/page";
+import RecipeDetailPage, { generateMetadata, revalidate as recipeDetailRevalidate } from "../src/app/recipes/[slug]/page";
 import RecipesPage from "../src/app/recipes/page";
 import RecipeListClient from "../src/components/recipes/RecipeListClient";
 import SearchPagination from "../src/components/search/SearchPagination";
 import RecipePagination from "../src/components/recipes/RecipePagination";
 import RecipeImage from "../src/components/shared/RecipeImage";
 import ContentState from "../src/components/shared/ContentState";
-import { buildRecipeJsonLd, buildRecipeMetadata, serializeJsonLd } from "../src/services/recipe-seo";
+import { buildCategoryMetadata, buildRecipeJsonLd, buildRecipeMetadata, buildSiteMetadata, serializeJsonLd } from "../src/services/recipe-seo";
 import { searchRecipes } from "../src/services/search-service";
 import { clearRecipeRequests } from "../src/services/recipe-requests";
 import type { RecipeSearchPage } from "../src/types/search";
@@ -550,4 +552,36 @@ test("recipe detail route emits public metadata and escaped JSON-LD only for a p
   const hidden = await generateMetadata({ params: Promise.resolve({ slug: "draft" }) });
   assert.deepEqual(hidden.robots, { index: false, follow: false });
   assert.equal(serializeJsonLd({ value: "<script>" }), '{"value":"\\u003cscript>"}');
+});
+
+test("category SEO metadata, root Open Graph metadata, and ISR revalidate exports are configured", async () => {
+  assert.equal(sitemapRevalidate, 120);
+  assert.equal(recipeDetailRevalidate, 120);
+  assert.equal(categoriesRevalidate, 120);
+  assert.equal(categoryDetailRevalidate, 120);
+  const rootMetadata = buildSiteMetadata("https://culinary.example");
+  assert.equal(rootMetadata.alternates?.canonical, "/");
+  assert.equal(rootMetadata.openGraph?.siteName, "Culinary Blog");
+  assert.equal(categoriesMetadata.alternates?.canonical, "/categories");
+
+  const catMeta = buildCategoryMetadata(
+    { name: "Món nước", slug: "mon-nuoc", description: "Các món nước truyền thống." },
+    "https://culinary.example"
+  );
+  assert.equal(catMeta.title, "Món nước | Culinary Blog");
+  assert.equal(catMeta.alternates?.canonical, "https://culinary.example/categories/mon-nuoc");
+  assert.equal(catMeta.openGraph?.title, "Món nước | Culinary Blog");
+
+  globalThis.fetch = async () =>
+    Response.json({
+      category: { id: "c1", name: "Món chay", slug: "mon-chay", description: null, recipeCount: 4 },
+      recipes: emptyPage,
+    });
+  const dynamicMeta = await generateCategoryMetadata({ params: Promise.resolve({ slug: "mon-chay" }) });
+  assert.equal(dynamicMeta.title, "Món chay | Culinary Blog");
+  assert.equal(dynamicMeta.alternates?.canonical, "http://localhost:3000/categories/mon-chay");
+
+  globalThis.fetch = async () => new Response(null, { status: 404 });
+  const missingMeta = await generateCategoryMetadata({ params: Promise.resolve({ slug: "khong-ton-tai" }) });
+  assert.deepEqual(missingMeta.robots, { index: false, follow: false });
 });

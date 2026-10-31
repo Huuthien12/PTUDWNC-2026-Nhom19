@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import CulinaryIllustration from "@/components/shared/CulinaryIllustration";
 import ContentState from "@/components/shared/ContentState";
@@ -7,7 +8,10 @@ import CategoryPagination from "@/components/categories/CategoryPagination";
 import CategoryRecipeCard from "@/components/categories/CategoryRecipeCard";
 import { ApiError } from "@/services/api-client";
 import { getCategoryBySlug } from "@/services/category-service";
+import { buildCategoryMetadata, getSiteUrl } from "@/services/recipe-seo";
 import type { CategoryDetail } from "@/types/category";
+
+export const revalidate = 120;
 
 interface CategoryDetailPageProps {
   params: Promise<{
@@ -17,6 +21,18 @@ interface CategoryDetailPageProps {
   searchParams: Promise<{
     page?: string;
   }>;
+}
+
+export async function generateMetadata({
+  params,
+}: Pick<CategoryDetailPageProps, "params">): Promise<Metadata> {
+  try {
+    const { slug } = await params;
+    const detail = await getCategoryBySlug(slug, 1, 1);
+    return buildCategoryMetadata(detail.category, getSiteUrl());
+  } catch {
+    return { robots: { index: false, follow: false } };
+  }
 }
 
 export default async function CategoryDetailPage({
