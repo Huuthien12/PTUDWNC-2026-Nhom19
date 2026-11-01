@@ -18,6 +18,8 @@ import ContentState from "../src/components/shared/ContentState";
 import { buildCategoryMetadata, buildRecipeJsonLd, buildRecipeMetadata, buildSiteMetadata, serializeJsonLd } from "../src/services/recipe-seo";
 import { searchRecipes } from "../src/services/search-service";
 import { clearRecipeRequests } from "../src/services/recipe-requests";
+import { getCategories, getCategoryBySlug } from "../src/services/category-service";
+import { getRecipeBySlug, getRecipes } from "../src/services/recipe-service";
 import type { RecipeSearchPage } from "../src/types/search";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -584,4 +586,27 @@ test("category SEO metadata, root Open Graph metadata, and ISR revalidate export
   globalThis.fetch = async () => new Response(null, { status: 404 });
   const missingMeta = await generateCategoryMetadata({ params: Promise.resolve({ slug: "khong-ton-tai" }) });
   assert.deepEqual(missingMeta.robots, { index: false, follow: false });
+});
+
+test("public category and recipe reads use the ISR cache tags declared by their routes", async () => {
+  const requests: RequestInit[] = [];
+  globalThis.fetch = async (_url, init) => {
+    requests.push(init ?? {});
+    return Response.json({});
+  };
+
+  await getCategories();
+  await getCategoryBySlug("mon-chay");
+  await getRecipes();
+  await getRecipeBySlug("pho-bo");
+
+  assert.deepEqual(requests.map((request) => ({
+    cache: request.cache,
+    next: request.next,
+  })), [
+    { cache: "force-cache", next: { revalidate: 120, tags: ["categories"] } },
+    { cache: "force-cache", next: { revalidate: 120, tags: ["categories"] } },
+    { cache: "force-cache", next: { revalidate: 120, tags: ["recipes"] } },
+    { cache: "force-cache", next: { revalidate: 120, tags: ["recipes"] } },
+  ]);
 });

@@ -6,6 +6,12 @@ import type { RecipePage } from "../types/recipe";
 
 export type RecipeLifecycleAction = "publish" | "unpublish" | "archive";
 
+function publicRecipeReadOptions() {
+  return typeof window === "undefined"
+    ? { cache: "force-cache" as const, next: { revalidate: 120, tags: ["recipes"] } }
+    : { cache: "no-store" as const };
+}
+
 export function getRecipes(page = 1, pageSize = 12, filters: RecipeListFilters = {}): Promise<RecipePage> {
   const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (filters.categoryId) query.set("categoryId", filters.categoryId);
@@ -16,7 +22,7 @@ export function getRecipes(page = 1, pageSize = 12, filters: RecipeListFilters =
   if (filters.sortOrder) query.set("sortOrder", filters.sortOrder);
   const endpoint = `/api/v1/recipes?${query}`;
   if (getSession()) return apiClient<RecipePage>(endpoint, { auth: true, cache: "no-store" });
-  return publicRecipeRequest(endpoint, () => apiClient<RecipePage>(endpoint, { cache: "no-store" }));
+  return publicRecipeRequest(endpoint, () => apiClient<RecipePage>(endpoint, publicRecipeReadOptions()));
 }
 
 export function getMyRecipes(page = 1, pageSize = 12): Promise<RecipeDashboardPage> {
@@ -36,7 +42,7 @@ export function createRecipe(input: CreateRecipeRequest): Promise<RecipeDto> {
 export function getRecipeBySlug(slug: string): Promise<RecipeDetail> {
   const endpoint = `/api/v1/recipes/${encodeURIComponent(slug)}`;
   if (getSession()) return apiClient<RecipeDetail>(endpoint, { auth: true, cache: "no-store" });
-  return publicRecipeRequest(endpoint, () => apiClient<RecipeDetail>(endpoint, { cache: "no-store" }));
+  return publicRecipeRequest(endpoint, () => apiClient<RecipeDetail>(endpoint, publicRecipeReadOptions()));
 }
 
 export function updateRecipe(id: string, input: UpdateRecipeRequest): Promise<RecipeDto> {

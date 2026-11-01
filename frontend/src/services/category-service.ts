@@ -9,10 +9,14 @@ export interface CategoryInput {
   description: string | null;
 }
 
+function publicCategoryReadOptions() {
+  return typeof window === "undefined"
+    ? { cache: "force-cache" as const, next: { revalidate: 120, tags: ["categories"] } }
+    : { cache: "no-store" as const };
+}
+
 export async function getCategories(): Promise<Category[]> {
-  return apiClient<Category[]>("/api/v1/categories", {
-    cache: "no-store",
-  });
+  return apiClient<Category[]>("/api/v1/categories", publicCategoryReadOptions());
 }
 
 export async function getCategoryBySlug(
@@ -27,9 +31,7 @@ export async function getCategoryBySlug(
 
   return apiClient<CategoryDetail>(
     `/api/v1/categories/${encodeURIComponent(slug)}?${query.toString()}`,
-    {
-      cache: "no-store",
-    }
+    publicCategoryReadOptions()
   );
 }
 
