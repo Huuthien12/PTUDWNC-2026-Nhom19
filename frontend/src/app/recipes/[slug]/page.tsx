@@ -4,6 +4,8 @@ import { getRecipeBySlug } from "@/services/recipe-service";
 import { buildRecipeJsonLd, buildRecipeMetadata, getSiteUrl, serializeJsonLd } from "@/services/recipe-seo";
 import type { RecipeDetail } from "@/types/recipe";
 
+export const revalidate = 120;
+
 type PageProps = { params: Promise<{ slug: string }> };
 
 async function getPublishedRecipe(slug: string): Promise<RecipeDetail | null> {

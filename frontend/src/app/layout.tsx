@@ -3,12 +3,10 @@ import Header from "@/components/Header";
 import AuthLifecycle from "@/components/auth/AuthLifecycle";
 import Footer from "@/components/layout/footer";
 import QueryProvider from "@/components/QueryProvider";
+import { buildSiteMetadata } from "@/services/recipe-seo";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "Culinary Blog",
-  description: "Chia sẻ và khám phá các công thức nấu ăn",
-};
+export const metadata: Metadata = buildSiteMetadata();
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
