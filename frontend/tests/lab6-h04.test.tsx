@@ -29,10 +29,10 @@ function text(node: ReactTestInstance): string {
   return node.children.map((child) => typeof child === "string" ? child : text(child)).join("");
 }
 
-function installAdminSession() {
+function installAdminSession(roles = ["Admin"]) {
   const session = { sessionId: "admin", accessToken: "access", refreshToken: "refresh", tokenType: "Bearer",
     expiresAt: new Date(Date.now() + 60_000).toISOString(), user: { id: "admin", fullName: "Admin", userName: "admin",
-      email: "admin@example.test", avatarUrl: null, roles: ["Admin"] } };
+      email: "admin@example.test", avatarUrl: null, roles } };
   Object.defineProperty(globalThis, "window", { configurable: true, value: Object.assign(new EventTarget(), {
     localStorage: { getItem: (key: string) => key === SESSION_KEY ? JSON.stringify(session) : null }, setTimeout, clearTimeout,
   }) });
@@ -69,6 +69,17 @@ test("admin users page renders API users, controls and pagination", async () => 
   assert.equal(view.root.findByProps({ "aria-label": "Tìm kiếm người dùng" }).props.disabled, undefined);
   assert.equal(view.root.findAllByType("tbody")[0].findAllByType("tr").length, 1);
   assert.match(text(view.root), /Trang 1/);
+});
+
+test("admin users route blocks Author before requesting the admin list", async () => {
+  installAdminSession(["Author"]);
+  let requested = false;
+  globalThis.fetch = async () => { requested = true; return userPage(); };
+
+  const view = await render(<AdminUsersPage />);
+  await act(async () => { await new Promise((resolve) => setImmediate(resolve)); });
+  assert.match(text(view.root), /không có quyền truy cập trang này/i);
+  assert.equal(requested, false);
 });
 
 test("static user list has a presentable empty state", async () => {

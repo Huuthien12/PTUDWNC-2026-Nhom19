@@ -6,6 +6,7 @@ namespace CulinaryBlog.Infrastructure.BackgroundJobs;
 public sealed class WelcomeEmailJob(IEmailService emailService)
 {
     [AutomaticRetry(Attempts = 3)]
+    [TrackWelcomeEmailJob]
     public Task SendAsync(string email, string fullName) =>
         emailService.SendWelcomeEmailAsync(email, fullName);
 }
