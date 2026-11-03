@@ -11,7 +11,7 @@ export const initialRecipeValues: RecipeFormValues = {
   difficulty: "1", instructions: "", calories: "", protein: "", carbs: "", fat: "",
 };
 export const recipeRoles = ["Author", "Admin"];
-export const recipeCreatedDestination = "/categories?created=recipe";
+export const recipeEditDestination = (slug: string) => `/recipes/${encodeURIComponent(slug)}/edit`;
 
 export function recipeValuesFromDetail(recipe: RecipeDetail): RecipeFormValues {
   return {

@@ -22,7 +22,8 @@
   --space-12: 3rem;
   --space-16: 4rem;
   --radius: .5rem;
-  --font-editorial: Georgia, "Times New Roman", serif;
+  --font-header: "Pacifico", cursive;
+  --font-editorial: "Inter Variable", "Inter", sans-serif;
 }
 
 @theme inline {
@@ -34,13 +35,15 @@
   --color-forest: var(--forest);
   --color-gold: var(--gold);
   --color-line: var(--line);
-  --font-sans: Arial, Helvetica, sans-serif;
+  --font-sans: "Inter Variable", "Inter", sans-serif;
+  --font-serif: "Inter Variable", "Inter", sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  font-weight: 700;
   line-height: 1.65;
 }
 
@@ -53,7 +56,7 @@ a, button { transition: background-color .2s, color .2s, border-color .2s; }
 .cb-container { width: min(100% - 3rem, 1160px); margin-inline: auto; }
 .cb-section { padding-block: var(--space-12) var(--space-16); }
 .cb-eyebrow { font-size: .72rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--forest); }
-.cb-title { font-family: var(--font-editorial); font-size: clamp(2.6rem, 6vw, 5rem); line-height: 1.12; letter-spacing: -.045em; font-weight: 400; text-wrap: balance; }
+.cb-title { font-family: var(--font-editorial); font-size: clamp(2.6rem, 6vw, 5rem); line-height: 1.12; letter-spacing: -.045em; font-weight: 700; text-wrap: balance; }
 .cb-section-title { font-family: var(--font-editorial); font-size: clamp(1.65rem, 3vw, 2.2rem); line-height: 1.25; }
 .cb-lead { color: var(--muted); max-width: 38rem; font-size: 1.05rem; line-height: 1.8; }
 .cb-title, .cb-lead, .cb-category, .cb-recipe, .cb-admin-table td { overflow-wrap: anywhere; }
@@ -70,7 +73,8 @@ a, button { transition: background-color .2s, color .2s, border-color .2s; }
 .cb-skip:focus { top: 1rem; }
 .cb-header { border-top: 5px solid var(--forest); border-bottom: 1px solid var(--line); }
 .cb-header-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-6); padding-block: var(--space-6); }
-.cb-brand { color: var(--forest); font-family: var(--font-editorial); font-size: 1.8rem; letter-spacing: -.05em; line-height: 1.1; }
+.cb-brand { color: var(--forest); font-family: var(--font-sans); font-size: 1.8rem; letter-spacing: -.05em; line-height: 1.1; }
+.cb-header .cb-brand { font-family: var(--font-header); font-weight: 400; letter-spacing: 0; }
 .cb-brand span { font-style: italic; }
 .cb-nav { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-6); font-size: .85rem; }
 .cb-nav a { padding-block: .4rem; border-bottom: 2px solid transparent; }

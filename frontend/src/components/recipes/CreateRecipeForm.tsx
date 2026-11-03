@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { getCategories } from "@/services/category-service";
 import { createRecipe } from "@/services/recipe-service";
-import { buildRecipePayload, initialRecipeValues, mapRecipeError, nutritionFields, recipeCreatedDestination,
+import { buildRecipePayload, initialRecipeValues, mapRecipeError, nutritionFields, recipeEditDestination,
   type FieldErrors, type RecipeField } from "@/services/recipe-form";
 import type { Category } from "@/types/category";
 import type { RecipeDto, RecipeImage } from "@/types/recipe";
@@ -73,7 +73,7 @@ export default function CreateRecipeForm() {
         submitting.current = false;
         setPending(false);
       } else {
-        router.replace(recipeCreatedDestination);
+        router.replace(recipeEditDestination(created.slug));
       }
     } catch (error) {
       const mapped = mapRecipeError(error);
@@ -108,7 +108,7 @@ export default function CreateRecipeForm() {
 
   return <main className="mx-auto max-w-3xl px-6 py-10 text-gray-900">
     <h1 className="text-3xl font-bold">{createdRecipe ? "Ảnh công thức" : "Tạo công thức"}</h1>
-    <p className="my-4 text-gray-600">Công thức được lưu dưới dạng bản nháp và chưa xuất hiện công khai. Nếu đã chọn ảnh, bạn có thể tải ảnh lên trước khi hoàn tất.</p>
+    <p className="my-4 text-gray-600">Công thức được lưu dưới dạng bản nháp. Sau khi lưu, bạn có thể thêm nguyên liệu, các bước nấu và ảnh trong trang chỉnh sửa; bản nháp chưa xuất hiện trong danh sách công khai.</p>
     {notice && <p role="status" className="mb-4 text-green-800">{notice}</p>}
     {categoryState === "loading" && <p role="status">Đang tải danh mục...</p>}
     {categoryState === "error" && <div role="alert">Không tải được danh mục. <button type="button" className="underline"
@@ -133,7 +133,7 @@ export default function CreateRecipeForm() {
         selectedFile={selectedImage} onSelectedFileChange={setSelectedImage} onImagesChange={setImages}
         onRowVersionChange={setRowVersion} disabled={pending} />
       {createdRecipe ? (
-        <button type="button" onClick={() => router.replace(recipeCreatedDestination)}
+        <button type="button" onClick={() => router.replace(recipeEditDestination(createdRecipe.slug))}
           className="rounded-lg bg-orange-600 px-5 py-3 font-semibold text-white">
           Hoàn tất
         </button>

@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import "@fontsource-variable/inter";
+import "@fontsource/pacifico";
 import Header from "@/components/Header";
 import AuthLifecycle from "@/components/auth/AuthLifecycle";
 import Footer from "@/components/layout/footer";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildRecipePayload, initialRecipeValues, mapRecipeError, recipeCreatedDestination, recipeRoles } from "../src/services/recipe-form";
+import { buildRecipePayload, initialRecipeValues, mapRecipeError, recipeEditDestination, recipeRoles } from "../src/services/recipe-form";
 import { ApiError, httpClient } from "../src/services/http-client";
 import { changeRecipeLifecycle, createRecipe, deleteRecipe, getMyRecipes, getRecipes } from "../src/services/recipe-service";
 import { dashboardActions, lifecycleErrorMessage } from "../src/services/recipe-dashboard";
@@ -122,7 +122,8 @@ test("UI access and login return path allow Author/Admin only, destination needs
   assert.equal(loginDestination("/recipes/create"), "/recipes/create");
   assert.equal(loginDestination("/recipes/dashboard"), "/recipes/dashboard");
   assert.equal(loginDestination("/recipes/create?next=https://evil.test"), "/");
-  assert.equal(recipeCreatedDestination, "/categories?created=recipe");
+  assert.equal(recipeEditDestination("canh-chua"), "/recipes/canh-chua/edit");
+  assert.equal(recipeEditDestination("canh chua/ca"), "/recipes/canh%20chua%2Fca/edit");
 });
 
 test("dashboard service uses the authenticated mine endpoint without detail fan-out", async () => {
