@@ -38,9 +38,11 @@ using System.Threading.RateLimiting;
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
+using System.Net;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console(new JsonFormatter())
@@ -152,6 +154,8 @@ builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<IRecipeRepository, RecipeRepository>();
 builder.Services.AddScoped<ISearchHistoryRepository, SearchHistoryRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<IRecipeImageOperationLock, PostgresRecipeImageOperationLock>();
+builder.Services.AddScoped<IRecipeImageObjectCleanup, RecipeImageObjectCleanup>();
 builder.Services.AddScoped<IIdentityService, IdentityService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
@@ -437,6 +441,19 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+var knownProxy = builder.Configuration["ForwardedHeaders:KnownProxy"];
+if (IPAddress.TryParse(knownProxy, out var knownProxyAddress))
+{
+    app.UseForwardedHeaders(new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor |
+            ForwardedHeaders.XForwardedProto |
+            ForwardedHeaders.XForwardedHost,
+        ForwardLimit = 1,
+        KnownProxies = { knownProxyAddress }
+    });
+}
+
 // =========================
 // Database Migration & Seed
 // =========================
@@ -452,14 +469,18 @@ if (!app.Environment.IsEnvironment("Testing"))
     var userManager =
         services.GetRequiredService<UserManager<ApplicationUser>>();
 
+    var roleManager =
+        services.GetRequiredService<RoleManager<IdentityRole>>();
+
     await dbContext.Database.MigrateAsync();
 
     await DataSeeder.SeedAsync(
         dbContext,
-        userManager);
+        userManager,
+        roleManager);
 
     services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<OrphanImageCleanupJob>(
-        "orphan-image-cleanup", job => job.RunAsync(), "30 3 * * *",
+        "orphan-image-cleanup", job => job.RunAsync(CancellationToken.None), "30 3 * * *",
         new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
     services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<OrphanImageCleanupJob>(
         "pending-image-recovery", job => job.RecoverPendingAsync(), "*/5 * * * *",

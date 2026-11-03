@@ -73,6 +73,7 @@ public sealed class RecipeRelatedCacheTests
     private static MultipartFormDataContent Upload(string version)
     {
         var content = new MultipartFormDataContent();
+        content.Add(new StringContent(Guid.NewGuid().ToString()), "uploadId");
         var file = new ByteArrayContent([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]);
         file.Headers.ContentType = new MediaTypeHeaderValue("image/png");
         content.Add(file, "file", "photo.png");

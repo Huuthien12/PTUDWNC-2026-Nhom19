@@ -16,6 +16,9 @@ let view: ReactTestRenderer | undefined;
 let recipe: RecipeDetail;
 let calls: { path: string; method: string; body: Record<string, unknown> }[];
 let version: number;
+let reorderFailureStatus: number | null;
+let failReorderAfterCommit: boolean;
+let reorderGate: Promise<void> | null;
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const nextVersion = () => { recipe.rowVersion = Buffer.from(`v${++version}`).toString("base64"); };
 const ingredient = (): RecipeIngredient => ({ id: "ingredient", name: "Salt", quantity: 1, unit: "g", notes: null, orderIndex: 0 });
@@ -30,7 +33,9 @@ function Host() {
   return <><IngredientEditor recipeId={model.id} initialIngredients={model.ingredients} rowVersion={model.rowVersion}
     mutation={mutation} onRowVersionChange={publishVersion} onReload={reload} />
   <RecipeStepManager recipeId={model.id} initialSteps={model.steps} rowVersion={model.rowVersion}
-    mutation={mutation} onRowVersionChange={publishVersion} onReload={reload} /></>;
+    mutation={mutation} onRowVersionChange={publishVersion} onReload={reload} />
+    <button type="button" data-testid="refresh-model" onClick={() => setModel(clone(recipe))} />
+  </>;
 }
 
 beforeEach(() => {
@@ -42,6 +47,9 @@ beforeEach(() => {
     confirm: () => true, localStorage: { getItem: (key: string) => key === SESSION_KEY ? JSON.stringify(session) : null },
   }) });
   version = 0;
+  reorderFailureStatus = null;
+  failReorderAfterCommit = false;
+  reorderGate = null;
   recipe = { id: "recipe", slug: "recipe", title: "Recipe", description: "Description", instructions: "",
     prepTime: 1, cookTime: 1, servings: 1, difficulty: 1, status: 1,
     rowVersion: Buffer.from("v0").toString("base64"), createdAt: "", publishedAt: null,
@@ -62,6 +70,25 @@ beforeEach(() => {
       nextVersion();
       return Response.json({ id: "ingredient", name: body.name, quantity: body.quantity, unit: body.unit,
         notes: body.notes, sortOrder: body.sortOrder, rowVersion: recipe.rowVersion });
+    }
+    if (path.endsWith("/steps/order")) {
+      if (reorderGate) await reorderGate;
+      if (reorderFailureStatus !== null) {
+        const status = reorderFailureStatus;
+        reorderFailureStatus = null;
+        return Response.json({ type: "reorder-failed", status }, { status });
+      }
+      const orderedIds = body.orderedStepIds as string[];
+      recipe.steps = orderedIds.map((id, index) => ({
+        ...recipe.steps.find((item) => item.id === id)!,
+        stepNumber: index + 1,
+      }));
+      nextVersion();
+      if (failReorderAfterCommit) {
+        failReorderAfterCommit = false;
+        throw new TypeError("response lost after server commit");
+      }
+      return Response.json({ items: recipe.steps, rowVersion: recipe.rowVersion });
     }
     const id = method === "POST" ? `S${recipe.steps.length + 1}` : path.split("/").at(-1)!;
     if (method === "DELETE") {
@@ -171,6 +198,85 @@ test("Step validation rejects blank description and invalid timer before transpo
   await dispatch(() => { void stepForm().props.onSubmit({ preventDefault() {} }); });
   assert.equal(mutations().length, 0);
   assert.match(text(manager()), /số nguyên lớn hơn hoặc bằng 0/);
+});
+
+test("step reorder submits the complete order and uses the returned RowVersion for the next mutation", async () => {
+  await mount();
+  assert.equal(stepButton("Lên", 0).props.disabled, true);
+  assert.equal(stepButton("Xuống", 1).props.disabled, true);
+
+  await dispatch(() => stepButton("Xuống", 0).props.onClick());
+
+  assert.equal(calls[0].method, "PUT");
+  assert.equal(calls[0].path, "/api/recipe-cache/api/v1/recipes/recipe/steps/order");
+  assert.deepEqual(calls[0].body, {
+    rowVersion: Buffer.from("v0").toString("base64"),
+    orderedStepIds: ["B", "A"],
+  });
+  assert.deepEqual(recipe.steps.map((item) => [item.id, item.stepNumber]), [["B", 1], ["A", 2]]);
+  assert.equal(manager().props.rowVersion, recipe.rowVersion);
+
+  await dispatch(() => stepButton("Lên", 1).props.onClick());
+  assert.deepEqual(calls[1].body, {
+    rowVersion: Buffer.from("v1").toString("base64"),
+    orderedStepIds: ["A", "B"],
+  });
+  assert.deepEqual(recipe.steps.map((item) => [item.id, item.stepNumber]), [["A", 1], ["B", 2]]);
+
+  await dispatch(() => input("recipe-step-description").props.onChange({ target: { value: "Third step" } }));
+  await dispatch(() => { void stepForm().props.onSubmit({ preventDefault() {} }); });
+  assert.equal(mutations()[2].body.rowVersion, Buffer.from("v2").toString("base64"));
+});
+
+test("stale step reorder reloads server state and never reports success", async () => {
+  await mount();
+  reorderFailureStatus = 422;
+
+  await dispatch(() => stepButton("Xuống", 0).props.onClick());
+
+  assert.equal(mutations().length, 1);
+  assert.match(text(manager()), /Công thức đã thay đổi/);
+  assert.doesNotMatch(text(manager()), /Đã cập nhật thứ tự các bước nấu/);
+  assert.deepEqual(recipe.steps.map((item) => item.id), ["A", "B"]);
+});
+
+test("ambiguous reorder response reloads the committed server order before unlocking mutations", async () => {
+  await mount();
+  failReorderAfterCommit = true;
+
+  await dispatch(() => stepButton("Xuống", 0).props.onClick());
+
+  assert.match(text(manager()), /Không thể xác nhận kết quả lưu/);
+  assert.deepEqual(manager().findAllByType("article").map((node) =>
+    node.findByType("h3").children.join("")), ["Title B", "Title A"]);
+  assert.equal(manager().props.rowVersion, recipe.rowVersion);
+  assert.equal(stepButton("Lên", 1).props.disabled, false);
+});
+
+test("step reorder blocks overlapping mutations while the request is pending", async () => {
+  await mount();
+  let releaseRequest!: () => void;
+  reorderGate = new Promise<void>((resolve) => { releaseRequest = resolve; });
+
+  await dispatch(() => stepButton("Xuống", 0).props.onClick());
+  assert.equal(stepButton("Lên", 1).props.disabled, true);
+  assert.equal(stepButton("Sửa", 0).props.disabled, true);
+
+  await dispatch(() => { releaseRequest(); });
+  reorderGate = null;
+  await dispatch(() => new Promise<void>((resolve) => setImmediate(resolve)));
+  assert.equal(mutations().length, 1);
+});
+
+test("step list synchronizes when refreshed initial steps arrive from the parent", async () => {
+  await mount();
+  recipe.steps = [step("C", 1)];
+
+  await dispatch(() => view!.root.findByProps({ "data-testid": "refresh-model" }).props.onClick());
+
+  assert.equal(manager().findAllByType("article").length, 1);
+  assert.match(text(manager()), /Description C/);
+  assert.doesNotMatch(text(manager()), /Description A|Description B/);
 });
 
 test("Ingredient and Step mutations share one current Recipe RowVersion in both directions", async () => {

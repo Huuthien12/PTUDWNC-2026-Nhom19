@@ -1,8 +1,25 @@
+import type { Metadata } from "next";
 import CategoryList from "@/components/categories/CategoryList";
 import CulinaryIllustration from "@/components/shared/CulinaryIllustration";
 import ContentState from "@/components/shared/ContentState";
 import { getCategories } from "@/services/category-service";
 import type { Category } from "@/types/category";
+
+export const revalidate = 120;
+
+export const metadata: Metadata = {
+  title: "Danh mục món ăn | Culinary Blog",
+  description: "Khám phá các danh mục công thức nấu ăn theo khẩu vị và nguyên liệu trên Culinary Blog.",
+  alternates: { canonical: "/categories" },
+  openGraph: {
+    title: "Danh mục món ăn | Culinary Blog",
+    description: "Khám phá các danh mục công thức nấu ăn theo khẩu vị và nguyên liệu trên Culinary Blog.",
+    url: "/categories",
+    siteName: "Culinary Blog",
+    locale: "vi_VN",
+    type: "website",
+  },
+};
 
 export default async function CategoriesPage({ searchParams }: {
   searchParams: Promise<{ created?: string }>;

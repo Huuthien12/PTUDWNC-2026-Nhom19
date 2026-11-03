@@ -7,6 +7,7 @@ namespace CulinaryBlog.Infrastructure.BackgroundJobs;
 
 public sealed class RecipeImageProcessingJob(
     IFileStorageService storage,
+    IRecipeImageObjectCleanup objectCleanup,
     IUnitOfWork unitOfWork,
     IImageCleanupQueue cleanup,
     IRecipeCacheInvalidator? invalidator,
@@ -55,7 +56,7 @@ public sealed class RecipeImageProcessingJob(
             {
                 try
                 {
-                    await storage.DeleteAsync(objectKey);
+                    await objectCleanup.DeleteIfUnreferencedAsync(objectKey);
                 }
                 catch (Exception cleanupException)
                 {

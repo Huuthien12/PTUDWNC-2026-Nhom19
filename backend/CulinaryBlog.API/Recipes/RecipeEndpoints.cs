@@ -228,6 +228,43 @@ public static class RecipeEndpoints
             });
 
         app.MapPut(
+            "/api/v1/recipes/{id:guid}/steps/order",
+            async (
+                Guid id,
+                [FromBody] ReorderRecipeStepsRequest request,
+                ClaimsPrincipal user,
+                ISender sender,
+                CancellationToken cancellationToken) =>
+            {
+                var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrWhiteSpace(userId))
+                    throw new UnauthorizedAccessException();
+
+                var result = await sender.Send(
+                    new ReorderRecipeStepsCommand(
+                        id,
+                        request,
+                        userId,
+                        user.IsInRole("Admin")),
+                    cancellationToken);
+
+                return Results.Ok(result);
+            })
+            .WithName("ReorderRecipeSteps")
+            .WithSummary("Reorder all active steps in a recipe")
+            .WithDescription("Replaces the complete active-step order using the supplied Recipe RowVersion.")
+            .Produces<RecipeStepListDto>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
+            .RequireAuthorization(policy => policy
+                .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)
+                .RequireAuthenticatedUser()
+                .RequireRole("Author", "Admin"));
+
+        app.MapPut(
             "/api/v1/recipes/{id:guid}/steps/{stepId:guid}",
             async (
                 Guid id,

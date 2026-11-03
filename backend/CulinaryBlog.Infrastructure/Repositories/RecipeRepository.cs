@@ -98,6 +98,18 @@ public sealed class RecipeRepository : IRecipeRepository
         => _context.Recipes.Include(recipe => recipe.Images)
             .FirstOrDefaultAsync(recipe => recipe.Id == id, cancellationToken);
 
+    public Task<RecipeImage?> GetImageByIdAsync(Guid imageId, CancellationToken cancellationToken = default)
+        => _context.RecipeImages.IgnoreQueryFilters().AsNoTracking()
+            .FirstOrDefaultAsync(image => image.Id == imageId, cancellationToken);
+
+    public Task<byte[]?> GetCurrentRowVersionAsync(
+        Guid recipeId,
+        CancellationToken cancellationToken = default)
+        => _context.Recipes.AsNoTracking()
+            .Where(recipe => recipe.Id == recipeId)
+            .Select(recipe => recipe.RowVersion)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public void AddImage(RecipeImage image)
     {
         ArgumentNullException.ThrowIfNull(image);

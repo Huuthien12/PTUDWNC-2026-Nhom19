@@ -3,6 +3,7 @@ using CulinaryBlog.Application.Recipes.DTOs;
 using CulinaryBlog.Domain.Entities;
 using CulinaryBlog.Domain.Exceptions;
 using FluentValidation;
+using FluentValidation.Results;
 using MediatR;
 
 namespace CulinaryBlog.Application.Recipes.Commands;
@@ -27,6 +28,11 @@ public sealed record DeleteRecipeStepRequest(
     string RowVersion
 );
 
+public sealed record ReorderRecipeStepsRequest(
+    string? RowVersion,
+    IReadOnlyList<Guid>? OrderedStepIds
+);
+
 public sealed record CreateRecipeStepCommand(
     Guid RecipeId,
     CreateRecipeStepRequest Request,
@@ -49,6 +55,44 @@ public sealed record DeleteRecipeStepCommand(
     string UserId,
     bool IsAdmin
 ) : IRequest<string>;
+
+public sealed record ReorderRecipeStepsCommand(
+    Guid RecipeId,
+    ReorderRecipeStepsRequest Request,
+    string UserId,
+    bool IsAdmin
+) : IRequest<RecipeStepListDto>;
+
+public sealed class ReorderRecipeStepsCommandValidator
+    : AbstractValidator<ReorderRecipeStepsCommand>
+{
+    public ReorderRecipeStepsCommandValidator()
+    {
+        RuleFor(x => x.Request.RowVersion)
+            .Must(IsCanonicalBase64)
+            .WithMessage("RowVersion is required and must be canonical Base64.");
+
+        RuleFor(x => x.Request.OrderedStepIds)
+            .NotNull()
+            .WithMessage("The full ordered step ID list is required.")
+            .Must(ids => ids is null || ids.Distinct().Count() == ids.Count)
+            .WithMessage("Step IDs must not contain duplicates.");
+    }
+
+    private static bool IsCanonicalBase64(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        try
+        {
+            var bytes = Convert.FromBase64String(value);
+            return bytes.Length > 0 && Convert.ToBase64String(bytes) == value;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+}
 
 public sealed class CreateRecipeStepCommandValidator
     : AbstractValidator<CreateRecipeStepCommand>
@@ -408,6 +452,101 @@ public sealed class DeleteRecipeStepCommandHandler(
 
     if (invalidator is not null) await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
     return Convert.ToBase64String(recipe.RowVersion);
+    }
+}
+
+public sealed class ReorderRecipeStepsCommandHandler(
+    IUnitOfWork unitOfWork,
+    IValidator<ReorderRecipeStepsCommand> validator,
+    TimeProvider clock,
+    IRecipeCacheInvalidator? invalidator = null)
+    : IRequestHandler<ReorderRecipeStepsCommand, RecipeStepListDto>
+{
+    public async Task<RecipeStepListDto> Handle(
+        ReorderRecipeStepsCommand command,
+        CancellationToken cancellationToken)
+    {
+        var recipe = await unitOfWork.Recipes.GetForStepMutationAsync(
+            command.RecipeId,
+            cancellationToken)
+            ?? throw new NotFoundException("RECIPE_NOT_FOUND", "Recipe not found.");
+
+        if (!command.IsAdmin && recipe.AuthorId != command.UserId)
+            throw new ForbiddenException(
+                "RECIPE_FORBIDDEN",
+                "Only the author or an Admin may modify recipe steps.");
+
+        await validator.ValidateAndThrowAsync(command, cancellationToken);
+
+        var expectedRowVersion = Convert.FromBase64String(command.Request.RowVersion!);
+        recipe.EnsureCurrentRowVersion(expectedRowVersion);
+
+        var activeSteps = recipe.Steps
+            .Where(step => !step.IsDeleted)
+            .OrderBy(step => step.StepNumber)
+            .ToList();
+        var orderedStepIds = command.Request.OrderedStepIds!;
+        var activeStepIds = activeSteps.Select(step => step.Id).ToHashSet();
+        if (orderedStepIds.Count != activeSteps.Count ||
+            !activeStepIds.SetEquals(orderedStepIds))
+        {
+            throw new ValidationException(new[]
+            {
+                new ValidationFailure(
+                    "Request.OrderedStepIds",
+                    "The ordered step IDs must contain every active step exactly once.")
+            });
+        }
+
+        if (activeSteps.Select(step => step.Id).SequenceEqual(orderedStepIds))
+            return RecipeStepCommandResult.CreateResult(recipe);
+
+        var stepById = activeSteps.ToDictionary(step => step.Id);
+        var temporaryStart = FindTemporaryStart(activeSteps);
+
+        await unitOfWork.Recipes.ExecuteInTransactionAsync(
+            async transactionCancellationToken =>
+            {
+                for (var index = 0; index < activeSteps.Count; index++)
+                    activeSteps[index].StepNumber = checked(temporaryStart + index);
+
+                recipe.UpdatedAt = clock.GetUtcNow().UtcDateTime;
+                unitOfWork.Recipes.Update(recipe, expectedRowVersion);
+                await unitOfWork.SaveChangesAsync(transactionCancellationToken);
+
+                for (var index = 0; index < orderedStepIds.Count; index++)
+                    stepById[orderedStepIds[index]].StepNumber = index + 1;
+
+                await unitOfWork.SaveChangesAsync(transactionCancellationToken);
+                return true;
+            },
+            cancellationToken);
+
+        if (invalidator is not null)
+            await invalidator.RecipeChangedAsync(recipe.Slug, cancellationToken);
+
+        return RecipeStepCommandResult.CreateResult(recipe);
+    }
+
+    private static int FindTemporaryStart(IReadOnlyCollection<RecipeStep> activeSteps)
+    {
+        var count = activeSteps.Count;
+        var unavailable = activeSteps.Select(step => step.StepNumber).ToHashSet();
+        for (long target = 1; target <= count; target++)
+            unavailable.Add((int)target);
+
+        long start = 1;
+        foreach (var occupied in unavailable.OrderBy(number => number))
+        {
+            if (occupied < start) continue;
+            if ((long)occupied - start >= count) break;
+            start = (long)occupied + 1;
+        }
+
+        if (start + count - 1 > int.MaxValue)
+            throw new InvalidOperationException("No positive temporary step numbers are available.");
+
+        return (int)start;
     }
 }
 

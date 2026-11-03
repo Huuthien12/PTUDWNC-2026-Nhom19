@@ -5,6 +5,8 @@ using Microsoft.Extensions.Options;
 using CulinaryBlog.Domain.Exceptions;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using Minio.Exceptions;
 
 namespace CulinaryBlog.Infrastructure.Storage;
 
@@ -25,12 +27,16 @@ public sealed class MinioFileStorageService(
     IImageCleanupQueue cleanup,
     ILogger<MinioFileStorageService> logger) : IFileStorageService
 {
-    public async Task<StoredFile> StoreAsync(Guid recipeId, Stream content, string? declaredContentType,
+    public async Task<StoredFile> StoreAsync(Guid recipeId, Guid uploadId, Stream content, string? declaredContentType,
         CancellationToken cancellationToken = default)
     {
         var image = validator.Validate(content, declaredContentType);
         var config = options.Value;
-        var objectKey = $"recipes/{recipeId:D}/{Guid.NewGuid():N}.{image.Extension}";
+        content.Position = 0;
+        var contentHash = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+        content.Position = 0;
+        // Same-file retries reuse the object key; a different payload cannot overwrite it.
+        var objectKey = $"recipes/{recipeId:D}/{uploadId:N}-{contentHash}.{image.Extension}";
         var client = CreateClient(config);
         try
         {
@@ -92,9 +98,7 @@ public sealed class MinioFileStorageService(
                 {
                     try
                     {
-                        await client.RemoveObjectAsync(new RemoveObjectArgs()
-                            .WithBucket(config.Bucket)
-                            .WithObject(uploadedKey), cancellationToken);
+                        await DeleteAsync(uploadedKey, cancellationToken);
                     }
                     catch (Exception cleanupException)
                     {
@@ -136,8 +140,63 @@ public sealed class MinioFileStorageService(
     public async Task DeleteAsync(string objectKey, CancellationToken cancellationToken = default)
     {
         var config = options.Value;
-        try { await CreateClient(config).RemoveObjectAsync(new RemoveObjectArgs().WithBucket(config.Bucket).WithObject(objectKey), cancellationToken); }
-        catch (Exception) { throw new ServiceUnavailableException("MINIO_UNAVAILABLE", "Image storage is unavailable."); }
+        var client = CreateClient(config);
+        Exception? deleteException = null;
+        try
+        {
+            await client.RemoveObjectAsync(new RemoveObjectArgs()
+                .WithBucket(config.Bucket)
+                .WithObject(objectKey), cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            deleteException = exception;
+        }
+
+        using var verificationTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        try
+        {
+            await client.StatObjectAsync(new StatObjectArgs()
+                .WithBucket(config.Bucket)
+                .WithObject(objectKey), verificationTimeout.Token);
+        }
+        catch (ObjectNotFoundException)
+        {
+            if (deleteException is not null)
+                logger.LogWarning(deleteException,
+                    "MinIO reported an uncertain deletion for {ObjectKey}, but a follow-up check confirmed it is absent.",
+                    objectKey);
+            return;
+        }
+        catch (Exception verificationException)
+        {
+            logger.LogError(deleteException ?? verificationException,
+                "Could not verify deletion of image object {ObjectKey}.", objectKey);
+            if (cancellationToken.IsCancellationRequested)
+                throw new OperationCanceledException(
+                    "Image deletion was cancelled and its result could not be verified.",
+                    deleteException ?? verificationException,
+                    cancellationToken);
+            throw new ServiceUnavailableException(
+                "IMAGE_DELETE_UNCONFIRMED",
+                "Image deletion could not be verified.");
+        }
+
+        if (deleteException is not null)
+        {
+            logger.LogError(deleteException, "Image object {ObjectKey} remains after a failed delete request.", objectKey);
+            if (cancellationToken.IsCancellationRequested)
+                throw new OperationCanceledException(
+                    "Image deletion was cancelled and the object remains present.",
+                    deleteException,
+                    cancellationToken);
+            throw new ServiceUnavailableException("MINIO_UNAVAILABLE", "Image storage is unavailable.");
+        }
+
+        logger.LogError("Image object {ObjectKey} remains after MinIO acknowledged its deletion.", objectKey);
+        throw new ServiceUnavailableException(
+            "IMAGE_DELETE_UNCONFIRMED",
+            "Image deletion could not be verified.");
     }
 
     public async IAsyncEnumerable<StoredImageObject> ListRecipeObjectsAsync(

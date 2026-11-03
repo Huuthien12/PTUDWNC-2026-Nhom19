@@ -113,6 +113,13 @@ public interface IRecipeRepository
     // Returns a tracked recipe with its (non-deleted) Images for RecipeImage mutations.
     Task<Recipe?> GetForImagesAsync(Guid id, CancellationToken cancellationToken = default);
 
+    // Image IDs are global primary keys; include deleted rows so an upload ID cannot be reused.
+    Task<RecipeImage?> GetImageByIdAsync(Guid imageId, CancellationToken cancellationToken = default);
+
+    Task<byte[]?> GetCurrentRowVersionAsync(
+        Guid recipeId,
+        CancellationToken cancellationToken = default);
+
     // New RecipeImage rows have client-generated GUIDs, so they must be tracked explicitly as Added.
     void AddImage(RecipeImage image);
 

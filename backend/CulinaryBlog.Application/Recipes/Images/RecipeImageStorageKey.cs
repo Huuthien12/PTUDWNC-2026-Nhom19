@@ -3,9 +3,29 @@ using CulinaryBlog.Domain.Entities;
 namespace CulinaryBlog.Application.Recipes.Images;
 
 // The DB stores public URLs; IFileStorageService.DeleteAsync needs the object key
-// (FR-FILE-002: "Trich xuat object name tu URL"). Keys look like recipes/{recipeId}/{guid}.{ext}.
+// (FR-FILE-002: "Trich xuat object name tu URL"). Objects stay under recipes/{recipeId}/;
+// current uploads use {uploadId}-{contentHash}.{ext} names and older GUID names remain valid.
 public static class RecipeImageStorageKey
 {
+    private const int Sha256HexLength = 64;
+
+    public static bool TryGetRecipeIdFromObjectKey(string? objectKey, out Guid recipeId)
+    {
+        recipeId = Guid.Empty;
+        if (string.IsNullOrWhiteSpace(objectKey) ||
+            objectKey.Contains('\\') ||
+            objectKey.Contains("//", StringComparison.Ordinal) ||
+            objectKey.Contains("..", StringComparison.Ordinal))
+            return false;
+
+        const string prefix = "recipes/";
+        if (!objectKey.StartsWith(prefix, StringComparison.Ordinal)) return false;
+        var recipeEnd = objectKey.IndexOf('/', prefix.Length);
+        return recipeEnd > prefix.Length &&
+            recipeEnd < objectKey.Length - 1 &&
+            Guid.TryParseExact(objectKey.AsSpan(prefix.Length, recipeEnd - prefix.Length), "D", out recipeId);
+    }
+
     public static bool TryFromUrl(string? url, Guid recipeId, out string objectKey)
     {
         objectKey = string.Empty;
@@ -24,6 +44,36 @@ public static class RecipeImageStorageKey
             return false;
 
         objectKey = key;
+        return true;
+    }
+
+    public static bool TryGetUploadContentHash(
+        string? url,
+        Guid recipeId,
+        Guid uploadId,
+        out string contentHash)
+    {
+        contentHash = string.Empty;
+        if (!TryFromUrl(url, recipeId, out var objectKey)) return false;
+
+        var fileName = objectKey[(objectKey.LastIndexOf('/') + 1)..];
+        var uploadPrefix = $"{uploadId:N}-";
+        var extensionIndex = fileName.LastIndexOf('.');
+        if (!fileName.StartsWith(uploadPrefix, StringComparison.Ordinal) ||
+            extensionIndex < uploadPrefix.Length + Sha256HexLength ||
+            extensionIndex != uploadPrefix.Length + Sha256HexLength)
+            return false;
+
+        var hash = fileName.AsSpan(uploadPrefix.Length, Sha256HexLength);
+        foreach (var character in hash)
+        {
+            if (!((character >= '0' && character <= '9') ||
+                  (character >= 'a' && character <= 'f') ||
+                  (character >= 'A' && character <= 'F')))
+                return false;
+        }
+
+        contentHash = hash.ToString();
         return true;
     }
 

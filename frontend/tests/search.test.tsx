@@ -5,14 +5,21 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from "rea
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import Home from "../src/app/page";
 import Loading from "../src/app/loading";
+import sitemap, { revalidate as sitemapRevalidate } from "../src/app/sitemap";
+import { metadata as categoriesMetadata, revalidate as categoriesRevalidate } from "../src/app/categories/page";
+import { generateMetadata as generateCategoryMetadata, revalidate as categoryDetailRevalidate } from "../src/app/categories/[slug]/page";
+import RecipeDetailPage, { generateMetadata, revalidate as recipeDetailRevalidate } from "../src/app/recipes/[slug]/page";
 import RecipesPage from "../src/app/recipes/page";
 import RecipeListClient from "../src/components/recipes/RecipeListClient";
 import SearchPagination from "../src/components/search/SearchPagination";
 import RecipePagination from "../src/components/recipes/RecipePagination";
 import RecipeImage from "../src/components/shared/RecipeImage";
 import ContentState from "../src/components/shared/ContentState";
+import { buildCategoryMetadata, buildRecipeJsonLd, buildRecipeMetadata, buildSiteMetadata, serializeJsonLd } from "../src/services/recipe-seo";
 import { searchRecipes } from "../src/services/search-service";
 import { clearRecipeRequests } from "../src/services/recipe-requests";
+import { getCategories, getCategoryBySlug } from "../src/services/category-service";
+import { getRecipeBySlug, getRecipes } from "../src/services/recipe-service";
 import type { RecipeSearchPage } from "../src/types/search";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -396,4 +403,210 @@ test("homepage has a route loading state", async () => {
   await render(<Loading />);
   assert.match(text(view!.root), /Đang tải trang chủ/);
   assert.equal(view!.root.findByProps({ role: "status" }).type, "p");
+});
+
+test("homepage renders category list inside a sidebar alongside latest recipes", async () => {
+  globalThis.fetch = async (url) => String(url).includes("/categories")
+    ? Response.json([
+        { id: "c1", name: "Món Việt", slug: "mon-viet", description: null, recipeCount: 5 },
+        { id: "c2", name: "Món Chay", slug: "mon-chay", description: null, recipeCount: 3 },
+      ])
+    : Response.json({
+        items: [{ id: "r1", slug: "canh-chua", title: "Canh chua cá lóc", description: "Đậm đà", prepTime: 15, cookTime: 25, servings: 4, difficulty: 1, thumbnailUrl: null, mediumUrl: null, publishedAt: null }],
+        totalCount: 1, page: 1, pageSize: 6, totalPages: 1,
+      });
+
+  await render(<Home />);
+
+  const sidebar = view!.root.findByType("aside");
+  assert.equal(sidebar.props["aria-label"], "Danh mục món ăn");
+  assert.match(text(sidebar), /Món Việt/);
+  assert.match(text(sidebar), /Món Chay/);
+  assert.match(text(view!.root), /Canh chua cá lóc/);
+});
+
+test("empty search or filtered recipe list offers a reset link back to all recipes", async () => {
+  globalThis.fetch = async () => Response.json(emptyPage);
+  await render(<RecipeListClient page={1} query="phở" />);
+  const links = view!.root.findAll((node) => node.props.href === "/recipes");
+  assert.ok(links.length >= 1);
+  assert.match(text(view!.root), /Xem tất cả món ăn/);
+});
+
+test("sitemap includes static routes, categories, and recipes with graceful upstream fallback", async () => {
+  globalThis.fetch = async (url) => String(url).includes("/categories")
+    ? Response.json([{ id: "c1", name: "Món Việt", slug: "mon-viet", description: null, recipeCount: 2 }])
+    : Response.json({
+        items: [{ id: "r1", slug: "bun-bo-hue", title: "Bún bò Huế", description: "Cay nồng", prepTime: 20, cookTime: 60, servings: 4, difficulty: 2, thumbnailUrl: null, mediumUrl: null, publishedAt: "2026-10-20T00:00:00Z" }],
+        totalCount: 1, page: 1, pageSize: 50, totalPages: 1,
+      });
+
+  const entries = await sitemap();
+  const urls = entries.map((entry) => entry.url);
+  assert.ok(urls.includes("http://localhost:3000/"));
+  assert.ok(urls.includes("http://localhost:3000/recipes"));
+  assert.ok(urls.includes("http://localhost:3000/categories"));
+  assert.ok(urls.includes("http://localhost:3000/categories/mon-viet"));
+  assert.ok(urls.includes("http://localhost:3000/recipes/bun-bo-hue"));
+
+  globalThis.fetch = async () => new Response(null, { status: 503 });
+  const fallbackEntries = await sitemap();
+  assert.equal(fallbackEntries.length, 3);
+});
+
+test("recipe SEO helpers build Open Graph metadata and Schema.org Recipe JSON-LD", () => {
+  const sampleRecipe = {
+    id: "r1",
+    slug: "pho-bo",
+    title: "Phở bò truyền thống",
+    description: "Nước dùng trong và thơm mùi quế hồi.",
+    instructions: "Ninh xương và chan nước dùng.",
+    prepTime: 30,
+    cookTime: 120,
+    servings: 4,
+    difficulty: 2 as const,
+    status: 2 as const,
+    rowVersion: "AQ==",
+    createdAt: "2026-10-01T00:00:00Z",
+    publishedAt: "2026-10-02T00:00:00Z",
+    author: { id: "a1", fullName: "Nguyễn Khiêm Thuận", avatarUrl: null },
+    category: { id: "c1", name: "Món nước", slug: "mon-nuoc" },
+    nutrition: { calories: 450, protein: 28, carbs: 52, fat: 12, fiber: 3 },
+    ingredients: [{ id: "i1", name: "Bánh phở", quantity: 500, unit: "g", notes: null, orderIndex: 0 }],
+    steps: [{ id: "s1", stepNumber: 1, title: "Ninh xương", description: "Hầm xương bò trong 2 giờ.", imageUrl: null, timerMinutes: 120, rowVersion: "AQ==" }],
+    images: [{ id: "img1", originalUrl: "https://storage.test/pho-original.jpg", mediumUrl: "https://storage.test/pho-medium.jpg", thumbnailUrl: null, altText: "Tô phở bò", isPrimary: true, orderIndex: 0 }],
+  };
+
+  const metadata = buildRecipeMetadata(sampleRecipe, "https://culinary.example");
+  assert.equal(metadata.title, "Phở bò truyền thống | Culinary Blog");
+  assert.equal(metadata.alternates?.canonical, "https://culinary.example/recipes/pho-bo");
+  assert.equal(metadata.openGraph?.title, "Phở bò truyền thống");
+
+  const jsonLd = buildRecipeJsonLd(sampleRecipe, "https://culinary.example");
+  assert.equal(jsonLd["@context"], "https://schema.org");
+  assert.equal(jsonLd["@type"], "Recipe");
+  assert.equal(jsonLd.name, "Phở bò truyền thống");
+  assert.equal(jsonLd.prepTime, "PT30M");
+  assert.equal(jsonLd.cookTime, "PT120M");
+  assert.equal(jsonLd.totalTime, "PT150M");
+  assert.deepEqual(jsonLd.recipeIngredient, ["500 g Bánh phở"]);
+});
+
+function sitemapRecipe(index: number, publishedAt = "2026-10-20T00:00:00Z") {
+  return { id: `r${index}`, slug: `recipe-${index}`, title: `Recipe ${index}`, description: "Published", prepTime: 10, cookTime: 20, servings: 2, difficulty: 1, thumbnailUrl: null, publishedAt };
+}
+
+async function sitemapFor(pages: Record<number, { items: ReturnType<typeof sitemapRecipe>[]; totalCount: number; page: number; pageSize: number; totalPages: number }>) {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/categories")) return Response.json([]);
+    const page = Number(new URL(String(url)).searchParams.get("page"));
+    return Response.json(pages[page]);
+  };
+  return sitemap();
+}
+
+test("sitemap handles zero, fewer than 50, and exactly 50 published recipes", async () => {
+  for (const count of [0, 3, 50]) {
+    const entries = await sitemapFor({
+      1: { items: Array.from({ length: count }, (_, index) => sitemapRecipe(index + 1)), totalCount: count, page: 1, pageSize: 50, totalPages: count ? 1 : 0 },
+    });
+    assert.equal(entries.filter((entry) => entry.url.includes("/recipes/")).length, count);
+  }
+});
+
+test("sitemap includes every later page once and excludes private recipes", async () => {
+  const requested: number[] = [];
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/categories")) return Response.json([]);
+    const page = Number(new URL(String(url)).searchParams.get("page"));
+    requested.push(page);
+    if (page === 1) return Response.json({ items: Array.from({ length: 50 }, (_, index) => sitemapRecipe(index + 1)), totalCount: 101, page, pageSize: 50, totalPages: 3 });
+    if (page === 2) return Response.json({ items: [...Array.from({ length: 50 }, (_, index) => sitemapRecipe(index + 51)), sitemapRecipe(1)], totalCount: 101, page, pageSize: 50, totalPages: 3 });
+    return Response.json({ items: [sitemapRecipe(101), sitemapRecipe(102, null as unknown as string)], totalCount: 101, page, pageSize: 50, totalPages: 3 });
+  };
+
+  const entries = await sitemap();
+  const recipeUrls = entries.filter((entry) => entry.url.includes("/recipes/")).map((entry) => entry.url);
+  assert.deepEqual(requested, [1, 2, 3]);
+  assert.equal(recipeUrls.length, 101);
+  assert.equal(new Set(recipeUrls).size, 101);
+  assert.ok(!recipeUrls.some((url) => url.endsWith("/recipe-102")));
+});
+
+test("recipe detail route emits public metadata and escaped JSON-LD only for a published recipe", async () => {
+  const recipe = {
+    id: "r1", slug: "pho-bo", title: "Phở </script><script>alert(1)</script>", description: "Nước dùng", instructions: "Ninh xương",
+    prepTime: 30, cookTime: 120, servings: 4, difficulty: 2, status: 2, rowVersion: "AQ==", createdAt: "2026-10-01T00:00:00Z", publishedAt: "2026-10-02T00:00:00Z",
+    author: { id: "a1", fullName: "Tác giả", avatarUrl: null }, category: { id: "c1", name: "Món nước", slug: "mon-nuoc" }, nutrition: null,
+    ingredients: [], steps: [], images: [],
+  };
+  globalThis.fetch = async () => Response.json(recipe);
+  const metadata = await generateMetadata({ params: Promise.resolve({ slug: recipe.slug }) });
+  assert.equal(metadata.alternates?.canonical, "http://localhost:3000/recipes/pho-bo");
+  const page = await RecipeDetailPage({ params: Promise.resolve({ slug: recipe.slug }) });
+  const [script, client] = page.props.children;
+  assert.equal(script.type, "script");
+  assert.equal(client.props.slug, recipe.slug);
+  assert.ok(!script.props.dangerouslySetInnerHTML.__html.includes("</script>"));
+  assert.match(script.props.dangerouslySetInnerHTML.__html, /\\u003c\/script>/);
+
+  globalThis.fetch = async () => new Response(null, { status: 404 });
+  const hidden = await generateMetadata({ params: Promise.resolve({ slug: "draft" }) });
+  assert.deepEqual(hidden.robots, { index: false, follow: false });
+  assert.equal(serializeJsonLd({ value: "<script>" }), '{"value":"\\u003cscript>"}');
+});
+
+test("category SEO metadata, root Open Graph metadata, and ISR revalidate exports are configured", async () => {
+  assert.equal(sitemapRevalidate, 120);
+  assert.equal(recipeDetailRevalidate, 120);
+  assert.equal(categoriesRevalidate, 120);
+  assert.equal(categoryDetailRevalidate, 120);
+  const rootMetadata = buildSiteMetadata("https://culinary.example");
+  assert.equal(rootMetadata.alternates?.canonical, "/");
+  assert.equal(rootMetadata.openGraph?.siteName, "Culinary Blog");
+  assert.equal(categoriesMetadata.alternates?.canonical, "/categories");
+
+  const catMeta = buildCategoryMetadata(
+    { name: "Món nước", slug: "mon-nuoc", description: "Các món nước truyền thống." },
+    "https://culinary.example"
+  );
+  assert.equal(catMeta.title, "Món nước | Culinary Blog");
+  assert.equal(catMeta.alternates?.canonical, "https://culinary.example/categories/mon-nuoc");
+  assert.equal(catMeta.openGraph?.title, "Món nước | Culinary Blog");
+
+  globalThis.fetch = async () =>
+    Response.json({
+      category: { id: "c1", name: "Món chay", slug: "mon-chay", description: null, recipeCount: 4 },
+      recipes: emptyPage,
+    });
+  const dynamicMeta = await generateCategoryMetadata({ params: Promise.resolve({ slug: "mon-chay" }) });
+  assert.equal(dynamicMeta.title, "Món chay | Culinary Blog");
+  assert.equal(dynamicMeta.alternates?.canonical, "http://localhost:3000/categories/mon-chay");
+
+  globalThis.fetch = async () => new Response(null, { status: 404 });
+  const missingMeta = await generateCategoryMetadata({ params: Promise.resolve({ slug: "khong-ton-tai" }) });
+  assert.deepEqual(missingMeta.robots, { index: false, follow: false });
+});
+
+test("public category and recipe reads use the ISR cache tags declared by their routes", async () => {
+  const requests: RequestInit[] = [];
+  globalThis.fetch = async (_url, init) => {
+    requests.push(init ?? {});
+    return Response.json({});
+  };
+
+  await getCategories();
+  await getCategoryBySlug("mon-chay");
+  await getRecipes();
+  await getRecipeBySlug("pho-bo");
+
+  assert.deepEqual(requests.map((request) => ({
+    cache: request.cache,
+    next: request.next,
+  })), [
+    { cache: "force-cache", next: { revalidate: 120, tags: ["categories"] } },
+    { cache: "force-cache", next: { revalidate: 120, tags: ["categories"] } },
+    { cache: "force-cache", next: { revalidate: 120, tags: ["recipes"] } },
+    { cache: "force-cache", next: { revalidate: 120, tags: ["recipes"] } },
+  ]);
 });
