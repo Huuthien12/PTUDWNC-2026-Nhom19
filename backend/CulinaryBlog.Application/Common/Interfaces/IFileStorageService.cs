@@ -16,6 +16,8 @@ public interface IFileStorageService
 
     Task DeleteAsync(string objectKey, CancellationToken cancellationToken = default);
 
+    Task<StoredFileContent?> ReadAsync(string objectKey, CancellationToken cancellationToken = default);
+
     IAsyncEnumerable<StoredImageObject> ListRecipeObjectsAsync(CancellationToken cancellationToken = default);
 
     Task<bool> IsAvailableAsync(CancellationToken cancellationToken = default);
@@ -34,3 +36,4 @@ public sealed record StoredImageVariants(
     StoredImageVariant Thumbnail);
 
 public sealed record StoredImageObject(string ObjectKey, DateTime LastModifiedUtc);
+public sealed record StoredFileContent(Stream Content, string ContentType);

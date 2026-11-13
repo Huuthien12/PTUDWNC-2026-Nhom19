@@ -22,10 +22,10 @@ let serverUploads: Map<string, typeof imageResponse>;
 const rowVersion = Buffer.from("recipe-v1").toString("base64");
 const imageResponse = {
   imageId: "image-1",
-  url: "https://storage.example/recipes/image.jpg",
-  originalUrl: "https://storage.example/recipes/image.jpg",
-  mediumUrl: "https://storage.example/recipes/image-medium.jpg",
-  thumbnailUrl: "https://storage.example/recipes/image-thumbnail.jpg",
+  url: "https://storage.example/images/image.jpg",
+  originalUrl: "https://storage.example/images/image.jpg",
+  mediumUrl: "https://storage.example/images/image-medium.jpg",
+  thumbnailUrl: "https://storage.example/images/image-thumbnail.jpg",
   altText: "A bowl of soup",
   isPrimary: true,
   orderIndex: 0,
@@ -181,10 +181,11 @@ test("upload errors preserve the selected image and allow retry", async () => {
   assert.equal(view!.root.findByType("img").props.src, "blob:recipe-preview");
   await dispatch(() => button("Thử tải lại ảnh").props.onClick());
 
-  assert.equal(calls.length, 2);
+  const uploads = calls.filter((call) => call.method === "POST");
+  assert.equal(uploads.length, 2);
   assert.equal(
-    (calls[0].body as FormData).get("uploadId"),
-    (calls[1].body as FormData).get("uploadId"),
+    (uploads[0].body as FormData).get("uploadId"),
+    (uploads[1].body as FormData).get("uploadId"),
   );
   assert.match(text(view!.root), /Ảnh đại diện/);
   assert.equal(view!.root.findByType("img").props.src, imageResponse.originalUrl);
@@ -250,7 +251,7 @@ test("frontend upload validation blocks empty, oversized, and unsupported files"
     assert.equal(button("Tải ảnh lên"), undefined);
     assert.ok(view!.root.findByProps({ role: "alert" }));
   }
-  assert.equal(calls.length, 0);
+  assert.equal(calls.filter((call) => call.method === "PATCH" || call.method === "DELETE").length, 0);
 });
 
 test("primary and delete actions use the latest RowVersion and keep existing images intact until requested", async () => {

@@ -6,6 +6,9 @@ import { getRecipes } from "@/services/recipe-service";
 import type { Category } from "@/types/category";
 import type { RecipePage } from "@/types/recipe";
 
+// Homepage data is fetched from the API at request time in Compose; the API is not available while its image builds.
+export const dynamic = "force-dynamic";
+
 async function CategorySection() {
   let categories: Category[] = [];
   let categoriesFailed = false;

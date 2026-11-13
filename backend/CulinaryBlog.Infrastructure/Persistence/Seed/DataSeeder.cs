@@ -1,4 +1,3 @@
-using Bogus;
 using CulinaryBlog.Domain.Entities;
 using CulinaryBlog.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
@@ -89,9 +88,6 @@ public static class DataSeeder
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole> roleManager)
     {
-        // Cố định seed để dữ liệu có thể tái tạo.
-        Randomizer.Seed = new Random(2312753);
-
         Console.WriteLine("===== LAB 02 DATA SEED =====");
 
         var author = await SeedAuthorAsync(userManager, roleManager);
@@ -106,6 +102,84 @@ public static class DataSeeder
             categories);
 
         Console.WriteLine("===== SEED COMPLETED =====");
+    }
+
+    private static async Task UpgradeRecognizableRealRecipesAsync(
+        AppDbContext context, ApplicationUser author, IReadOnlyList<Category> categories)
+    {
+        var targets = Catalog()
+            .Select((recipe, index) => (Number: index + 1, Recipe: recipe))
+            .ToDictionary(item => $"lab02-recipe-{item.Number}", item => item);
+        var categoryNames = categories.ToDictionary(category => category.Id, category => category.Name);
+        var recipes = await context.Recipes
+            .Where(recipe => recipe.AuthorId == author.Id && targets.Keys.Contains(recipe.Slug))
+            .Include(recipe => recipe.Ingredients)
+            .Include(recipe => recipe.Steps)
+            .Include(recipe => recipe.Nutrition)
+            .ToListAsync();
+
+        var eligible = recipes.Where(recipe => targets.TryGetValue(recipe.Slug, out var target) &&
+            categoryNames.TryGetValue(recipe.CategoryId, out var categoryName) &&
+            SameCategory(categoryName, target.Recipe.CategoryName) &&
+            IsUntouchedLegacyRecipe(recipe, target.Number, categoryName)).ToList();
+
+        if (eligible.Count == 0)
+            return;
+
+        await using var transaction = await context.Database.BeginTransactionAsync();
+        foreach (var recipe in eligible)
+        {
+            var target = targets[recipe.Slug].Recipe;
+            context.RecipeIngredients.RemoveRange(recipe.Ingredients);
+            context.RecipeSteps.RemoveRange(recipe.Steps);
+            await context.SaveChangesAsync();
+
+            recipe.Title = target.Title;
+            recipe.Description = target.Description;
+            recipe.Instructions = string.Join("\n\n", target.Steps.Select(step => $"{step.Title}: {step.Description}"));
+            recipe.PrepTime = target.PrepTime;
+            recipe.CookTime = target.CookTime;
+            recipe.Servings = target.Servings;
+            recipe.Difficulty = target.Difficulty;
+            recipe.UpdatedAt = DateTime.UtcNow;
+            recipe.Nutrition.Calories = null;
+            recipe.Nutrition.Protein = null;
+            recipe.Nutrition.Carbs = null;
+            recipe.Nutrition.Fat = null;
+            foreach (var (ingredient, index) in target.Ingredients.Select((item, index) => (item, index)))
+                context.RecipeIngredients.Add(new RecipeIngredient
+                {
+                    RecipeId = recipe.Id, Name = ingredient.Name, Quantity = ingredient.Quantity,
+                    Unit = ingredient.Unit, Notes = ingredient.Notes, OrderIndex = index + 1
+                });
+            foreach (var (step, index) in target.Steps.Select((item, index) => (item, index)))
+                context.RecipeSteps.Add(new RecipeStep
+                {
+                    RecipeId = recipe.Id, StepNumber = index + 1, Title = step.Title,
+                    Description = step.Description, TimerMinutes = step.TimerMinutes
+                });
+        }
+
+        await context.SaveChangesAsync();
+        await transaction.CommitAsync();
+        Console.WriteLine($"Upgraded {eligible.Count} untouched real-recipe seed records.");
+    }
+
+    private static bool IsUntouchedLegacyRecipe(Recipe recipe, int number, string categoryName) =>
+        recipe.Title == $"Công thức #{number:00}" &&
+        recipe.Description == RecipeDescription(categoryName) &&
+        recipe.Instructions == "Thực hiện theo các bước chế biến bên dưới." &&
+        recipe.Ingredients.Count(ingredient => !ingredient.IsDeleted) == IngredientsPerRecipe &&
+        recipe.Steps.Count(step => !step.IsDeleted) == StepsPerRecipe &&
+        recipe.Steps.Where(step => !step.IsDeleted).All(step => step.StepNumber is >= 1 and <= StepsPerRecipe &&
+            step.Title == $"Bước {step.StepNumber}" && step.Description == StepDescriptions[step.StepNumber - 1]);
+
+    private static bool SameCategory(string left, string right)
+    {
+        static string Normalize(string value) => string.Concat(value.Normalize(System.Text.NormalizationForm.FormD)
+            .Where(character => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(character) != System.Globalization.UnicodeCategory.NonSpacingMark))
+            .ToLowerInvariant();
+        return Normalize(left) == Normalize(right);
     }
 
     // =========================================================
@@ -289,232 +363,26 @@ public static class DataSeeder
     // RECIPES
     // =========================================================
 
+    private static IReadOnlyList<RealRecipeSeed> Catalog() => RealRecipeSeedBatch01.Items
+        .Concat(RealRecipeSeedBatch02.Items).Concat(RealRecipeSeedBatch03.Items)
+        .Concat(RealRecipeSeedBatch04.Items).Concat(RealRecipeSeedBatch05.Items).ToList();
+
     private static async Task SeedRecipesAsync(
         AppDbContext context,
         ApplicationUser author,
         IReadOnlyList<Category> categories)
     {
-        var existingRecipes =
-            await context.Recipes
-                .IgnoreQueryFilters()
-                .CountAsync();
-
-        if (existingRecipes >= RequiredRecipes)
+        var existing = await context.Recipes.IgnoreQueryFilters().Where(x => x.AuthorId == author.Id && x.Slug.StartsWith("lab02-recipe-")).Select(x => x.Slug).ToListAsync();
+        foreach (var (seed, index) in Catalog().Select((seed, index) => (seed, index)))
         {
-            Console.WriteLine(
-                $"Recipes already exist: {existingRecipes}");
-
-            return;
-        }
-
-        var faker = new Faker("vi");
-
-        var ingredientNames = new[]
-        {
-            "Thịt heo",
-            "Thịt bò",
-            "Thịt gà",
-            "Cá",
-            "Tôm",
-            "Trứng",
-            "Cà rốt",
-            "Khoai tây",
-            "Cà chua",
-            "Hành tây",
-            "Hành lá",
-            "Tỏi",
-            "Gừng",
-            "Nấm",
-            "Đậu hũ",
-            "Rau cải",
-            "Ớt",
-            "Nước mắm",
-            "Đường",
-            "Muối",
-            "Tiêu",
-            "Dầu ăn",
-            "Nước tương",
-            "Bột nêm"
-        };
-
-        var units = new[]
-        {
-            "g",
-            "kg",
-            "ml",
-            "l",
-            "muỗng",
-            "thìa",
-            "củ",
-            "quả"
-        };
-
-        var numberToCreate =
-            RequiredRecipes - existingRecipes;
-
-        for (var index = 0;
-             index < numberToCreate;
-             index++)
-        {
-            var recipeNumber =
-                existingRecipes + index + 1;
-
-            var category =
-                categories[
-                    index % categories.Count];
-
-            var recipe = new Recipe
-            {
-                Title =
-                    $"Công thức #{recipeNumber:00}",
-
-                Slug =
-                    $"lab02-recipe-{recipeNumber}",
-
-                Description =
-                    RecipeDescription(category.Name),
-
-                Instructions =
-                    "Thực hiện theo các bước chế biến bên dưới.",
-
-                PrepTime =
-                    faker.Random.Int(5, 60),
-
-                CookTime =
-                    faker.Random.Int(10, 120),
-
-                Servings =
-                    faker.Random.Int(1, 8),
-
-                Difficulty =
-                    faker.PickRandom<RecipeDifficulty>(),
-
-                Status =
-                    RecipeStatus.Published,
-
-                CategoryId =
-                    category.Id,
-
-                AuthorId =
-                    author.Id,
-
-                PublishedAt =
-                    DateTime.UtcNow.AddDays(
-                        -faker.Random.Int(0, 180)),
-
-                Nutrition = new RecipeNutrition
-                {
-                    Calories =
-                        faker.Random.Decimal(
-                            100,
-                            900),
-
-                    Protein =
-                        faker.Random.Decimal(
-                            5,
-                            80),
-
-                    Carbs =
-                        faker.Random.Decimal(
-                            5,
-                            120),
-
-                    Fat =
-                        faker.Random.Decimal(
-                            1,
-                            60)
-                }
-            };
-
-            // =============================================
-            // 10 INGREDIENTS / RECIPE
-            // =============================================
-
-            var selectedIngredients =
-                faker.PickRandom(
-                    ingredientNames,
-                    IngredientsPerRecipe)
-                .ToList();
-
-            for (var ingredientIndex = 0;
-                 ingredientIndex <
-                 IngredientsPerRecipe;
-                 ingredientIndex++)
-            {
-                recipe.Ingredients.Add(
-                    new RecipeIngredient
-                    {
-                        Name =
-                            selectedIngredients[
-                                ingredientIndex],
-
-                        Quantity =
-                            Math.Round(
-                                faker.Random.Decimal(
-                                    1,
-                                    500),
-                                2),
-
-                        Unit =
-                            faker.PickRandom(units),
-
-                        Notes =
-                            ingredientIndex % 4 == 0
-                                ? "Điều chỉnh theo khẩu vị"
-                                : null,
-
-                        OrderIndex =
-                            ingredientIndex + 1
-                    });
-            }
-
-            // =============================================
-            // 5 STEPS / RECIPE
-            // =============================================
-
-            for (var stepNumber = 1;
-                 stepNumber <= StepsPerRecipe;
-                 stepNumber++)
-            {
-                recipe.Steps.Add(
-                    new RecipeStep
-                    {
-                        StepNumber =
-                            stepNumber,
-
-                        Title =
-                            $"Bước {stepNumber}",
-
-                        Description =
-                            StepDescriptions[stepNumber - 1],
-
-                        TimerMinutes =
-                            faker.Random.Int(2, 20)
-                    });
-            }
-
+            var slug = $"lab02-recipe-{index + 1}";
+            if (existing.Contains(slug)) continue;
+            var category = categories.Single(x => SameCategory(x.Name, seed.CategoryName));
+            var recipe = new Recipe { Title = seed.Title, Slug = slug, Description = seed.Description, Instructions = string.Join("\n\n", seed.Steps.Select(x => $"{x.Title}: {x.Description}")), PrepTime = seed.PrepTime, CookTime = seed.CookTime, Servings = seed.Servings, Difficulty = seed.Difficulty, Status = RecipeStatus.Published, CategoryId = category.Id, AuthorId = author.Id, PublishedAt = DateTime.UtcNow, Nutrition = new RecipeNutrition() };
+            foreach (var (item, order) in seed.Ingredients.Select((item, order) => (item, order))) recipe.Ingredients.Add(new RecipeIngredient { Name = item.Name, Quantity = item.Quantity, Unit = item.Unit, Notes = item.Notes, OrderIndex = order + 1 });
+            foreach (var (item, order) in seed.Steps.Select((item, order) => (item, order))) recipe.Steps.Add(new RecipeStep { StepNumber = order + 1, Title = item.Title, Description = item.Description, TimerMinutes = item.TimerMinutes });
             context.Recipes.Add(recipe);
         }
-
         await context.SaveChangesAsync();
-
-        var finalRecipeCount =
-            await context.Recipes
-                .IgnoreQueryFilters()
-                .CountAsync();
-
-        Console.WriteLine(
-            $"Recipes: {finalRecipeCount}");
-
-        Console.WriteLine(
-            $"Created {numberToCreate} recipes.");
-
-        Console.WriteLine(
-            $"Each generated recipe contains " +
-            $"{IngredientsPerRecipe} ingredients.");
-
-        Console.WriteLine(
-            $"Each generated recipe contains " +
-            $"{StepsPerRecipe} steps.");
     }
 }

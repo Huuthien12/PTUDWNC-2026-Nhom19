@@ -13,7 +13,23 @@ node_modules/
 out/
 build/
 .env.local
+.env
 
 # Docker & OS
 .DS_Store
 Thumbs.db
+
+# Local-only seed upgrade, review, backup, and browser artifacts
+/.playwright-cli/
+/.worktrees/
+/backups/
+/audit-reports/
+/batch1/
+/batch2/
+/CulinaryBlog_Batch03_05_60_Anh_DuThao/
+/seed-assets/
+/seed-upgrade-*/
+/seed-upgrade-*.json
+*.dump
+/frontend/curl.exe
+/frontend/frontend/
