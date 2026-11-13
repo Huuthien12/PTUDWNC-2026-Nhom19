@@ -82,6 +82,10 @@ public sealed class FakeFileStorageService : IFileStorageService
 
     public Task<bool> IsAvailableAsync(CancellationToken cancellationToken = default) => Task.FromResult(!Unavailable);
 
+    public Task<StoredFileContent?> ReadAsync(string objectKey, CancellationToken cancellationToken = default)
+        => Task.FromResult<StoredFileContent?>(Objects.Any(item => item.ObjectKey == objectKey)
+            ? new StoredFileContent(new MemoryStream([0]), "image/webp") : null);
+
     public async IAsyncEnumerable<StoredImageObject> ListRecipeObjectsAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {

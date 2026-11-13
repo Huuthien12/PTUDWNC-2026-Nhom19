@@ -199,6 +199,32 @@ public sealed class MinioFileStorageService(
             "Image deletion could not be verified.");
     }
 
+    public async Task<StoredFileContent?> ReadAsync(string objectKey, CancellationToken cancellationToken = default)
+    {
+        var config = options.Value;
+        var content = new MemoryStream();
+        try
+        {
+            var stat = await CreateClient(config).StatObjectAsync(new StatObjectArgs()
+                .WithBucket(config.Bucket).WithObject(objectKey), cancellationToken);
+            await CreateClient(config).GetObjectAsync(new GetObjectArgs().WithBucket(config.Bucket)
+                .WithObject(objectKey).WithCallbackStream(stream => stream.CopyTo(content)), cancellationToken);
+            content.Position = 0;
+            return new StoredFileContent(content, string.IsNullOrWhiteSpace(stat.ContentType)
+                ? "application/octet-stream" : stat.ContentType);
+        }
+        catch (ObjectNotFoundException)
+        {
+            await content.DisposeAsync();
+            return null;
+        }
+        catch (Exception)
+        {
+            await content.DisposeAsync();
+            throw new ServiceUnavailableException("MINIO_UNAVAILABLE", "Image storage is unavailable.");
+        }
+    }
+
     public async IAsyncEnumerable<StoredImageObject> ListRecipeObjectsAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {

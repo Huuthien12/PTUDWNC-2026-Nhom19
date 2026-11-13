@@ -245,13 +245,13 @@ for (const [userId, roles, allowed] of [
   assert.equal(button("Lưu thay đổi").props.disabled, !allowed);
 });
 
-for (const [userId, roles, allowed] of [
-  ["other", ["Author"], false], ["owner", ["Author"], true], ["admin", ["Admin"], true],
-] as const) test(`detail page ownership gating: ${userId}/${roles[0]}`, async () => {
+for (const [userId, roles] of [
+  ["other", ["Author"]], ["owner", ["Author"]], ["admin", ["Admin"]],
+] as const) test(`detail page keeps ingredient editing out of the read view: ${userId}/${roles[0]}`, async () => {
   browser(userId, [...roles]);
   const params = Promise.resolve({ slug: "recipe" });
   await dispatch(() => { view = create(<Suspense fallback={<p>loading</p>}><RecipeDetailPage params={params} /></Suspense>); });
-  assert.equal(view!.root.findAllByType(IngredientEditor).length, allowed ? 1 : 0);
+  assert.equal(view!.root.findAllByType(IngredientEditor).length, 0);
 });
 
 test("drag-and-drop order is persisted with the same semantics as the arrow buttons", async () => {

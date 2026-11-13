@@ -1,11 +1,16 @@
 using System.Security.Claims;
+using CulinaryBlog.Application.Common.Interfaces;
 using CulinaryBlog.Application.Recipes.Commands;
+using CulinaryBlog.Application.Recipes.Images;
+using CulinaryBlog.Domain.Enums;
+using CulinaryBlog.Infrastructure.Persistence;
 using FluentValidation;
 using FluentValidation.Results;
 using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace CulinaryBlog.API.Recipes;
 
@@ -20,6 +25,7 @@ public static class RecipeImageEndpoints
     private const long MaxMultipartBytes = 5 * 1024 * 1024 + 64 * 1024;
     public static void MapRecipeImageEndpoints(this WebApplication app)
     {
+        app.MapGet("/api/v1/images", ReadAsync);
         var images = app.MapGroup("/api/v1/recipes/{id:guid}/images")
             .RequireAuthorization(policy => policy
                 .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)
@@ -28,6 +34,24 @@ public static class RecipeImageEndpoints
         images.MapPost("", UploadAsync);
         images.MapPatch("{imageId:guid}/primary", SetPrimaryAsync);
         images.MapDelete("{imageId:guid}", DeleteAsync);
+    }
+
+    private static async Task<IResult> ReadAsync(string source, ClaimsPrincipal user, AppDbContext db,
+        IFileStorageService storage, CancellationToken cancellationToken)
+    {
+        var image = await db.RecipeImages.Include(item => item.Recipe).SingleOrDefaultAsync(item =>
+            item.OriginalUrl == source || item.MediumUrl == source || item.ThumbnailUrl == source, cancellationToken);
+        if (image is null || !RecipeImageStorageKey.TryFromUrl(source, image.RecipeId, out var objectKey))
+            return Results.NotFound();
+
+        var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        var canRead = image.Recipe.Status == RecipeStatus.Published || user.IsInRole("Admin") ||
+            (!string.IsNullOrWhiteSpace(userId) && image.Recipe.AuthorId == userId);
+        if (!canRead) return Results.NotFound();
+
+        var content = await storage.ReadAsync(objectKey, cancellationToken);
+        return content is null ? Results.NotFound() : Results.File(content.Content, content.ContentType,
+            enableRangeProcessing: true);
     }
 
     private static async Task<IResult> UploadAsync(Guid id, HttpContext http, ClaimsPrincipal user,
