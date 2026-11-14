@@ -8,4 +8,6 @@ public interface IRecipeCacheInvalidator
     Task ListChangedAsync(CancellationToken cancellationToken);
     Task<string?> GetSuggestionVersionAsync(CancellationToken cancellationToken);
     Task InvalidateSuggestionsAsync(CancellationToken cancellationToken);
+    Task<string?> GetSearchVersionAsync(CancellationToken cancellationToken);
+    Task InvalidateSearchAsync(CancellationToken cancellationToken);
 }

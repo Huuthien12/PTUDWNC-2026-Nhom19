@@ -54,6 +54,7 @@ public sealed class CreateRecipeCommandHandler(IUnitOfWork unitOfWork, ICacheSer
         // No outer transaction: the atomic Recipe/Nutrition save has committed before eviction.
         await cache.RemoveSafelyAsync($"recipe:{recipe.Slug}", cancellationToken);
         if (invalidator is not null) await invalidator.ListChangedAsync(cancellationToken);
+        if (invalidator is not null) await invalidator.InvalidateSearchAsync(cancellationToken);
         return new RecipeDto(recipe.Id, recipe.Title, recipe.Slug, recipe.Description,
             recipe.Instructions, recipe.CategoryId, recipe.AuthorId, recipe.PrepTime,
             recipe.CookTime, recipe.Servings, recipe.Difficulty, recipe.Status,

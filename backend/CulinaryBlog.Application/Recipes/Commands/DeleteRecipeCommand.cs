@@ -35,6 +35,7 @@ public sealed class DeleteRecipeCommandHandler(IUnitOfWork unitOfWork, ICacheSer
         // Repeated deletes are filtered out by the repository and never reach eviction.
         await cache.RemoveSafelyAsync($"recipe:{slug}", cancellationToken);
         if (invalidator is not null) await invalidator.ListChangedAsync(cancellationToken);
+        if (invalidator is not null) await invalidator.InvalidateSearchAsync(cancellationToken);
         if (wasPublished)
             await cache.RemoveSafelyAsync("categories:all", cancellationToken);
         if (wasPublished && invalidator is not null)

@@ -24,7 +24,7 @@ export default async function RecipesPage({ searchParams }: {
     ...(difficulty !== undefined ? { difficulty } : {}),
     ...(maxCookTime !== undefined ? { maxCookTime } : {}),
     ...(Number.isInteger(rawServings) && rawServings >= 1 ? { minServings: rawServings } : {}),
-    sortBy: (params.sortBy ?? requestedSortBy) === "title" ? "title" : "createdAt",
+    sortBy: ["title", "cookTime"].includes(params.sortBy ?? requestedSortBy) ? (params.sortBy ?? requestedSortBy) as "title" | "cookTime" : "createdAt",
     sortOrder: (params.sortOrder ?? requestedSortOrder) === "asc" ? "asc" : "desc",
   };
   return <main className="cb-container cb-section"><h1 className="cb-section-title">{query ? `Kết quả tìm kiếm cho "${query}"` : "Danh sách món ăn"}</h1><RecipeListClient page={page} query={query} filters={filters} /></main>;

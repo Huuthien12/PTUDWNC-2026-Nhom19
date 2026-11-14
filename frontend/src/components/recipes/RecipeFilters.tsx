@@ -47,6 +47,8 @@ export default function RecipeFilters({
             <option value="createdAt-asc">Cũ nhất</option>
             <option value="title-asc">Tên A–Z</option>
             <option value="title-desc">Tên Z–A</option>
+            <option value="cookTime-asc">Nấu nhanh nhất</option>
+            <option value="cookTime-desc">Nấu lâu nhất</option>
           </select>
         </label>
         <label className="grid gap-2 text-sm font-semibold text-[#254b3b]" htmlFor="recipe-servings">

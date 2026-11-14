@@ -29,6 +29,7 @@ public sealed class ChangeRecipeLifecycleCommandHandler(IUnitOfWork unitOfWork, 
         // Idempotent actions still save a new RowVersion, so their cached DTO must also be evicted.
         await cache.RemoveSafelyAsync($"recipe:{recipe.Slug}", cancellationToken);
         if (invalidator is not null) await invalidator.ListChangedAsync(cancellationToken);
+        if (invalidator is not null) await invalidator.InvalidateSearchAsync(cancellationToken);
         if (invalidateCategoryCounts)
             await cache.RemoveSafelyAsync("categories:all", cancellationToken);
         if (invalidateSuggestions && invalidator is not null)

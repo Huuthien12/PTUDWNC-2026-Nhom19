@@ -394,6 +394,10 @@ public sealed class RecipeRepository : IRecipeRepository
                     .OrderBy(recipe => recipe.CreatedAt)
                     .ThenBy(recipe => recipe.Id),
 
+            "cooktime" => descending
+                ? query.OrderByDescending(recipe => recipe.CookTime).ThenBy(recipe => recipe.Id)
+                : query.OrderBy(recipe => recipe.CookTime).ThenBy(recipe => recipe.Id),
+
             _ => descending
                 ? query
                     .OrderByDescending(recipe => recipe.CreatedAt)
@@ -564,12 +568,21 @@ public sealed class RecipeRepository : IRecipeRepository
     string normalizedQuery,
     CancellationToken cancellationToken = default)
 {
-    var recipeSuggestions = await _context.Recipes
+    var recipes = _context.Recipes
         .AsNoTracking()
         .Where(recipe =>
             !recipe.IsDeleted &&
-            recipe.Status == RecipeStatus.Published &&
-            recipe.Title.ToLower().StartsWith(normalizedQuery))
+            recipe.Status == RecipeStatus.Published);
+    var categories = _context.Categories
+        .AsNoTracking()
+        .Where(category => !category.IsDeleted);
+
+    var isPostgres = _context.Database.IsNpgsql();
+    var recipeSuggestions = await (isPostgres
+        ? recipes.Where(recipe =>
+            EF.Functions.ILike(EF.Functions.Unaccent(recipe.Title),
+                EF.Functions.Unaccent(normalizedQuery) + "%"))
+        : recipes.Where(recipe => recipe.Title.ToLower().StartsWith(normalizedQuery)))
         .Select(recipe => new RecipeSuggestionDto(
             recipe.Title,
             "recipe",
@@ -577,11 +590,11 @@ public sealed class RecipeRepository : IRecipeRepository
         .Take(10)
         .ToListAsync(cancellationToken);
 
-    var categorySuggestions = await _context.Categories
-        .AsNoTracking()
-        .Where(category =>
-            !category.IsDeleted &&
-            category.Name.ToLower().StartsWith(normalizedQuery))
+    var categorySuggestions = await (isPostgres
+        ? categories.Where(category =>
+            EF.Functions.ILike(EF.Functions.Unaccent(category.Name),
+                EF.Functions.Unaccent(normalizedQuery) + "%"))
+        : categories.Where(category => category.Name.ToLower().StartsWith(normalizedQuery)))
         .Select(category => new RecipeSuggestionDto(
             category.Name,
             "category",

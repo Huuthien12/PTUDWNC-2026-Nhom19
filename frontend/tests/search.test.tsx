@@ -15,6 +15,7 @@ import SearchPagination from "../src/components/search/SearchPagination";
 import RecipePagination from "../src/components/recipes/RecipePagination";
 import RecipeImage from "../src/components/shared/RecipeImage";
 import ContentState from "../src/components/shared/ContentState";
+import SearchBar from "../src/components/search/SearchBar";
 import { buildCategoryMetadata, buildRecipeJsonLd, buildRecipeMetadata, buildSiteMetadata, serializeJsonLd } from "../src/services/recipe-seo";
 import { searchRecipes } from "../src/services/search-service";
 import { clearRecipeRequests } from "../src/services/recipe-requests";
@@ -25,10 +26,11 @@ import type { RecipeSearchPage } from "../src/types/search";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const originalFetch = globalThis.fetch;
 const originalSelf = Object.getOwnPropertyDescriptor(globalThis, "self");
+const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 let view: ReactTestRenderer | undefined;
 const emptyPage: RecipeSearchPage = { items: [], totalCount: 0, page: 1, pageSize: 12, totalPages: 0 };
 const router = {
-  back() {}, forward() {}, refresh() {}, hmrRefresh() {}, push() {}, replace() {}, prefetch() {},
+  back() {}, forward() {}, refresh() {}, hmrRefresh() {}, push(_href?: string) {}, replace() {}, prefetch() {},
   bfcacheId: "test",
 };
 
@@ -44,6 +46,8 @@ afterEach(async () => {
   view = undefined;
   globalThis.fetch = originalFetch;
   clearRecipeRequests();
+  if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+  else Reflect.deleteProperty(globalThis, "window");
 });
 
 function text(node: ReactTestInstance): string {
@@ -73,6 +77,28 @@ test("search query sends encoded q, page and pageSize", async () => {
   assert.equal(url.searchParams.get("q"), "phở & bò");
   assert.equal(url.searchParams.get("page"), "3");
   assert.equal(url.searchParams.get("pageSize"), "6");
+});
+
+test("search bar ignores an aborted suggestion response and supports keyboard selection", async () => {
+  Object.defineProperty(globalThis, "window", { configurable: true, value: globalThis });
+  const pushed: string[] = [];
+  router.push = (href?: string) => { if (href) pushed.push(href); };
+  let firstAbort = false;
+  globalThis.fetch = (_url, init) => new Promise<Response>((resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => { firstAbort = true; reject(new DOMException("", "AbortError")); });
+    setTimeout(() => resolve(Response.json({ items: [{ text: "Bánh mì", type: "recipe", slug: "banh-mi" }] })), 20);
+  });
+  await render(<SearchBar />);
+  const input = view!.root.findByProps({ id: "recipe-search" });
+  await act(async () => { input.props.onChange({ target: { value: "ba" } }); });
+  await act(async () => { input.props.onChange({ target: { value: "ban" } }); await new Promise(resolve => setTimeout(resolve, 500)); });
+  assert.ok(firstAbort);
+  const updatedInput = view!.root.findByProps({ id: "recipe-search" });
+  await act(async () => { updatedInput.props.onKeyDown({ key: "ArrowDown", preventDefault() {} }); });
+  const selectedInput = view!.root.findByProps({ id: "recipe-search" });
+  await act(async () => { selectedInput.props.onKeyDown({ key: "Enter", preventDefault() {} }); });
+  assert.deepEqual(pushed, ["/recipes?q=B%C3%A1nh%20m%C3%AC"]);
+  router.push = () => {};
 });
 
 test("recipes page ignores unsupported one-character queries and invalid pages", async () => {

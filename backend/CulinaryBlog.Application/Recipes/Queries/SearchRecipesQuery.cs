@@ -6,6 +6,7 @@ using CulinaryBlog.Application.Common.Models;
 using CulinaryBlog.Application.Recipes.DTOs;
 using FluentValidation;
 using MediatR;
+using Microsoft.Extensions.Logging;
 
 namespace CulinaryBlog.Application.Recipes.Queries;
 
@@ -24,12 +25,23 @@ public sealed class SearchRecipesQueryValidator : AbstractValidator<SearchRecipe
     }
 }
 
-public sealed class SearchRecipesQueryHandler(IUnitOfWork unitOfWork)
+public sealed class SearchRecipesQueryHandler(IUnitOfWork unitOfWork, ICacheService? cache = null,
+    IRecipeCacheInvalidator? invalidator = null, ILogger<SearchRecipesQueryHandler>? logger = null)
     : IRequestHandler<SearchRecipesQuery, PagedResult<RecipeSearchDto>>
 {
     public async Task<PagedResult<RecipeSearchDto>> Handle(
         SearchRecipesQuery request, CancellationToken cancellationToken)
     {
+        var normalizedQuery = request.Q.Trim().ToLowerInvariant();
+        var version = invalidator is null ? null : await invalidator.GetSearchVersionAsync(cancellationToken);
+        var cacheKey = version is null ? null : $"search:recipes:v{version}:{normalizedQuery}:{request.Page}:{request.PageSize}";
+        if (cacheKey is not null) try
+        {
+            var cached = await cache!.GetAsync<PagedResult<RecipeSearchDto>>(cacheKey, cancellationToken);
+            if (cached is not null) return cached;
+        }
+        catch (Exception error) when (CacheFailure.IsInfrastructure(error)) { CacheFailure.Log(logger, "recipe-search read", error); }
+
         var tsQuery = BuildPrefixQuery(request.Q);
         if (tsQuery.Length == 0)
             throw new ValidationException("Search query must contain searchable terms.");
@@ -53,8 +65,14 @@ public sealed class SearchRecipesQueryHandler(IUnitOfWork unitOfWork)
                 result.RelevanceScore);
         }).ToList();
         var totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)request.PageSize);
-        return new PagedResult<RecipeSearchDto>(
+        var page = new PagedResult<RecipeSearchDto>(
             items, totalCount, request.Page, request.PageSize, totalPages);
+        if (cacheKey is not null) try
+        {
+            await cache!.SetAsync(cacheKey, page, TimeSpan.FromSeconds(60), cancellationToken, useAbsoluteExpiration: true);
+        }
+        catch (Exception error) when (CacheFailure.IsInfrastructure(error)) { CacheFailure.Log(logger, "recipe-search write", error); }
+        return page;
     }
 
     private static string BuildPrefixQuery(string value)

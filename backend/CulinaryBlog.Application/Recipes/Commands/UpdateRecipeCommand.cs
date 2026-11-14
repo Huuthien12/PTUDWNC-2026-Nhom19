@@ -57,6 +57,7 @@ public sealed class UpdateRecipeCommandHandler(IUnitOfWork unitOfWork,
         // This update has no outer transaction: SaveChanges above must succeed before eviction.
         await cache.RemoveSafelyAsync($"recipe:{recipe.Slug}", cancellationToken);
         if (invalidator is not null) await invalidator.ListChangedAsync(cancellationToken);
+        if (invalidator is not null) await invalidator.InvalidateSearchAsync(cancellationToken);
         if (invalidateSuggestions && invalidator is not null)
             await invalidator.InvalidateSuggestionsAsync(cancellationToken);
 
