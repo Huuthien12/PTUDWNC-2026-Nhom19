@@ -21,6 +21,7 @@ import { searchRecipes } from "../src/services/search-service";
 import { clearRecipeRequests } from "../src/services/recipe-requests";
 import { getCategories, getCategoryBySlug } from "../src/services/category-service";
 import { getRecipeBySlug, getRecipes } from "../src/services/recipe-service";
+import { SESSION_CHANGED, SESSION_KEY } from "../src/services/auth-session";
 import type { RecipeSearchPage } from "../src/types/search";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -65,6 +66,27 @@ async function render(node: ReactElement) {
   });
 }
 
+class SearchStorage {
+  private readonly values = new Map<string, string>();
+  getItem(key: string) { return this.values.get(key) ?? null; }
+  setItem(key: string, value: string) { this.values.set(key, value); }
+  removeItem(key: string) { this.values.delete(key); }
+}
+
+class SearchBrowser extends EventTarget {
+  localStorage = new SearchStorage();
+  setTimeout = setTimeout;
+  clearTimeout = clearTimeout;
+}
+
+function setSearchSession(browser: SearchBrowser, sessionId: string) {
+  browser.localStorage.setItem(SESSION_KEY, JSON.stringify({
+    sessionId, accessToken: `${sessionId}-access`, refreshToken: `${sessionId}-refresh`, tokenType: "Bearer",
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    user: { id: sessionId, fullName: sessionId, userName: sessionId, email: `${sessionId}@example.test`, avatarUrl: null, roles: ["Author"] },
+  }));
+}
+
 test("search query sends encoded q, page and pageSize", async () => {
   let requested = "";
   globalThis.fetch = async (url) => {
@@ -80,7 +102,7 @@ test("search query sends encoded q, page and pageSize", async () => {
 });
 
 test("search bar ignores an aborted suggestion response and supports keyboard selection", async () => {
-  Object.defineProperty(globalThis, "window", { configurable: true, value: globalThis });
+  Object.defineProperty(globalThis, "window", { configurable: true, value: Object.assign(new EventTarget(), { setTimeout, clearTimeout }) });
   const pushed: string[] = [];
   router.push = (href?: string) => { if (href) pushed.push(href); };
   let firstAbort = false;
@@ -98,6 +120,50 @@ test("search bar ignores an aborted suggestion response and supports keyboard se
   const selectedInput = view!.root.findByProps({ id: "recipe-search" });
   await act(async () => { selectedInput.props.onKeyDown({ key: "Enter", preventDefault() {} }); });
   assert.deepEqual(pushed, ["/recipes?q=B%C3%A1nh%20m%C3%AC"]);
+  router.push = () => {};
+});
+
+test("search history clears when the user logs out", async () => {
+  const browser = new SearchBrowser();
+  setSearchSession(browser, "first");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: browser });
+  globalThis.fetch = async () => Response.json([{ id: "one", query: "First history", searchedAt: "2026-01-01T00:00:00Z" }]);
+  await render(<SearchBar />);
+  const input = view!.root.findByProps({ id: "recipe-search" });
+  await act(async () => { input.props.onFocus(); await new Promise<void>((resolve) => setImmediate(resolve)); });
+  assert.match(text(view!.root), /First history/);
+
+  browser.localStorage.removeItem(SESSION_KEY);
+  await act(async () => { browser.dispatchEvent(new Event(SESSION_CHANGED)); });
+
+  assert.doesNotMatch(text(view!.root), /First history/);
+});
+
+test("search history ignores an old session response and keyboard uses the displayed history", async () => {
+  const browser = new SearchBrowser();
+  setSearchSession(browser, "first");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: browser });
+  const responses: ((response: Response) => void)[] = [];
+  const pushed: string[] = [];
+  router.push = (href?: string) => { if (href) pushed.push(href); };
+  globalThis.fetch = () => new Promise<Response>((resolve) => responses.push(resolve));
+  await render(<SearchBar />);
+  let input = view!.root.findByProps({ id: "recipe-search" });
+  await act(async () => { input.props.onFocus(); await new Promise<void>((resolve) => setImmediate(resolve)); });
+
+  setSearchSession(browser, "second");
+  await act(async () => { browser.dispatchEvent(new Event(SESSION_CHANGED)); });
+  input = view!.root.findByProps({ id: "recipe-search" });
+  await act(async () => { input.props.onFocus(); await new Promise<void>((resolve) => setImmediate(resolve)); });
+  await act(async () => { responses[0](Response.json([{ id: "old", query: "Old history", searchedAt: "2026-01-01T00:00:00Z" }])); });
+  assert.doesNotMatch(text(view!.root), /Old history/);
+  await act(async () => { responses[1](Response.json([{ id: "new", query: "New history", searchedAt: "2026-01-02T00:00:00Z" }])); });
+  assert.match(text(view!.root), /New history/);
+
+  input = view!.root.findByProps({ id: "recipe-search" });
+  await act(async () => { input.props.onKeyDown({ key: "ArrowDown", preventDefault() {} }); });
+  await act(async () => { input.props.onKeyDown({ key: "Enter", preventDefault() {} }); });
+  assert.deepEqual(pushed, ["/recipes?q=New%20history"]);
   router.push = () => {};
 });
 
