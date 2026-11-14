@@ -9,6 +9,7 @@ public sealed class RecipeCacheInvalidator(AppDbContext db, ICacheService cache,
     IOutputCacheStore output, ILogger<RecipeCacheInvalidator> logger) : IRecipeCacheInvalidator
 {
     private const string SuggestionVersionKey = "search:suggest:version";
+    private const string SearchVersionKey = "search:recipes:version";
 
     public async Task RecipeChangedAsync(string slug, CancellationToken cancellationToken)
     {
@@ -61,5 +62,19 @@ public sealed class RecipeCacheInvalidator(AppDbContext db, ICacheService cache,
         }
         catch (Exception error) when (CacheFailure.IsInfrastructure(error))
         { CacheFailure.Log(logger, "recipe-suggestion invalidation", error); }
+    }
+
+    public async Task<string?> GetSearchVersionAsync(CancellationToken cancellationToken)
+    {
+        try { return await cache.GetAsync<string>(SearchVersionKey, cancellationToken) ?? "0"; }
+        catch (Exception error) when (CacheFailure.IsInfrastructure(error))
+        { CacheFailure.Log(logger, "recipe-search version read", error); return null; }
+    }
+
+    public async Task InvalidateSearchAsync(CancellationToken cancellationToken)
+    {
+        try { await cache.SetAsync(SearchVersionKey, Guid.NewGuid().ToString("N"), TimeSpan.FromDays(1), cancellationToken, useAbsoluteExpiration: true); }
+        catch (Exception error) when (CacheFailure.IsInfrastructure(error))
+        { CacheFailure.Log(logger, "recipe-search invalidation", error); }
     }
 }

@@ -11,4 +11,6 @@ public sealed class RecordingRecipeInvalidator : IRecipeCacheInvalidator
     public Task ListChangedAsync(CancellationToken token) => Task.CompletedTask;
     public Task<string?> GetSuggestionVersionAsync(CancellationToken token) => Task.FromResult<string?>("0");
     public Task InvalidateSuggestionsAsync(CancellationToken token) => Task.CompletedTask;
+    public Task<string?> GetSearchVersionAsync(CancellationToken token) => Task.FromResult<string?>("0");
+    public Task InvalidateSearchAsync(CancellationToken token) => Task.CompletedTask;
 }

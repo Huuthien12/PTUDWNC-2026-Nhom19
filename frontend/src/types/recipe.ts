@@ -8,7 +8,7 @@ export interface RecipeListFilters {
   difficulty?: RecipeDifficulty;
   maxCookTime?: number;
   minServings?: number;
-  sortBy?: "createdAt" | "title";
+  sortBy?: "createdAt" | "title" | "cookTime";
   sortOrder?: "asc" | "desc";
 }
 

@@ -29,7 +29,7 @@ public sealed class GetRecipesQueryValidator : AbstractValidator<GetRecipesQuery
         RuleFor(x => x.MaxCookTime).GreaterThanOrEqualTo(0).When(x => x.MaxCookTime.HasValue);
         RuleFor(x => x.MinServings).GreaterThanOrEqualTo(1).When(x => x.MinServings.HasValue);
         RuleFor(x => x.Difficulty).IsInEnum().When(x => x.Difficulty.HasValue);
-        RuleFor(x => x.SortBy).Must(value => value.Equals("createdAt", StringComparison.OrdinalIgnoreCase) || value.Equals("title", StringComparison.OrdinalIgnoreCase));
+        RuleFor(x => x.SortBy).Must(value => value.Equals("createdAt", StringComparison.OrdinalIgnoreCase) || value.Equals("title", StringComparison.OrdinalIgnoreCase) || value.Equals("cookTime", StringComparison.OrdinalIgnoreCase));
         RuleFor(x => x.SortOrder).Must(value => value.Equals("asc", StringComparison.OrdinalIgnoreCase) || value.Equals("desc", StringComparison.OrdinalIgnoreCase));
     }
 }

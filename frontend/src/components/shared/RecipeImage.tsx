@@ -26,7 +26,9 @@ export default function RecipeImage({ src, mediumSrc, thumbnailSrc, title, alt, 
     ? mediumSrc
     : null;
   useEffect(() => {
-    const candidates = [safeSource, safeMediumSource, safeThumbnailSource].filter((value): value is string => Boolean(value));
+    // One authenticated blob request per card prevents the three responsive variants
+    // from exhausting the shared API rate limit during list navigation.
+    const candidates = [safeSource].filter((value): value is string => Boolean(value));
     const protectedSources = candidates.filter((value) => value.includes("/recipes/"));
     if (protectedSources.length === 0) return;
     let disposed = false;
@@ -42,10 +44,13 @@ export default function RecipeImage({ src, mediumSrc, thumbnailSrc, title, alt, 
       objectUrls.push(objectUrl);
       return [source, objectUrl] as const;
     })).then((entries) => {
-      if (!disposed) setResolved(Object.fromEntries(entries.filter(([, value]) => value)));
-    }).catch(() => { if (!disposed) setResolved({}); });
+      if (!disposed) {
+        setResolved(Object.fromEntries(entries.filter(([, value]) => value)));
+        setFailedSource(entries.find(([, value]) => !value)?.[0] ?? null);
+      }
+    }).catch(() => { if (!disposed) { setResolved({}); setFailedSource(safeSource); } });
     return () => { disposed = true; objectUrls.forEach(URL.revokeObjectURL); };
-  }, [safeSource, safeMediumSource, safeThumbnailSource]);
+  }, [safeSource]);
   const displaySource = safeSource && (safeSource.includes("/recipes/") ? resolved[safeSource] : safeSource);
   const displayThumbnailSource = safeThumbnailSource && (safeThumbnailSource.includes("/recipes/") ? resolved[safeThumbnailSource] : safeThumbnailSource);
   const displayMediumSource = safeMediumSource && (safeMediumSource.includes("/recipes/") ? resolved[safeMediumSource] : safeMediumSource);
@@ -56,7 +61,7 @@ export default function RecipeImage({ src, mediumSrc, thumbnailSrc, title, alt, 
   };
   return (
     <div className={`cb-recipe-visual ${className}`.trim()} style={style}>
-      {displaySource && failedSource !== displaySource ? (
+      {safeSource?.includes("/recipes/") && !displaySource && failedSource !== safeSource ? <div className="cb-placeholder" role="status">Đang tải ảnh…</div> : displaySource && failedSource !== displaySource ? (
         <picture>
           {displayThumbnailSource && !failedVariantUrls.includes(displayThumbnailSource) &&
             <source media="(max-width: 400px)" srcSet={displayThumbnailSource} />}
