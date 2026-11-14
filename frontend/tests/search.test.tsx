@@ -282,6 +282,14 @@ test("recipe image uses responsive thumbnail and medium sources with next/image 
   assert.equal(view!.root.findByType("img").props.src, "https://storage.test/original.jpg");
 });
 
+test("protected image fetch failure uses the safe placeholder instead of loading forever", async () => {
+  globalThis.fetch = async () => new Response(null, { status: 403 });
+  await render(<RecipeImage src="https://storage.test/recipes/private.jpg" title="Canh chua" />);
+  await act(async () => { await new Promise<void>((resolve) => setImmediate(resolve)); });
+  assert.equal(view!.root.findAllByType("img").length, 0);
+  assert.match(text(view!.root), /Góc bếp/);
+});
+
 test("recipe image removes only the failed variant and restores variants for a new image", async () => {
   const src = "https://storage.test/original.jpg";
   const mediumSrc = "https://storage.test/medium.jpg";

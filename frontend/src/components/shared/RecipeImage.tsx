@@ -44,8 +44,11 @@ export default function RecipeImage({ src, mediumSrc, thumbnailSrc, title, alt, 
       objectUrls.push(objectUrl);
       return [source, objectUrl] as const;
     })).then((entries) => {
-      if (!disposed) setResolved(Object.fromEntries(entries.filter(([, value]) => value)));
-    }).catch(() => { if (!disposed) setResolved({}); });
+      if (!disposed) {
+        setResolved(Object.fromEntries(entries.filter(([, value]) => value)));
+        setFailedSource(entries.find(([, value]) => !value)?.[0] ?? null);
+      }
+    }).catch(() => { if (!disposed) { setResolved({}); setFailedSource(safeSource); } });
     return () => { disposed = true; objectUrls.forEach(URL.revokeObjectURL); };
   }, [safeSource]);
   const displaySource = safeSource && (safeSource.includes("/recipes/") ? resolved[safeSource] : safeSource);
